@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141416" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Тренування">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Тренування</title>
+<style>
+:root{
+  --bg:#f6f5f2; --card:#ffffff; --ink:#1d1d1f; --muted:#6a6a70; --line:#e3e1dc; --soft:#f0eee9;
+  --accent:#b4481d; --accent-ink:#ffffff; --accent-soft:#f6e3d8; --ok:#2f7d4f; --ok-soft:#e1f1e7;
+  --warn:#9a6a00; --warn-soft:#fbf0d2; --bad:#a3312b; --bad-soft:#f8e0de;
+  --g-legs:#d0692e; --g-chest:#3b73c9; --g-back:#2f8f62; --g-shoulders:#8e5bb5; --g-arms:#b88a0c; --g-core:#6b7280;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#141416; --card:#1d1d20; --ink:#ececee; --muted:#a3a3ab; --line:#2e2e33; --soft:#26262a;
+    --accent:#f08a5d; --accent-ink:#1d1d20; --accent-soft:#3a2419; --ok:#6fcf97; --ok-soft:#18301f;
+    --warn:#e8c25a; --warn-soft:#33290f; --bad:#f08a84; --bad-soft:#3a1c1a;
+    --g-legs:#f0915e; --g-chest:#6fa1f0; --g-back:#5cc493; --g-shoulders:#b98ad9; --g-arms:#e0b84a; --g-core:#9ca3af;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  padding:env(safe-area-inset-top) 0 0;touch-action:manipulation}
+main{max-width:640px;margin:0 auto;padding:12px 16px calc(150px + env(safe-area-inset-bottom))}
+h1{font-size:1.35rem;margin:6px 0 2px;line-height:1.2}
+h2{font-size:1.05rem;margin:18px 0 8px}
+h3{font-size:.95rem;margin:12px 0 6px}
+p{margin:6px 0}
+.muted{color:var(--muted)} .small{font-size:.85rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.chip{display:inline-block;font-size:.78rem;font-weight:600;border-radius:999px;padding:2px 9px;background:var(--soft);color:var(--muted)}
+.chip.acc{background:var(--accent-soft);color:var(--accent)} .chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.bad{background:var(--bad-soft);color:var(--bad)}
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:8px 12px;border-radius:0 10px 10px 0;margin:8px 0;font-size:.92rem}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)} .note.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+.note.bad{border-left-color:var(--bad);background:var(--bad-soft)}
+button,.btn{font:inherit;font-size:.95rem;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:10px 14px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:650}
+button.ghost{background:transparent}
+button.small{min-height:36px;padding:6px 10px;font-size:.85rem}
+button.wide{width:100%}
+button:disabled{opacity:.5}
+input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 8px;min-height:44px;width:100%}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:0}
+label.f{display:block;font-size:.82rem;color:var(--muted);margin:8px 0 3px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ex h3{margin:0;font-size:1rem}
+.ex .meta{font-size:.82rem;color:var(--muted);margin:2px 0 6px}
+.ex.skipped{opacity:.55}
+.set{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(0,.85fr) 64px 46px;gap:6px;align-items:center;margin:6px 0}
+.set .n{color:var(--muted);font-size:.85rem;text-align:center}
+.set input,.set select{padding:6px;text-align:center}
+.set .done{min-height:44px;padding:0;font-size:1.15rem;border-radius:12px}
+.set.isdone .done{background:var(--ok);border-color:var(--ok);color:#fff}
+.set.isdone input,.set.isdone select{background:var(--ok-soft)}
+.sethead{display:grid;grid-template-columns:22px minmax(0,1fr) minmax(0,.85fr) 64px 46px;gap:6px;font-size:.72rem;color:var(--muted);text-align:center}
+.pr{font-size:.78rem;color:var(--ok);font-weight:650;grid-column:2/-1;margin-top:-2px}
+details.tip summary{cursor:pointer;color:var(--accent);font-size:.85rem;list-style:none;padding:4px 0}
+details.tip summary::-webkit-details-marker{display:none}
+details.tip p{font-size:.88rem}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);padding:4px 4px calc(4px + env(safe-area-inset-bottom));z-index:20}
+nav.tabs button{border:0;background:transparent;min-height:52px;padding:4px 0;font-size:.7rem;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:10px}
+nav.tabs button .i{font-size:1.25rem;line-height:1}
+nav.tabs button.on{color:var(--accent);font-weight:650}
+#timer{position:fixed;left:8px;right:8px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:19;display:none;background:var(--ink);color:var(--bg);border-radius:14px;padding:8px 10px 8px 14px;align-items:center;justify-content:space-between;gap:8px;max-width:624px;margin:0 auto}
+#timer.show{display:flex}
+#timer .t{font-size:1.3rem;font-weight:700;font-variant-numeric:tabular-nums}
+#timer button{background:transparent;color:var(--bg);border-color:rgba(127,127,127,.5);min-height:40px;padding:6px 10px}
+#timer.alarm{background:var(--accent);color:var(--accent-ink)}
+#toast{position:fixed;left:16px;right:16px;top:calc(10px + env(safe-area-inset-top));z-index:30;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;display:none;max-width:608px;margin:0 auto;font-size:.92rem}
+#toast.show{display:block}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:1.35rem;line-height:1.2}
+.stat span{font-size:.78rem;color:var(--muted)}
+svg.chart{width:100%;height:auto;display:block;overflow:visible}
+svg.chart text{font-size:10px;fill:var(--muted);font-family:inherit}
+svg.chart .grid{stroke:var(--line);stroke-width:1}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.78rem;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.heat{display:grid;grid-template-columns:repeat(12,1fr);gap:3px}
+.heat .col{display:grid;grid-template-rows:repeat(7,1fr);gap:3px}
+.heat .c{aspect-ratio:1;border-radius:3px;background:var(--soft)}
+.heat .c.d{background:var(--ok-soft);outline:1px solid var(--ok)} .heat .c.t{background:var(--accent)} .heat .c.f{background:transparent}
+.hist{width:100%;border-collapse:collapse;font-size:.85rem}
+.hist td{padding:5px 2px;border-bottom:1px solid var(--line)}
+.hist td:last-child{text-align:right}
+.chk{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.chk:last-child{border-bottom:0}
+.chk input[type=checkbox]{width:26px;height:26px;min-height:0;flex:0 0 auto;accent-color:var(--accent)}
+.pick{display:grid;gap:10px}
+.pick button{text-align:left;padding:14px}
+.pick b{display:block;font-size:1.05rem}
+.empty{text-align:center;color:var(--muted);padding:18px 8px}
+</style>
+</head>
+<body>
+<main id="app"><p class="muted">Завантаження…</p></main>
+<div id="timer"><div><div class="small" id="timerLabel">Відпочинок</div><div class="t" id="timerT">0:00</div></div>
+  <div class="row"><button type="button" id="timerPlus">+30 с</button><button type="button" id="timerSkip">Далі</button></div></div>
+<div id="toast"></div>
+<nav class="tabs" id="tabs">
+  <button type="button" data-tab="today"><span class="i">🏋️</span>Сьогодні</button>
+  <button type="button" data-tab="daily"><span class="i">✅</span>Щодня</button>
+  <button type="button" data-tab="progress"><span class="i">📈</span>Прогрес</button>
+  <button type="button" data-tab="body"><span class="i">⚖️</span>Тіло</button>
+  <button type="button" data-tab="settings"><span class="i">⚙️</span>Налашт.</button>
+</nav>
+<script src="program.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
