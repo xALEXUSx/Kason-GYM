@@ -39,10 +39,11 @@ var ENGINE = (function () {
   }
 
   /* Історія вправи: [{date, n, deload, sets:[…]}] за зростанням дати. */
-  function history(profile, exId) {
+  function isWork(x) { return !x.type || x.type === 'N' || x.type === 'F'; }
+  function history(profile, exId, kind) {
     var out = [];
     (profile.sessions || []).forEach(function (s) {
-      var sets = (s.sets || []).filter(function (x) { return x.ex === exId && x.reps > 0; });
+      var sets = (s.sets || []).filter(function (x) { return x.ex === exId && x.reps > 0 && (kind === 'all' ? x.type !== 'W' : isWork(x)); });
       if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, sets: sets });
     });
     return out;
@@ -52,7 +53,8 @@ var ENGINE = (function () {
   }
 
   /* Підказка на сьогодні за правилами прогресії програми. */
-  function suggest(prog, exId, item, nSets, hist, handle, deload) {
+  function suggest(prog, exId, item, nSets, hist, handle, deload, stepIn) {
+    var STEP = stepIn || 2.5;
     var ex = prog.ex[exId], cap = prog.cap || 20;
     var min = item.min, max = item.max;
     var out = { sets: [], note: '' };
@@ -194,7 +196,7 @@ var ENGINE = (function () {
     var map = {};
     (profile.sessions || []).forEach(function (s) {
       var k = weekKey(s.date); map[k] = map[k] || {};
-      (s.sets || []).forEach(function (x) { if (!(x.reps > 0)) return; var g = (prog.ex[x.ex] || {}).group || 'other'; map[k][g] = (map[k][g] || 0) + 1; });
+      (s.sets || []).forEach(function (x) { if (!(x.reps > 0) || x.type === 'W') return; var g = (prog.ex[x.ex] || {}).group || 'other'; map[k][g] = (map[k][g] || 0) + 1; });
     });
     return map;
   }
@@ -207,7 +209,167 @@ var ENGINE = (function () {
       return { d: p.d, v: round1(sum / c) };
     });
   }
-  return { planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
+
+  /* ---------- v2 ---------- */
+  var INV = { 5: 4, 2.5: 8, 1.25: 4 };
+  function stepFor(inv) { return (inv && inv[1.25] >= 4) ? 2.5 : 5; }
+  function dbCountOf(ex, variant) {
+    var db = ex.db || 1;
+    if (ex.variants && variant) ex.variants.forEach(function (v) { if (v.id === variant && v.db) db = v.db; });
+    return db;
+  }
+  /* Обсяг підходу, кг: усі гантелі × повторення (еспандер і без ваги — 0). */
+  function setVolume(ex, set, handle) {
+    if (!set || !(set.reps > 0) || set.type === 'W') return 0;
+    if (ex.type === 'db' || (ex.type === 'dbopt' && set.load !== null && set.load !== undefined && set.load !== '')) return round1(totalLoad(ex, set.load, handle, set.variant) * set.reps);
+    return 0;
+  }
+  function sessionVolume(prog, session, handle) {
+    var v = 0; (session.sets || []).forEach(function (x) { var ex = prog.ex[x.ex]; if (ex) v += setVolume(ex, x, handle); }); return round1(v);
+  }
+  /* Диски на кожен бік з урахуванням набору: dbCount гантелей заряджаються однаково. */
+  function plates(load, inv, dbCount, cap) {
+    inv = inv || INV; cap = cap || 20;
+    if (load === null || load === undefined || load === '') return { ok: true, side: [], text: 'без гантелі' };
+    load = Number(load);
+    if (load === 0) return { ok: true, side: [], text: 'лише гриф' };
+    if (load > cap) return { ok: false, side: [], text: 'понад межу ' + cap + ' кг на гриф' };
+    /* рахуємо в чвертях кілограма, щоб не було похибок заокруглення */
+    var per = Math.round(load * 2), sizes = [[5, 20], [2.5, 10], [1.25, 5]], side = [], k = 2 * (dbCount || 1);
+    sizes.forEach(function (z) {
+      var avail = Math.floor((inv[z[0]] || 0) / k);
+      while (avail > 0 && per >= z[1]) { side.push(z[0]); per -= z[1]; avail--; }
+    });
+    if (per > 0) return { ok: false, side: side, text: 'не зібрати з вашого набору' };
+    return { ok: true, side: side, text: side.map(function (x) { return String(x).replace('.', ','); }).join(' + ') };
+  }
+  /* Розминка для головних вправ з гантелями: 50 % × 10 і 75 % × 5, вниз до кроку дисків. */
+  function warmups(ex, workLoad, step) {
+    if (ex.type !== 'db' || !(ex.main || ex.big) || workLoad === null || workLoad === undefined) return [];
+    var w = Number(workLoad), st = step || 2.5;
+    if (w <= 0) return [];
+    var down = function (x) { return Math.max(0, Math.floor(x / st + 1e-9) * st); };
+    if (w < 7.5) return [{ load: 0, reps: 10 }];
+    var a = down(w * 0.5), b = down(w * 0.75);
+    var out = [{ load: a, reps: 10 }];
+    if (b > a && b < w) out.push({ load: b, reps: 5 });
+    return out;
+  }
+  /* Рекорди вправи: найкращий розрахунковий максимум, найважчий підхід, найбільший обсяг за тренування, повторення на кожній вазі. */
+  function records(ex, histAll, handle) {
+    var r = { e1rm: null, heavy: null, vol: null, reps: {} };
+    histAll.forEach(function (h) {
+      var vol = 0;
+      h.sets.forEach(function (x) {
+        var m = metric(ex, x, handle);
+        if (!r.e1rm || m > r.e1rm.v) r.e1rm = { v: m, date: h.date, set: x };
+        if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) {
+          var L = x.load === null || x.load === undefined || x.load === '' ? null : Number(x.load);
+          if (L !== null) {
+            var tot = totalLoad(ex, L, handle, x.variant);
+            if (!r.heavy || tot > r.heavy.total || (tot === r.heavy.total && x.reps > r.heavy.set.reps)) r.heavy = { total: tot, date: h.date, set: x };
+            var key = String(L);
+            if (!r.reps[key] || x.reps > r.reps[key].reps) r.reps[key] = { reps: x.reps, date: h.date };
+          }
+        }
+        vol += setVolume(ex, x, handle);
+      });
+      if (vol > 0 && (!r.vol || vol > r.vol.v)) r.vol = { v: round1(vol), date: h.date };
+    });
+    return r;
+  }
+  /* Які рекорди дає новий підхід (порівняння з усіма попередніми тренуваннями і ранішими підходами цього). */
+  function prTypes(ex, set, histAll, handle) {
+    if (!histAll.length || set.type === 'W') return [];
+    var rec = records(ex, histAll, handle), out = [];
+    var m = metric(ex, set, handle);
+    if (rec.e1rm && m > rec.e1rm.v) out.push('e1rm');
+    if ((ex.type === 'db' || ex.type === 'dbopt') && set.load !== null && set.load !== undefined && set.load !== '') {
+      var tot = totalLoad(ex, set.load, handle, set.variant);
+      if (rec.heavy && tot > rec.heavy.total) out.push('weight');
+      var prev = rec.reps[String(Number(set.load))];
+      if (prev && set.reps > prev.reps) out.push('reps');
+    }
+    return out;
+  }
+  /* Підходи на м'яз: основні — 1, допоміжні — 0,5; розминка не рахується. */
+  function muscleSets(prog, sessions, fromTs, toTs) {
+    var out = {};
+    (sessions || []).forEach(function (s) {
+      var t = new Date(s.date + 'T12:00:00').getTime();
+      if (t < fromTs || t > toTs) return;
+      (s.sets || []).forEach(function (x) {
+        if (!(x.reps > 0) || x.type === 'W') return;
+        var ex = prog.ex[x.ex]; if (!ex || !ex.m) return;
+        ex.m.p.forEach(function (k) { out[k] = (out[k] || 0) + 1; });
+        ex.m.s.forEach(function (k) { out[k] = (out[k] || 0) + 0.5; });
+      });
+    });
+    return out;
+  }
+  /* Серія тижнів поспіль із тренуванням (поточний тиждень не обриває серію, доки не скінчився). */
+  function streakWeeks(sessions, todayStr) {
+    var set = {}; (sessions || []).forEach(function (s) { set[weekKey(s.date)] = 1; });
+    var d = new Date(todayStr + 'T12:00:00'), n = 0;
+    if (!set[weekKey(todayStr)]) d.setDate(d.getDate() - 7);
+    for (;;) { var k = weekKey(d.toISOString().slice(0, 10)); if (set[k]) { n++; d.setDate(d.getDate() - 7); } else break; }
+    return n;
+  }
+  /* Місячний звіт. */
+  function monthReport(prog, profile, ym, handle) {
+    var r = { sessions: 0, mins: 0, volume: 0, sets: 0, prs: 0, best: null };
+    var ss = (profile.sessions || []).filter(function (s) { return s.date.slice(0, 7) === ym; });
+    r.sessions = ss.length;
+    ss.forEach(function (s) { r.mins += s.mins || 0; r.volume += sessionVolume(prog, s, handle); r.sets += (s.sets || []).filter(function (x) { return x.reps > 0 && x.type !== 'W'; }).length; r.prs += s.prs || 0; });
+    r.volume = round1(r.volume);
+    var gains = [];
+    Object.keys(prog.ex).forEach(function (id) {
+      var ex = prog.ex[id], h = history(profile, id);
+      var before = h.filter(function (x) { return x.date.slice(0, 7) < ym; }), inM = h.filter(function (x) { return x.date.slice(0, 7) === ym; });
+      if (!before.length || !inM.length) return;
+      var b0 = 0; before.forEach(function (x) { b0 = Math.max(b0, bestOf(ex, x.sets, handle)); });
+      var b1 = 0; inM.forEach(function (x) { b1 = Math.max(b1, bestOf(ex, x.sets, handle)); });
+      if (b0 > 0 && b1 > b0) gains.push({ id: id, pct: Math.round((b1 / b0 - 1) * 100) });
+    });
+    gains.sort(function (a, b) { return b.pct - a.pct; });
+    r.best = gains[0] || null; r.gains = gains;
+    return r;
+  }
+  /* Порядок вправ із суперсетами: друга вправа пари стає одразу за першою; мітки А1/А2. */
+  function orderItems(items, pairs) {
+    var list = items.map(function (it, i) { return { it: it, idx: i, ss: null }; });
+    (pairs || []).forEach(function (pr, gi) {
+      var a = -1, b = -1;
+      list.forEach(function (x, i) { if (x.it.ex === pr[0]) a = i; if (x.it.ex === pr[1]) b = i; });
+      if (a < 0 || b < 0) return;
+      var B = list.splice(b, 1)[0]; if (b < a) a--;
+      list.splice(a + 1, 0, B);
+      list[a].ss = { g: '', k: 1, pair: pr[1] }; list[a + 1].ss = { g: '', k: 2, pair: pr[0] };
+    });
+    var letters = 'АБВГДЕ', li = 0;
+    list.forEach(function (x, i) { if (x.ss && x.ss.k === 1) { x.ss.g = letters[li]; list[i + 1].ss.g = letters[li]; li++; } });
+    return list;
+  }
+  /* Перехід даних з версії 1. */
+  function migrate(db) {
+    if (!db || !db.profiles) return db;
+    db.v = 2;
+    db.settings = db.settings || {};
+    ['sound', 'haptics', 'awake'].forEach(function (k) { if (db.settings[k] === undefined) db.settings[k] = true; });
+    Object.keys(db.profiles).forEach(function (id) {
+      var p = db.profiles[id];
+      if (!p.inv) p.inv = { 5: 4, 2.5: 8, 1.25: 4 };
+      if (!p.notes) p.notes = {};
+      if (!p.body) p.body = { weight: [], waist: [], tests: [] };
+      ['weight', 'waist', 'chest', 'hips', 'arm', 'tests'].forEach(function (k) { if (!p.body[k]) p.body[k] = []; });
+      if (!p.daily) p.daily = {};
+      (p.sessions || []).forEach(function (s) { (s.sets || []).forEach(function (x) { if (!x.type) x.type = 'N'; }); });
+    });
+    return db;
+  }
+
+  return { isWork: isWork, INV: INV, stepFor: stepFor, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+           planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
 if (typeof module !== 'undefined') module.exports = ENGINE;

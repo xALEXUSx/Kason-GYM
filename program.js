@@ -80,6 +80,12 @@ var PROGRAMS = (function () {
     },
     week: function (wk) { return wk <= 4 ? (wk % 2 ? ['A','B','A'] : ['B','A','B']) : ['D1','D2','D3']; },
     deload: [8, 12],
+    days: [1, 3, 5],
+    /* Фаза 3 (тижні 9–11): суперсети без зміни дисків — друга вправа йде одразу за першою, відпочинок після пари. */
+    supersets: function (wk, wid) {
+      if (wk < 9 || wk > 11) return [];
+      return ({ D1: [['floorfly', 'closegrip'], ['skull', 'pushup']], D2: [['bridge', 'crunchw']], D3: [['curl', 'hammer'], ['bentrow', 'shrug']] })[wid] || [];
+    },
     setsFor: function (item, wk) { return this.deload.indexOf(wk) >= 0 ? Math.ceil(item.sets / 2) : item.sets; },
     note: function (wk) {
       if (wk <= 2) return { phase: 'Фаза 1 · техніка', rir: 'запас 3', text: 'Опускання 2–3 с, підйом 1–2 с, без ривків.' };
@@ -147,6 +153,8 @@ var PROGRAMS = (function () {
     },
     week: function (wk) { return wk % 2 ? ['A','B','A'] : ['B','A','B']; },
     deload: [8, 12],
+    days: [2, 4, 6],
+    supersets: function () { return []; },
     setsFor: function (item, wk) {
       if (this.deload.indexOf(wk) >= 0) return Math.ceil(item.sets / 2);
       if (wk <= 2) return Math.min(item.sets, 2);
@@ -166,6 +174,29 @@ var PROGRAMS = (function () {
     jumpsFor: function (wk) { return wk <= 2 ? { n: 10, times: 1 } : (wk <= 8 ? { n: 10, times: 2 } : { n: 20, times: 2 }); },
     tests: true
   };
+  /* М'язи: p — основні (1 підхід), s — допоміжні (0,5 підходу). */
+  var M = {
+    goblet: { p: ['quads', 'glutes'], s: ['abs'] }, floorpress: { p: ['chest'], s: ['triceps', 'delts'] },
+    bridge: { p: ['glutes'], s: ['hams'] }, row1: { p: ['lats'], s: ['biceps', 'reardelts'] },
+    pulldown: { p: ['lats'], s: ['biceps'] }, seatedpress: { p: ['delts'], s: ['triceps'] },
+    curl: { p: ['biceps'], s: ['forearms'] }, farmer: { p: ['forearms', 'traps'], s: ['abs'] },
+    rdl: { p: ['hams', 'glutes'], s: ['lowback'] }, splitsquat: { p: ['quads', 'glutes'], s: ['hams'] },
+    lateral: { p: ['delts'], s: [] }, facepull: { p: ['reardelts'], s: ['traps'] },
+    ohext: { p: ['triceps'], s: [] }, floorfly: { p: ['chest'], s: ['delts'] },
+    pullover: { p: ['lats'], s: ['chest'] }, crunch: { p: ['abs'], s: [] },
+    closegrip: { p: ['triceps'], s: ['chest'] }, skull: { p: ['triceps'], s: [] },
+    calf: { p: ['calves'], s: [] }, crunchw: { p: ['abs'], s: [] },
+    bentrow: { p: ['lats', 'reardelts'], s: ['biceps', 'lowback'] }, reardelt: { p: ['reardelts'], s: ['traps'] },
+    shrug: { p: ['traps'], s: ['forearms'] }, hammer: { p: ['biceps', 'forearms'], s: [] },
+    pushup: { p: ['chest'], s: ['triceps', 'delts', 'abs'] }, pallof: { p: ['obliques', 'abs'], s: [] },
+    suitcase: { p: ['obliques', 'forearms'], s: ['traps'] }, abduct: { p: ['glutes'], s: [] },
+    slrdl: { p: ['hams', 'glutes'], s: ['lowback'] }, extrot: { p: ['reardelts'], s: [] },
+    sideplank: { p: ['obliques'], s: ['abs'] }
+  };
+  [him, her].forEach(function (pr) { Object.keys(pr.ex).forEach(function (id) { pr.ex[id].m = M[id] || { p: [], s: [] }; }); });
   return { him: him, her: her };
 })();
-if (typeof module !== 'undefined') module.exports = PROGRAMS;
+var MUSCLES = [['chest', 'Груди'], ['delts', 'Плечі'], ['reardelts', 'Задні дельти'], ['biceps', 'Біцепс'], ['triceps', 'Трицепс'],
+  ['forearms', 'Передпліччя'], ['traps', 'Трапеції'], ['lats', 'Спина'], ['lowback', 'Поперек'], ['abs', 'Прес'], ['obliques', 'Косі'],
+  ['glutes', 'Сідниці'], ['quads', 'Квадрицепс'], ['hams', 'Задня поверхня стегна'], ['calves', 'Литки']];
+if (typeof module !== 'undefined') module.exports = { PROGRAMS: PROGRAMS, MUSCLES: MUSCLES };
