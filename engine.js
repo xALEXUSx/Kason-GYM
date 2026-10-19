@@ -243,17 +243,49 @@ var ENGINE = (function () {
     if (per > 0) return { ok: false, side: side, text: 'не зібрати з вашого набору' };
     return { ok: true, side: side, text: side.map(function (x) { return String(x).replace('.', ','); }).join(' + ') };
   }
-  /* Розминка для головних вправ з гантелями: 50 % × 10 і 75 % × 5, вниз до кроку дисків. */
-  function warmups(ex, workLoad, step) {
+  /* Розминка для головних вправ з гантелями — за схемою програми (наприклад, 1 × 12 з половинною вагою). */
+  function warmups(ex, workLoad, step, scheme) {
     if (ex.type !== 'db' || !(ex.main || ex.big) || workLoad === null || workLoad === undefined) return [];
-    var w = Number(workLoad), st = step || 2.5;
+    var w = Number(workLoad), st = step || 2.5, sc = scheme || { pct: [0.5], reps: [12] };
     if (w <= 0) return [];
     var down = function (x) { return Math.max(0, Math.floor(x / st + 1e-9) * st); };
-    if (w < 7.5) return [{ load: 0, reps: 10 }];
-    var a = down(w * 0.5), b = down(w * 0.75);
-    var out = [{ load: a, reps: 10 }];
-    if (b > a && b < w) out.push({ load: b, reps: 5 });
+    var out = [];
+    sc.pct.forEach(function (pc, i) { var L = down(w * pc); if (!out.length || L > out[out.length - 1].load) out.push({ load: L, reps: sc.reps[i] }); });
     return out;
+  }
+  /* Харчування: Міффлін — Сан Жеор × 1,45; мета «схуднення» — мінус дефіцит; білок — від цільової або поточної ваги. */
+  function nutrition(food, me, weight) {
+    if (!food || !me || !(me.age > 0) || !(me.height > 0) || !(weight > 0)) return null;
+    var bmr = 10 * weight + 6.25 * me.height - 5 * me.age + (me.sex === 'f' ? -161 : 5);
+    var tdee = bmr * 1.45, mid = tdee * (1 - (food.deficit || 0));
+    var r50 = function (x) { return Math.round(x / 50) * 50; }, r10 = function (x) { return Math.round(x / 10) * 10; };
+    var target = me.target > 0 ? me.target : Math.round(27.5 * Math.pow(me.height / 100, 2));
+    var base = food.basis === 'target' ? target : weight;
+    return { bmr: Math.round(bmr), tdee: Math.round(tdee), kLo: r50(mid - 100), kHi: r50(mid + 100), pLo: r10(food.protein[0] * base), pHi: r10(food.protein[1] * base), base: base, target: target };
+  }
+  /* Темп зміни ваги за середньою за 7 днів, кг на тиждень (потрібно ≥ 14 днів даних). */
+  function weightTrend(points) {
+    var avg = rolling7(points);
+    if (avg.length < 2) return null;
+    var last = avg[avg.length - 1], tl = new Date(last.d + 'T12:00:00').getTime(), prev = null;
+    for (var i = avg.length - 2; i >= 0; i--) { var t = new Date(avg[i].d + 'T12:00:00').getTime(); if (tl - t >= 14 * 864e5) { prev = avg[i]; break; } }
+    if (!prev) return { rate: null, now: last.v };
+    var days = (tl - new Date(prev.d + 'T12:00:00').getTime()) / 864e5;
+    return { rate: round1((last.v - prev.v) / (days / 7)), now: last.v, then: prev.v, days: Math.round(days) };
+  }
+  /* Підказка за темпом: схуднення −0,5…−1 кг/тиж; швидше за 1 кг — +200 ккал; 2 тижні стоїть — −200 ккал. Підтримка — ±0,25 кг/тиж. */
+  function foodAdvice(food, trend) {
+    if (!trend || trend.rate === null) return { k: 'wait', text: 'Для підказки потрібні зважування за 2 тижні.' };
+    var r = trend.rate;
+    if (food.goal === 'loss') {
+      if (r < -1) return { k: 'more', text: 'Худнете швидше за 1 кг на тиждень — додайте ≈ 200 ккал на день.' };
+      if (r > -0.2) return { k: 'less', text: 'Вага стоїть 2 тижні — заберіть ≈ 200 ккал на день.' };
+      if (r > -0.5) return { k: 'slow', text: 'Худнете повільніше за план (−0,5…−1 кг на тиждень). Якщо так ще тиждень — заберіть ≈ 200 ккал.' };
+      return { k: 'ok', text: 'Темп у нормі (−0,5…−1 кг на тиждень) — нічого не міняйте.' };
+    }
+    if (r > 0.25) return { k: 'less', text: 'Вага росте — заберіть ≈ 150–200 ккал на день.' };
+    if (r < -0.25) return { k: 'more', text: 'Вага падає — додайте ≈ 150–200 ккал на день.' };
+    return { k: 'ok', text: 'Вага стабільна — калорії підходять.' };
   }
   /* Рекорди вправи: найкращий розрахунковий максимум, найважчий підхід, найбільший обсяг за тренування, повторення на кожній вазі. */
   function records(ex, histAll, handle) {
@@ -368,7 +400,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { isWork: isWork, INV: INV, stepFor: stepFor, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();

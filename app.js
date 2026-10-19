@@ -1,7 +1,7 @@
 /* Журнал тренувань 2.0 — інтерфейс. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '2.0.0';
+  const VERSION = '2.2.0';
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = fixProfiles(STORE.load());
@@ -226,7 +226,7 @@
         <button type="button" class="ck" data-act="done" data-i="${i}" data-j="${j}" aria-label="виконано">✓</button>${pr}</div>`;
     }).join('');
     const firstWork = it.sets.find((s) => s.type !== 'W');
-    const canWarm = ENGINE.warmups(ex, firstWork ? firstWork.load : null, ENGINE.stepFor(P().inv)).length && !it.sets.some((s) => s.type === 'W');
+    const canWarm = ENGINE.warmups(ex, firstWork ? firstWork.load : null, ENGINE.stepFor(P().inv), G().warm).length && !it.sets.some((s) => s.type === 'W');
     const userNote = P().notes[it.ex] ? `<div class="hint">📝 ${esc(P().notes[it.ex])}</div>` : '';
     return `<div class="exc${it.ss ? ' ss' : ''}">
       <div class="exh"><div>${ssb}<h3 style="display:inline">${esc(ex.name)}</h3><div class="mus">${esc(mus)} · ${it.sets.filter((s) => s.type !== 'W').length} × ${range}${ex.side ? ' · на бік' : ''} · ${it.ss && it.ss.k === 1 ? 'одразу в пару' : 'відпочинок ' + it.rest + ' с'}</div></div>
@@ -245,12 +245,19 @@
       <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>
       <details class="card"><summary class="sp" style="list-style:none;cursor:pointer"><span><span class="chip a">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span> <span class="chip">${esc(plan.note.rir)}</span>${plan.deload ? ' <span class="chip w">легкий</span>' : ''}</span><span class="muted small">ⓘ</span></summary>
       <p class="small"><b>${esc(plan.note.phase)}.</b> ${esc(plan.note.text)}</p><p class="tiny muted">Типи підходів: торкніться номера — Р (розминка), Д (дроп), В (до відмови). Колонка «минулого» — торкніться, щоб повторити.</p></details>
+      ${guideChips(['warm', 'safety', 'gear'])}
       ${d.items.map((_, i) => exCard(d, i)).join('')}
+      ${cooldownNote()}
       <button type="button" class="pri wide big" data-act="finish">Завершити тренування</button><p></p>
       <button type="button" class="ghost wide" data-act="discard">Скасувати тренування</button>`;
     const el = () => { const e = document.getElementById('elapsed'); if (!e) return; const s = Math.floor((Date.now() - d.started) / 1000); e.textContent = (s >= 3600 ? Math.floor(s / 3600) + ':' + pad(Math.floor(s / 60) % 60) : Math.floor(s / 60)) + ':' + pad(s % 60); };
     el(); elapsedT = setInterval(el, 1000);
     keepAwake(true);
+  }
+  function cooldownNote() {
+    const w = (G().guide || []).find((g) => g.id === 'warm'); if (!w) return '';
+    const k = w.items.findIndex((x) => /^#Заминка/.test(x)); if (k < 0) return '';
+    return `<div class="note ok small"><b>${esc(w.items[k].slice(1))}:</b> ${esc(w.items.slice(k + 1).join(' '))}</div>`;
   }
   function toggleDone(i, j) {
     const p = P(), d = p.draft, it = d.items[i], s = it.sets[j], ex = G().ex[it.ex];
@@ -391,6 +398,24 @@
     c.toBlob((b) => { if (b) shareFile('trenuvannia-' + s.date + '.png', b, 'image/png'); }, 'image/png');
   }
 
+  /* ---------- порадник ---------- */
+  function guideBody(sec) {
+    const prog = G();
+    return sec.items.map((x) => {
+      if (x === '@posture') return '<ul class="list">' + prog.posture.map((r) => `<li style="display:block"><b>${esc(r[0])}</b> <span class="chip">${esc(r[1])}</span><div class="small muted" style="margin-top:3px">${esc(r[2])}</div></li>`).join('') + '</ul>';
+      if (x.charAt(0) === '#') return `<h3 style="margin:14px 0 4px">${esc(x.slice(1))}</h3>`;
+      return `<p class="small" style="margin:6px 0">• ${esc(x)}</p>`;
+    }).join('');
+  }
+  function guideSheet(id) {
+    const sec = (G().guide || []).find((g) => g.id === id); if (!sec) return;
+    openSheet(`<div class="sp"><b>${esc(sec.title)}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>${guideBody(sec)}`);
+  }
+  function guideChips(ids) {
+    const list = (G().guide || []).filter((g) => !ids || ids.indexOf(g.id) >= 0);
+    return '<div class="quick">' + list.map((g) => `<button type="button" class="sm" data-act="guide" data-id="${g.id}">${esc(g.title)}</button>`).join('') + '</div>';
+  }
+
   /* ---------- головна ---------- */
   function nextDayText(days) {
     if (!days || !days.length) return '';
@@ -404,10 +429,11 @@
     return `<h2>Щодня</h2><div class="card">${prog.daily.map((it) => {
       if (it.jumps) {
         const j = prog.jumpsFor(wk), done = rec.jumps || 0;
-        return `<div class="chk" style="flex-wrap:wrap"><div style="flex:1 1 100%"><b>${esc(it.label)}</b><div class="tiny muted">Тиждень ${wk}: ${j.n} стрибків × ${j.times} на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем.</div></div>
+        return `<div class="chk" style="flex-wrap:wrap"><div style="flex:1 1 100%"><b>${esc(it.label)}</b><div class="tiny muted">Тиждень ${wk}: ${j.n} стрибків × ${j.times} на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">як стрибати</button></div></div>
           <div class="row">${Array.from({ length: j.times }, (_, k) => `<button type="button" class="sm${k < done ? ' pri' : ''}" data-act="jump" data-k="${k + 1}">${k < done ? '✓ ' : ''}${k + 1}-й раз</button>`).join('')}</div></div>`;
       }
-      return `<label class="chk"><input type="checkbox" data-act="daily" data-id="${it.id}"${rec[it.id] ? ' checked' : ''}><span>${esc(it.label)}</span></label>`;
+      const how = it.id === 'posture' && prog.posture ? ' <button type="button" class="sm ghost" data-act="guide" data-id="posture">як робити</button>' : '';
+      return `<div class="chk"><label class="row" style="flex:1;flex-wrap:nowrap;gap:12px"><input type="checkbox" data-act="daily" data-id="${it.id}"${rec[it.id] ? ' checked' : ''}><span>${esc(it.label)}</span></label>${how}</div>`;
     }).join('')}</div>`;
   }
   function alerts() {
@@ -441,6 +467,7 @@
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, 3, thisWeek + '/3', 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}
+      <h2>Порадник</h2><div class="card" style="padding:10px 12px">${guideChips()}<button type="button" class="sm" style="margin-top:6px" data-act="food">Харчування</button></div>
       ${recent.length ? `<h2>Останні рекорди</h2><div class="card"><ul class="list">${recent.map((r) => `<li><span>${esc(prog.ex[r.ex].name)}<div class="tiny muted">${dm(r.d)}</div></span><span class="chip g">🏆 ${r.t.map((t) => ({ e1rm: 'максимум', weight: 'вага', reps: 'повторення' }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}
       ${w.length >= 2 ? `<h2>Вага тіла</h2><div class="card">${CHARTS.line([{ pts: avg.map((q) => ({ t: tms(q.d), v: q.v })), color: 'var(--accent)', area: true, dots: false }], { h: 120, label: 'вага' })}<p class="tiny muted">Середня за 7 днів: ${fmt(avg[avg.length - 1].v)} кг</p></div>` : ''}`;
   }
@@ -517,7 +544,7 @@
       const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
       body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}${used[id] ? '' : ' (ще не виконували)'}</option>`).join('')}</select>
         <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}">${l}</button>`).join('')}</div>
-        <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)} · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">${[['4', '4 т'], ['12', '12 т'], ['all', 'усе']].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:28px;padding:2px 8px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
+        <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)} · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">${[['4', '4 т'], ['12', '12 т'], ['all', 'усе']].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
         ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: 'Ще немає підходів у цій вправі' })}</div>
         ${histAll.length ? `<div class="grid3">
           <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' ? 'рекорд максимуму, кг' : 'найкращий показник'}</span></div>
@@ -558,7 +585,7 @@
   let photoUrls = [];
   function rBody() {
     const p = P(), prog = G();
-    const tabs = [['m', 'Заміри'], ['f', 'Фото']].concat(prog.tests ? [['t', 'Тести']] : []);
+    const tabs = [['m', 'Заміри'], ['n', 'Харчування'], ['f', 'Фото']].concat(prog.tests ? [['t', 'Тести']] : []);
     if (!tabs.some((t) => t[0] === ui.bodyTab)) ui.bodyTab = 'm';
     let body = '';
     if (ui.bodyTab === 'm') {
@@ -570,6 +597,21 @@
         return `<div class="card"><div class="sp"><div><b>${l}</b><div class="small muted">${last ? fmt(last.v) + ' ' + u + ' · ' + dm(last.d) + (first && first !== last ? ' · ' + (last.v - first.v >= 0 ? '+' : '') + fmt(Math.round((last.v - first.v) * 10) / 10) + ' від першого' : '') : 'ще немає'}</div></div><button type="button" class="sm" data-act="measAdd" data-m="${k}">+ Додати</button></div>
           ${arr.length >= 2 ? CHARTS.line(series, { h: 130, label: l }) : ''}${k === 'weight' && arr.length ? '<p class="tiny muted">Зважуйтесь зранку натщесерце; дивіться на середню за 7 днів (лінія).</p>' : ''}</div>`;
       }).join('');
+    } else if (ui.bodyTab === 'n') {
+      const food = prog.food, me = Object.assign({ sex: prog.sex }, p.me || {});
+      const wts = (p.body.weight || []), avg = ENGINE.rolling7(wts), wNow = avg.length ? avg[avg.length - 1].v : null;
+      const nu = ENGINE.nutrition(food, me, wNow);
+      const tr = ENGINE.weightTrend(wts), adv = ENGINE.foodAdvice(food, tr);
+      const goalTxt = food.goal === 'loss' ? 'мета — менше жиру, більше мʼязів: дефіцит ≈ ' + Math.round(food.deficit * 100) + ' % від витрат' : 'мета — сила й тонус: калорії на рівні підтримки, без дієт';
+      body = `<div class="card"><p class="small muted">Дані лише в цьому телефоні. Вага береться із «Замірів» (середня за 7 днів).</p>
+        <div class="grid2"><div><label class="f">Зріст, см</label><input inputmode="numeric" id="meH" value="${me.height || ''}"></div><div><label class="f">Вік, років</label><input inputmode="numeric" id="meA" value="${me.age || ''}"></div></div>
+        ${food.basis === 'target' ? `<label class="f">Цільова вага, кг (для білка; порожньо — порахую за зростом)</label><input inputmode="decimal" id="meT" value="${me.target || ''}">` : ''}
+        <p></p><button type="button" class="wide" data-act="meSave">Зберегти</button></div>
+        ${!wNow ? '<div class="note w">Додайте вагу у «Заміри» — і тут зʼявиться норма.</div>' : !nu ? '<div class="note w">Вкажіть зріст і вік — і тут зʼявиться норма.</div>' : `
+        <div class="grid2"><div class="stat"><b>${fmt(nu.kLo)}–${fmt(nu.kHi)}</b><span>ккал на день</span></div><div class="stat"><b>${nu.pLo}–${nu.pHi} г</b><span>білка на день</span></div></div>
+        <p class="tiny muted">${esc(goalTxt)}. Розрахунок: формула Міффліна — Сан Жеора × 1,45 (основний обмін ≈ ${fmt(nu.bmr)}, витрати ≈ ${fmt(nu.tdee)} ккал); білок — ${fmt(food.protein[0])}–${fmt(food.protein[1])} г на кг ${food.basis === 'target' ? 'цільової ваги ' + fmt(nu.target) + ' кг' : 'поточної ваги'}.</p>
+        <div class="note ${adv.k === 'ok' ? 'ok' : adv.k === 'wait' ? '' : 'w'}"><b>За вашою вагою:</b> ${esc(adv.text)}${tr && tr.rate !== null ? ' <span class="tiny muted">(темп ' + (tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : '') + fmt(Math.abs(tr.rate)) + ' кг на тиждень)</span>' : ''}</div>`}
+        <div class="card">${food.notes.map((x) => `<p class="small" style="margin:6px 0">• ${esc(x)}</p>`).join('')}</div>`;
     } else if (ui.bodyTab === 'f') {
       body = `<div class="seg">${[['front', 'Спереду'], ['side', 'Збоку'], ['back', 'Ззаду']].map(([k, l]) => `<button type="button" class="${ui.photoPose === k ? 'on' : ''}" data-act="pose" data-v="${k}">${l}</button>`).join('')}</div>
         <label class="btn pri" style="display:block;text-align:center;color:#fff;border:0;background:linear-gradient(135deg,var(--accent),var(--accent2));font-weight:700">Додати фото<input type="file" id="photoIn" accept="image/*" style="display:none"></label>
@@ -577,7 +619,7 @@
         <p class="tiny muted">Фото зберігаються лише в цьому телефоні (стиснені до 1080 px). Тижні 1, 4, 8, 12 — однакове світло й місце.</p>`;
     } else {
       const tl = (p.body.tests || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1));
-      body = `<div class="card"><p class="small muted">Тижні 1, 4, 8, 12. Головне — щоб числа росли.</p><div class="grid2">${TESTS.map(([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="decimal" id="t_${k}"></div>`).join('')}</div><p></p><button type="button" class="pri wide" data-act="saveTests">Зберегти тести</button></div>
+      body = `<details class="card"><summary style="cursor:pointer;font-weight:650">Як виконувати тести</summary>${(prog.testsHow || []).map((r) => `<p class="small" style="margin:8px 0"><b>${esc(r[0])}.</b> ${esc(r[1])}</p>`).join('')}</details><div class="card"><p class="small muted">Тижні 1, 4, 8, 12. Головне — щоб числа росли.</p><div class="grid2">${TESTS.map(([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="decimal" id="t_${k}"></div>`).join('')}</div><p></p><button type="button" class="pri wide" data-act="saveTests">Зберегти тести</button></div>
         ${[['chair', ['chair'], 'Вставання з крісла за 30 с'], ['bal', ['balL', 'balR'], 'Стійка на одній нозі, с'], ['sp', ['spL', 'spR'], 'Бічна планка, с'], ['push', ['push'], 'Віджимання'], ['car', ['carL', 'carR'], 'Валізна прогулянка, с']].map(([id, keys, name]) => {
           const ser = keys.map((key, i) => ({ pts: tl.filter((t) => t[key] !== null && t[key] !== undefined && t[key] !== '').map((t) => ({ t: tms(t.d), v: Number(t[key]) })), color: i ? 'var(--d)' : 'var(--accent)' }));
           if (!ser.some((x) => x.pts.length)) return '';
@@ -630,6 +672,7 @@
         <label class="f">Диски на обидві гантелі: 5 · 2,5 · 1,25 кг (штук)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="${p.inv[5]}"><input inputmode="numeric" data-inv="2.5" value="${p.inv[2.5]}"><input inputmode="numeric" data-inv="1.25" value="${p.inv[1.25]}"></div>
         <p class="tiny muted">Крок ваги зараз: ${fmt(ENGINE.stepFor(p.inv))} кг на гантель.</p></div>
       <h2>Тренування</h2><div class="card">${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', 'на iPhone з iOS 18+, якщо підтримується')}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
+      <h2>Порадник</h2><div class="card" style="padding:10px 12px">${guideChips()}<button type="button" class="sm" style="margin-top:6px" data-act="food">Харчування</button></div>
       <h2>Резервна копія</h2><div class="card"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: ${DB.lastBackup ? dm(DB.lastBackup) : 'ще не було'}</p>
         <label class="sw"><span>Разом із фото<div class="tiny muted">файл буде більшим</div></span><input type="checkbox" id="bkPhotos"></label>
         <button type="button" class="pri wide" data-act="backup">Зберегти резервну копію</button><p></p>
@@ -698,6 +741,8 @@
     const act = b.dataset.act, i = Number(b.dataset.i), j = Number(b.dataset.j);
     if (act === 'noop') return;
     if (act === 'closeSheet') return closeSheet();
+    if (act === 'guide') return guideSheet(b.dataset.id);
+    if (act === 'food') { view = 'body'; ui.bodyTab = 'n'; render(); window.scrollTo(0, 0); return; }
     /* знайомство */
     if (act === 'obProg') { ui.obProg = b.dataset.id; ui.ob = 2; return rOnboard(); }
     if (act === 'obBack') { ui.ob = 1; return rOnboard(); }
@@ -730,7 +775,7 @@
     if (act === 'copyprev') { const s = p.draft.items[i].sets[j]; if (!s.prev || s.done) return; s.load = s.prev.load; s.reps = s.prev.reps; s.touched = true; save(); haptic(); return rWorkout(); }
     if (act === 'variant') { p.draft.items[i].variant = b.dataset.v; save(); return rWorkout(); }
     if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false }); save(); return rWorkout(); }
-    if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv)); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); return rWorkout(); }
+    if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); return rWorkout(); }
     if (act === 'exmenu') return exMenu(i);
     if (act === 'noteSave') { const it = p.draft.items[i]; const v = document.getElementById('exNote').value.trim(); if (v) p.notes[it.ex] = v; else delete p.notes[it.ex]; save(); closeSheet(); toast('Нотатку збережено'); return rWorkout(); }
     if (act === 'delset') { const it = p.draft.items[i]; if (it.sets.length > 1) it.sets.pop(); save(); closeSheet(); return rWorkout(); }
@@ -771,6 +816,11 @@
       openSheet(`<img src="${img ? img.src : ''}" style="width:100%;border-radius:16px" alt="фото"><p></p><button type="button" class="ghost wide" style="color:var(--bad)" data-act="photoDel" data-id="${id}">Видалити фото</button>`); return;
     }
     if (act === 'photoDel') { if (!confirm('Видалити фото?')) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
+    if (act === 'meSave') {
+      const h = num(document.getElementById('meH').value), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? num(document.getElementById('meT').value) : null;
+      if ((h !== null && (h < 120 || h > 230)) || (a !== null && (a < 14 || a > 100)) || (te !== null && (te < 35 || te > 250))) { toast('Перевірте числа'); return; }
+      p.me = { height: h, age: a, target: te }; save(); toast('Збережено'); return rBody();
+    }
     if (act === 'saveTests') {
       const rec = { d: today() }; let any = false;
       TESTS.forEach(([k]) => { const v = num(document.getElementById('t_' + k).value); rec[k] = v; if (v !== null) any = true; });

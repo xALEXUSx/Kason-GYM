@@ -60,7 +60,7 @@ var CHARTS = (function () {
   /* Карта м'язів: v — підходи за період, mx — для «повної» заливки. */
   function bodyMap(v, mx) {
     mx = mx || 12;
-    function c(k) { var x = v[k] || 0; if (!x) return 'var(--bm-0)'; var f = Math.min(1, x / mx); return 'color-mix(in srgb, var(--accent) ' + Math.round(25 + f * 75) + '%, var(--bm-0))'; }
+    function c(k) { var x = v[k] || 0; if (!x) return 'var(--bm-0)'; var f = Math.min(1, x / mx); return 'var(--accent);fill-opacity:' + (0.3 + f * 0.7).toFixed(2); }
     function t(k) { return (v[k] ? fmt(v[k]) : '0'); }
     var base = 'style="fill:var(--bm-base)"';
     function sil(ox) {

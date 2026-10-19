@@ -1,5 +1,5 @@
 /* Робота без інтернету: файли застосунку в кеші; нова версія — нова назва кешу. */
-const CACHE = 'trening-2.0.0';
+const CACHE = 'trening-2.2.0';
 const FILES = ['./', 'index.html', 'program.js', 'engine.js', 'charts.js', 'store.js', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
