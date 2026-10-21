@@ -1,0 +1,16 @@
+[
+ {
+  "id": "gm",
+  "name": "Google · Charon · чоловічий",
+  "note": "базовий голос Google, спокійніший",
+  "gender": "m",
+  "priority": 1
+ },
+ {
+  "id": "gf",
+  "name": "Google · Sulafat · жіночий",
+  "note": "базовий голос Google, спокійніший",
+  "gender": "f",
+  "priority": 1
+ }
+]

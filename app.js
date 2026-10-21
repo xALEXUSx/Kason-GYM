@@ -1,7 +1,7 @@
 /* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '3.1.0';
+  const VERSION = '3.2.0';
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = fixProfiles(STORE.load());
@@ -43,7 +43,9 @@
     try { document.getElementById('hapLb').click(); } catch (e) { /* немає */ }
     if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(12);
   }
-  function ensureAudio() { if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; } } if (audio && audio.state === 'suspended') audio.resume(); }
+  /* iOS: звук Web Audio за замовчуванням вимикається перемикачем беззвучного режиму; тип «playback» — грає й тоді. */
+  function audioMode() { try { if ('audioSession' in navigator) navigator.audioSession.type = S().voice.silent === false ? 'auto' : 'playback'; } catch (e) { /* немає */ } }
+  function ensureAudio() { audioMode(); if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; } } if (audio && audio.state === 'suspended') audio.resume(); }
   function beep() {
     if (!S().sound || !audio) return;
     try { [0, 0.3, 0.6].forEach((d, i) => { const o = audio.createOscillator(), g = audio.createGain(); o.frequency.value = i === 2 ? 1175 : 880; o.connect(g); g.connect(audio.destination);
@@ -75,7 +77,7 @@
   function tickTimer() {
     if (!T.id) return;
     const left = Math.ceil((T.end - Date.now()) / 1000);
-    if (left === 10 && T.total >= 30 && !T.said10 && T.kind === 'rest') { T.said10 = true; if (!VOICE.busy()) talk('Десять секунд.'); }
+    if (left === 10 && T.total >= 30 && !T.said10 && T.kind === 'rest') { T.said10 = true; if (!speaking()) talk('Десять секунд.'); }
     if (coachOn()) {
       if (left <= 0) { if (!T.alarmed) { T.alarmed = true; const k = T.kind; beep(); haptic(); stopTimer(); onTimerEnd(k); } return; }
       const tEl = document.getElementById('cTime'), arc = document.getElementById('cArc');
@@ -86,7 +88,7 @@
     const f = Math.max(0, Math.min(1, left / T.total)), r = 22, c = 2 * Math.PI * r;
     const ring = `<svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:rgba(127,127,127,.35)" stroke-width="5"/><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 27 27)"/></svg>`;
     if (left <= 0) {
-      if (!T.alarmed) { T.alarmed = true; beep(); haptic(); if (T.kind === 'myo') talk('Ще від трьох до пʼяти повторень.'); else talk(T.next ? 'Час! ' + sp(T.next) : 'Час!'); }
+      if (!T.alarmed) { T.alarmed = true; beep(); haptic(); if (T.kind === 'myo') talk('Ще від трьох до пʼяти повторень.'); else talk(T.next ? 'Час! ' + T.next.split(' · ')[0] + '.' : 'Час!'); }
       timerEl.className = 'on al';
       timerEl.innerHTML = ring + `<div><div class="tt">Час!</div><div class="tn">${esc(T.next || 'Наступний підхід')}</div></div><div class="tb2"><button type="button" data-t="x">Готово</button></div>`;
       if (left < -30) stopTimer();
@@ -214,16 +216,50 @@
     return { n, week: plan.week, cycle: plan.cycle, workout: wid, deload: plan.deload, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
   }
   /* Текст для голосу: символи й скорочення — словами (5 хв → 5 хвилин, 20–30 с → від 20 до 30 секунд). */
-  const UNITS = [[/(\d+)\s*хв\.?(?=[\s.,;:!?)]|$)/g, ['хвилина', 'хвилини', 'хвилин']], [/(\d+)\s*с(?=[\s.,;:!?)]|$)/g, ['секунда', 'секунди', 'секунд']], [/(\d+)\s*кг(?=[\s.,;:!?)]|$)/g, ['кілограм', 'кілограми', 'кілограмів']]];
-  const sp = (t) => UNITS.reduce((a, [re, w]) => a.replace(re, (m, n) => n + ' ' + VOICE.plural(Number(n), w[0], w[1], w[2])),
-    String(t).replace(/\s{2,}/g, ' ').replace(/\s·\s/g, ', ').replace(/×/g, ' на ').replace(/≈\s*/g, 'приблизно ').replace(/(\d)°/g, '$1 градусів').replace(/\s–\s/g, ', ').replace(/(\d+)–(\d+)/g, 'від $1 до $2'));
-  const talk = (t) => VOICE.say(sp(t));
+  const sp = (t) => VOICE.norm(t);
+  /* Голос: якщо для профілю є записаний пакет і в ньому є всі речення — грає запис; інакше системний голос. */
+  const missedSegs = new Set();
+  const packId = () => { const v = S().voice; return v.packs && DB.active ? v.packs[DB.active] || '' : ''; };
+  function talk(t) {
+    if (!S().voice.on) return false;
+    const text = sp(t), id = packId();
+    if (id && VOICEPACK.packs[id]) {
+      const segs = VOICE.split(text);
+      if (VOICEPACK.has(id, segs)) { VOICE.stop(); ensureAudio(); VOICEPACK.play(id, segs, audio).then((ok) => { if (!ok) VOICE.say(text); }); return true; }
+      VOICEPACK.missing(id, segs).forEach((x) => missedSegs.add(x));
+    }
+    VOICEPACK.stop();
+    return VOICE.say(text);
+  }
+  const speaking = () => VOICE.busy() || VOICEPACK.busy;
+  /* Записані голоси: список у voices/packs.json; для кожного профілю — свій (чоловічий / жіночий). */
+  let VPACKS = [];
+  async function initPacks() {
+    try { const r = await fetch('voices/packs.json', { cache: 'no-cache' }); if (r.ok) VPACKS = await r.json(); } catch (e) { VPACKS = []; }
+    const v = S().voice; if (!v.packs) v.packs = {}; if (!v.packsManual) v.packsManual = {};
+    /* за замовчуванням — найкращий голос своєї статі; з'явився кращий — переходимо, якщо людина не обирала сама */
+    Object.keys(PROGRAMS).forEach((id) => {
+      const sex = PROGRAMS[id].sex, best = VPACKS.filter((x) => x.gender === sex).sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
+      if (v.packs[id] && !VPACKS.some((x) => x.id === v.packs[id])) { v.packs[id] = undefined; v.packsManual[id] = false; }
+      if (v.packs[id] === undefined || (!v.packsManual[id] && best && v.packs[id] !== best.id)) v.packs[id] = best ? best.id : '';
+    });
+    save();
+    const id = packId();
+    if (id) {
+      try {
+        await VOICEPACK.load(id);
+        /* тихо зберегти весь голос у телефоні, щоб тренер говорив і без інтернету */
+        if (!(await VOICEPACK.cached(id))) VOICEPACK.download(id).catch(() => {});
+      } catch (e) { /* лишається системний голос */ }
+    }
+    if (view === 'more') rMore();
+  }
   function startWorkout(wid, ready) {
     ensureAudio(); VOICE.unlock();
     P().draft = buildDraft(wid, ready); save(); view = 'workout'; render(); window.scrollTo(0, 0);
     const d = P().draft, prog = G(), mins = ENGINE.estimateMins(prog, d.items), nEx = d.items.filter((x) => !x.skipped).length;
-    talk(sp(prog.workouts[d.workout].title + ': ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + ', приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
-      + (ready === 'r' ? ' Сьогодні без вправ на поперек. ' + L('r', 0) : ready === 'y' ? ' Вправи на поперек сьогодні легше. ' + L('y', 0) : ' ') + (hard() ? L('start', d.n) : 'Починаємо.') + (S().mode === 'list' ? '' : ' Спершу розминка.')));
+    talk(prog.workouts[d.workout].title + '. ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + '. Приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
+      + (ready === 'r' ? ' Сьогодні без вправ на поперек. ' + L('r', 0) : ready === 'y' ? ' Вправи на поперек сьогодні легше. ' + L('y', 0) : ' ') + (hard() ? L('start', d.n) : 'Починаємо.') + (S().mode === 'list' ? '' : ' Спершу розминка.'));
   }
   function draftStats(d) {
     let done = 0, total = 0;
@@ -252,7 +288,7 @@
      останній робочий — характер. brief — лише ціль (для «Почати раніше» й повтору). */
   function setSpeech(d, st, brief) {
     const it = d.items[st.i], ex = G().ex[it.ex], s = it.sets[st.j], full = S().voice.level !== 'short', sc = script(it.ex);
-    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null) + '.';
+    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null);
     if (s.type === 'M') t += ' Міо-підхід: до відмови, далі короткі паузи.';
     if (ex.spine && s.type !== 'W') t += ' Запас два.';
     if (it.ss && it.ss.k === 1) { const b = d.items[st.i + 1]; if (b && !b.skipped) t += ' Суперсет: одразу після — ' + G().ex[b.ex].name + '.'; }
@@ -327,12 +363,12 @@
     let t = pre || '';
     if (!d.coach.half && st.total >= 6 && st.done * 2 >= st.total && nx) { d.coach.half = true; t += hard() ? L('half', 0) : 'Половина тренування позаду. '; }
     save();
-    if (!nx) { stopTimer(); rWorkout(); talk(t + 'Усі підходи зроблено. ' + (coolText() ? 'Заминка: ' + coolText() : 'Можна завершувати.')); return; }
+    if (!nx) { stopTimer(); rWorkout(); talk(t + 'Усі підходи зроблено. ' + (coolText() ? 'Заминка. ' + coolText() : 'Можна завершувати.')); return; }
     const left = ENGINE.stepOrder(d.items).filter((x) => !d.items[x.i].sets[x.j].done).length;
-    const rest = ENGINE.restAfter(d.items, i, j), lastTxt = left === 1 ? 'останній підхід тренування. ' : '';
+    const rest = ENGINE.restAfter(d.items, i, j), lastTxt = left === 1 ? 'Останній підхід тренування. ' : '';
     const nIt = d.items[nx.i], restLine = nIt.sets.filter((x) => x.done).length >= 2 ? L('rest', d.n + i + j) : '';
-    if (rest > 0) { startTimer(rest, nextLabel(d), 'rest'); rWorkout(); talk(t + 'Відпочинок ' + VOICE.secs(rest) + '. ' + restLine + 'Далі — ' + lastTxt + setSpeech(d, nx)); }
-    else { stopTimer(); rWorkout(); talk(t + 'Одразу — ' + lastTxt + setSpeech(d, nx)); }
+    if (rest > 0) { startTimer(rest, nextLabel(d), 'rest'); rWorkout(); talk(t + 'Відпочинок ' + VOICE.secs(rest) + '. ' + restLine + 'Далі. ' + lastTxt + setSpeech(d, nx)); }
+    else { stopTimer(); rWorkout(); talk(t + 'Одразу. ' + lastTxt + setSpeech(d, nx)); }
   }
   function myoRep(r) {
     const d = P().draft, m = d.coach.myo; if (!m) return;
@@ -344,13 +380,13 @@
     const d = P().draft, m = d.coach.myo; if (!m) return;
     d.coach.myo = null; stopTimer();
     const s = d.items[m.i].sets[m.j], tot = (s.mini || []).reduce((a, x) => a + x, 0);
-    afterSet(d, m.i, m.j, 'Міо-підхід завершено' + (tot ? ', у міні-підходах — ' + VOICE.reps(tot) : '') + '. ');
+    afterSet(d, m.i, m.j, 'Міо-підхід завершено. ' + (tot ? 'У міні-підходах — ' + VOICE.reps(tot) + '. ' : ''));
   }
   function onTimerEnd(kind) {
     const d = P() && P().draft; if (!d) return;
     if (kind === 'myo') { talk('Ще від трьох до пʼяти повторень.'); rWorkout(); return; }
     const cs = curStep(d);
-    talk(cs ? 'Час! ' + sp(G().ex[d.items[cs.i].ex].name) + '.' : 'Час!');
+    talk(cs ? 'Час! ' + G().ex[d.items[cs.i].ex].name + '.' : 'Час!');
     if (view === 'workout') rWorkout();
   }
 
@@ -561,7 +597,7 @@
     p.sessions.push(sess); p.sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
     p.draft = null; save(); stopTimer(); keepAwake(false);
     ui.summary = sess.id; view = 'summary'; render(); window.scrollTo(0, 0);
-    talk('Тренування завершено: ' + sess.mins + ' ' + VOICE.plural(sess.mins, 'хвилина', 'хвилини', 'хвилин') + (sess.prs ? ', рекордів: ' + sess.prs : '') + '. ' + (hard() ? COACH.line('end', G().sex, sess.n) : 'Гарна робота!'));
+    talk('Тренування завершено. ' + VOICE.cap(sess.mins + ' ' + VOICE.plural(sess.mins, 'хвилина', 'хвилини', 'хвилин')) + '. ' + (sess.prs ? 'Рекордів: ' + sess.prs + '. ' : '') + (hard() ? COACH.line('end', G().sex, sess.n) : 'Гарна робота!'));
   }
 
   /* ---------- клавіатура (шторка) ---------- */
@@ -702,6 +738,8 @@
       ['#cMore', 'Тут — як робити, заміна вправи, пропуск, нотатка.'],
       ['#modeBtn', 'Перемикач: усі вправи списком, як у класичному журналі. Повернутися — тією самою кнопкою.']]
   };
+  /* поворот екрана посеред навчання — підсвітка зсувається; прибираємо, навчання покажеться знову */
+  window.addEventListener('resize', () => { const t = document.getElementById('tour'); if (t) t.remove(); });
   function tourMaybe(id) { if (S().tour[id] || document.getElementById('tour') || document.body.classList.contains('sheet')) return; setTimeout(() => { if (!S().tour[id]) tour(id, 0); }, 400); }
   function tour(id, k) {
     const old = document.getElementById('tour'); if (old) old.remove();
@@ -721,7 +759,8 @@
   function whatsNew() {
     openSheet(`<div class="sp"><b>Що нового у версії 3</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
-        <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: розминка, вага й диски, відпочинок, «10 секунд», «Час!», рекорди. На екрані — лише поточний крок.</div></li>
+        <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: навіщо вправа, як робити, чого не робити, вага й диски, відпочинок, «Час!», рекорди. Характер — жорсткий з гумором. Природний записаний голос: чоловічий і жіночий («Більше» → «Голосовий тренер»).</div></li>
+        <li style="display:block"><b>📻 Радіо для тренувань</b><div class="small muted">Кнопка «♪»: 11 станцій. Коли говорить тренер, музика плавно притихає.</div></li>
         <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Перед тренуванням. Від відповіді застосунок сам полегшує або прибирає вправи на поперек.</div></li>
         <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети з першого тижня, міо-підходи в ізоляції з тижня 5 — менше часу, та сама робота.</div></li>
         <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
@@ -770,7 +809,9 @@
     if (b.dataset.r === 'open') return radioSheet();
     if (b.dataset.r === 'pause') RADIO.pause(); else if (b.dataset.r === 'resume') { ensureAudio(); RADIO.resume(); } else RADIO.stop();
   });
-  VOICE.onSpeaking((on) => RADIO.duck(on));
+  let sysTalk = false, packTalk = false;
+  VOICE.onSpeaking((on) => { sysTalk = on; RADIO.duck(sysTalk || packTalk); });
+  VOICEPACK.onSpeaking((on) => { packTalk = on; RADIO.duck(sysTalk || packTalk); });
 
   /* ---------- головна ---------- */
   function nextDayText(days) {
@@ -1016,6 +1057,19 @@
   }
 
   /* ---------- більше ---------- */
+  function packBox() {
+    if (!VPACKS.length) return '<div class="note small">Записаних голосів ще немає — зараз говорить системний голос телефону.</div>';
+    const cur = packId(), sex = G().sex;
+    const byP = (a, b) => (b.priority || 0) - (a.priority || 0), list = VPACKS.filter((x) => x.gender === sex).sort(byP).concat(VPACKS.filter((x) => x.gender !== sex).sort(byP));
+    return `<label class="f">Голос тренера</label><div class="pick vp">${list.map((x) => `<button type="button" class="rst${x.id === cur ? ' on' : ''}" data-act="vpack" data-id="${x.id}"><b>${esc(x.name)}</b><span class="small muted">${esc(x.note || '')}</span></button>`).join('')}
+      <button type="button" class="rst${cur ? '' : ' on'}" data-act="vpack" data-id=""><b>Системний голос телефону</b><span class="small muted">роботизований, але без завантаження</span></button></div>
+      ${cur ? `<p class="small muted" id="vpState">Перевіряю, чи збережено в телефоні…</p><button type="button" class="wide" data-act="vdl">Зберегти голос у телефоні (для роботи без інтернету)</button>` : ''}`;
+  }
+  async function packState() {
+    const el = document.getElementById('vpState'), id = packId(); if (!el || !id) return;
+    try { const p = await VOICEPACK.load(id), have = await VOICEPACK.cached(id); el.textContent = have ? 'Голос збережено в телефоні: працює без інтернету.' : 'Голос ще не збережено в телефоні (' + (p.bytes ? Math.round(p.bytes / 1e6) + ' МБ' : 'кілька МБ') + '). Без інтернету тренер говоритиме системним голосом.'; }
+    catch (e) { el.textContent = 'Не вдалося завантажити голос — перевірте інтернет.'; }
+  }
   function rMore() {
     const p = P(), prog = G(), V = S().voice;
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
@@ -1029,7 +1083,9 @@
     app.innerHTML = `<h1>Більше</h1>
       ${standalone ? '' : '<div class="note w small"><b>Встановіть як застосунок:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>'}
       <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">вага й диски, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
-        ${voiceBox}
+        ${packBox()}
+        ${packId() ? '' : voiceBox}
+        <label class="sw"><span>Говорити й у беззвучному режимі<div class="tiny muted">вимкніть, якщо слухаєте музику в іншому застосунку і вона ставатиме на паузу</div></span><input type="checkbox" id="voiceSilent"${V.silent === false ? '' : ' checked'}></label>
         <label class="f">Характер тренера</label>${seg('tone', [['hard', 'Жорсткий з гумором'], ['calm', 'Спокійний']], V.tone || 'hard')}
         <label class="f">Скільки говорити</label>${seg('level', [['full', 'Детально'], ['short', 'Коротко']], V.level)}
         <label class="f">Темп</label>${seg('rate', [[0.9, 'Повільніше'], [1, 'Звичайно'], [1.1, 'Швидше']], V.rate)}
@@ -1052,9 +1108,10 @@
         <button type="button" class="wide" data-act="csv">Вивантажити таблицю (CSV)</button></div>
       <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації, реклами й передачі даних. Голос — системний синтез телефону, без інтернету. Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.</p>
         <button type="button" class="ghost wide" style="color:var(--bad)" data-act="wipe">Стерти дані цієї програми</button></div>`;
-    document.getElementById('voiceOn').onchange = (e) => { V.on = e.target.checked; save(); if (V.on) { VOICE.unlock(); talk('Голос увімкнено.'); } else VOICE.stop(); };
+    document.getElementById('voiceOn').onchange = (e) => { V.on = e.target.checked; save(); if (V.on) { VOICE.unlock(); talk('Голос увімкнено.'); } else { VOICE.stop(); VOICEPACK.stop(); } };
+    document.getElementById('voiceSilent').onchange = (e) => { V.silent = e.target.checked; save(); audioMode(); };
     const vs = document.getElementById('voiceSel'); if (vs) vs.onchange = () => { V.uri = vs.value; save(); talk('Так звучить цей голос.'); };
-    document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); };
+    document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); initPacks(); };
     document.getElementById('weekSel').onchange = (e) => { const w = Number(e.target.value); p.offset = (w - 1) * 3 - p.sessions.length; save(); toast('Наступне тренування — тиждень ' + w); };
     document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast('Вага грифа — від 0 до 10 кг'); e.target.value = fmt(p.handle); return; } p.handle = v; save(); toast('Збережено'); };
     app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); save(); rMore(); }; });
@@ -1062,6 +1119,7 @@
     document.getElementById('restoreIn').onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
     if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then((v) => { const el = document.getElementById('persist'); if (el) el.textContent = v ? 'сховище захищене від автоочищення' : 'робіть резервні копії'; }).catch(() => {});
     if (VOICE.supported && !vl.length) setTimeout(() => { if (view === 'more' && VOICE.list().length) rMore(); }, 800);
+    packState();
   }
   async function shareFile(name, blob, type) {
     try { const file = new File([blob], name, { type }); if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return true; } }
@@ -1094,7 +1152,7 @@
         DB = fixProfiles(ENGINE.migrate(o.db)); if (!DB.active || !DB.profiles[DB.active]) DB.active = Object.keys(DB.profiles)[0] || null;
         VOICE.init(DB.settings.voice); RADIO.setDuck(DB.settings.radio.duck);
         if (o.photos && o.photos.length) { for (const x of o.photos) { try { await STORE.putPhoto({ id: x.id, profile: x.profile, date: x.date, pose: x.pose, blob: STORE.dataToBlob(x.data) }); } catch (e) { /* пропуск */ } } }
-        save(); toast('Дані відновлено'); view = DB.active ? 'home' : 'onboard'; render();
+        save(); toast('Дані відновлено'); view = DB.active ? 'home' : 'onboard'; render(); initPacks();
       } catch (e) { toast('Це не схоже на резервну копію журналу'); }
     };
     r.readAsText(file);
@@ -1133,22 +1191,22 @@
     const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload;
     const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: old.from || old.ex, myo });
     nw.skipped = false; d.items[i] = nw; save(); closeSheet(); rWorkout();
-    talk(sp('Заміна: ' + prog.ex[to].name + '.'));
+    talk('Заміна. ' + prog.ex[to].name + '.');
   }
   function sayWhat(b) {
     const w = b.dataset.what, d = P() && P().draft;
     if (w === 'gl') { const g = GLOSSARY[b.dataset.k]; if (g) say1(g[0] + '. ' + g[1]); return; }
     if (w === 'exTip') { const ex = G().ex[b.dataset.ex], sc = script(b.dataset.ex); if (ex) say1(ex.name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : ex.tip)); return; }
-    if (w === 'test') { say1('Привіт! Я ваш тренер. Так звучатиме голос під час тренування.'); return; }
+    if (w === 'test') { say1('Привіт! Я твій тренер. Так звучатиме голос під час тренування.'); return; }
     if (!d) return;
     if (w === 'warm') { const wl = warmList(); say1(wl.title + '. ' + wl.items.join(' ')); return; }
     const cs = curStep(d); if (!cs) { say1(coolText() ? 'Заминка: ' + coolText() : 'Усі підходи зроблено.'); return; }
     if (w === 'tip') { const id = d.items[cs.i].ex, sc = script(id); say1(G().ex[id].name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : G().ex[id].tip)); return; }
-    say1((T.id && T.kind === 'rest' ? 'Далі — ' : '') + setSpeech(d, cs, true));
+    say1((T.id && T.kind === 'rest' ? 'Далі. ' : '') + setSpeech(d, cs, true));
   }
   function say1(t) {
     if (!S().voice.on) { toast('Голос вимкнено: «Більше» → «Голосовий тренер»'); return; }
-    if (!talk(sp(t))) toast(VOICE.supported ? 'Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»' : 'Цей браузер не вміє озвучувати текст');
+    if (!talk(t)) toast(VOICE.supported ? 'Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»' : 'Цей браузер не вміє озвучувати текст');
   }
   function sheetAct(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -1183,7 +1241,7 @@
       const w = Number(document.getElementById('obWeek').value); p.offset = (w - 1) * 3 - p.sessions.length;
       ENGINE.migrate(DB); save();
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-      view = 'home'; return render();
+      view = 'home'; render(); initPacks(); return;
     }
     const p = P();
     /* головна */
@@ -1202,7 +1260,7 @@
     if (act === 'stype') { const s = p.draft.items[i].sets[j]; if (s.done) return; s.type = { N: 'W', W: 'D', D: 'F', F: 'M', M: 'N' }[s.type || 'N']; save(); haptic(); return rWorkout(); }
     if (act === 'mode') { S().mode = S().mode === 'list' ? 'coach' : 'list'; if (S().mode === 'coach' && p.draft && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }
     if (act === 'cdone') return coachDone();
-    if (act === 'cwarm') { p.draft.coach.warm = true; save(); rWorkout(); window.scrollTo(0, 0); const cs = curStep(p.draft); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || 'Добре. ') + 'Перша вправа: ' + setSpeech(p.draft, cs)); return; }
+    if (act === 'cwarm') { p.draft.coach.warm = true; save(); rWorkout(); window.scrollTo(0, 0); const cs = curStep(p.draft); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || 'Добре. ') + 'Перша вправа. ' + setSpeech(p.draft, cs)); return; }
     if (act === 'cstep') {
       const it = p.draft.items[i], s = it.sets[j], ex = G().ex[it.ex], dir = Number(b.dataset.d);
       if (b.dataset.f === 'reps') { const stp = ex.type === 'time' ? 5 : 1; s.reps = Math.max(0, (Number(s.reps) || 0) + stp * dir); }
@@ -1233,7 +1291,7 @@
     if (act === 'exmenu') return exMenu(i);
     if (act === 'noteSave') { const it = p.draft.items[i]; const v = document.getElementById('exNote').value.trim(); if (v) p.notes[it.ex] = v; else delete p.notes[it.ex]; save(); closeSheet(); toast('Нотатку збережено'); return rWorkout(); }
     if (act === 'delset') { const it = p.draft.items[i]; if (it.sets.length > 1 && !it.sets[it.sets.length - 1].done) it.sets.pop(); save(); closeSheet(); return rWorkout(); }
-    if (act === 'skip') { p.draft.items[i].skipped = true; save(); closeSheet(); rWorkout(); const cs = curStep(p.draft); if (cs && S().mode !== 'list' && !T.id) talk((hard() ? COACH.line('skip', G().sex, 0) + ' ' : 'Пропускаємо. ') + 'Далі — ' + setSpeech(p.draft, cs)); return; }
+    if (act === 'skip') { p.draft.items[i].skipped = true; save(); closeSheet(); rWorkout(); const cs = curStep(p.draft); if (cs && S().mode !== 'list' && !T.id) talk((hard() ? COACH.line('skip', G().sex, 0) + ' ' : 'Пропускаємо. ') + 'Далі. ' + setSpeech(p.draft, cs)); return; }
     if (act === 'unskip') { p.draft.items[i].skipped = false; save(); return rWorkout(); }
     /* підсумок */
     if (act === 'shareSum') return shareSummary();
@@ -1284,6 +1342,13 @@
     }
     /* більше */
     if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; save(); rMore(); if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? 'Такий темп.' : k === 'tone' ? (v === 'calm' ? 'Добре, говоритиму спокійно.' : 'Жарти лишаються. Скінчилось лише філонство.') : v === 'short' ? 'Говоритиму коротко.' : 'Говоритиму детально.'); } return; }
+    if (act === 'vpack') { ensureAudio(); S().voice.packs[DB.active] = b.dataset.id; S().voice.packsManual = S().voice.packsManual || {}; S().voice.packsManual[DB.active] = true; save(); const id = b.dataset.id;
+      if (id) VOICEPACK.load(id).then(() => { rMore(); talk('Привіт! Я твій тренер. Так звучатиме голос під час тренування.'); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast('Не вдалося завантажити голос — перевірте інтернет'));
+      else { rMore(); talk('Так звучить системний голос.'); }
+      return; }
+    if (act === 'vdl') { const id = packId(), el = document.getElementById('vpState'); b.disabled = true;
+      VOICEPACK.download(id, (d, t) => { if (el) el.textContent = 'Зберігаю: ' + (t ? Math.round(d / t * 100) + ' %' : Math.round(d / 1e6) + ' МБ') + '…'; }).then(() => { toast('Голос збережено в телефоні'); packState(); b.disabled = false; }).catch(() => { toast('Не вдалося — перевірте інтернет'); b.disabled = false; });
+      return; }
     if (act === 'tourReset') { S().tour = { v3: true }; save(); toast('Навчання покажеться на головній і в першому тренуванні'); view = 'home'; return render(); }
     if (act === 'day') { const dd = Number(b.dataset.d), k = p.days.indexOf(dd); if (k >= 0) p.days.splice(k, 1); else p.days.push(dd); p.days.sort(); save(); return rMore(); }
     if (act === 'backup') return backup();
@@ -1301,5 +1366,6 @@
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
   render();
-  window.__app = { get DB() { return DB; }, get T() { return T; }, render: () => render(), set view(v) { view = v; } };
+  initPacks();
+  window.__app = { get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 })();

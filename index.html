@@ -71,8 +71,8 @@ nav#tabs button{border:0;background:transparent;min-height:54px;padding:4px 0 2p
 nav#tabs svg{width:25px;height:25px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav#tabs button.on{color:var(--accent);font-weight:650}
 /* тренування */
-.wbar{position:sticky;top:0;z-index:15;margin:0 -16px;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;background:var(--bg);background:color-mix(in srgb,var(--bg) 90%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:6px;border-bottom:1px solid var(--line)}
-.wbar .t{text-align:center;line-height:1.15} .wbar .t b{display:block;font-size:.95rem} .wbar .t span{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.wbar{position:sticky;top:0;z-index:15;margin:0 -16px;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;background:var(--bg);background:color-mix(in srgb,var(--bg) 90%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:6px;border-bottom:1px solid var(--line)}
+.wbar .t{text-align:center;line-height:1.15;min-width:0;overflow:hidden} .wbar .t b{display:block;font-size:.95rem} .wbar .t span{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .wbar button{min-height:44px;padding:6px 12px}
 .prog{height:4px;background:var(--soft);border-radius:4px;margin:0 -16px 10px;overflow:hidden} .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s}
 .exc{background:var(--card);border-radius:var(--r);padding:12px 12px 8px;margin:12px 0;box-shadow:var(--shadow);border:1px solid var(--line)}
@@ -204,6 +204,7 @@ h3.rg{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:upper
 .rst{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;min-height:58px;padding:8px 10px;border-radius:14px}
 .rst b{font-size:.88rem;line-height:1.2} .rst.on{border-color:var(--accent);background:var(--accent-soft)}
 .rnow{margin-top:6px}
+.pick.vp{gap:8px}
 .wbar .t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tour{position:fixed;inset:0;z-index:60}
 #tour .th{position:fixed;border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.62);pointer-events:none;transition:all .2s}
@@ -232,6 +233,7 @@ h3.rg{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:upper
 <script src="voice.js"></script>
 <script src="coach.js"></script>
 <script src="radio.js"></script>
+<script src="voicepack.js"></script>
 <script src="charts.js"></script>
 <script src="store.js"></script>
 <script src="app.js"></script>
