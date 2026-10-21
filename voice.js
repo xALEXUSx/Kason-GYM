@@ -1,0 +1,98 @@
+/* Голосовий тренер: системний синтез мовлення (українські голоси телефону), без мережі.
+   Тексти фраз — чисті функції (перевіряються в node); озвучення — лише в браузері. */
+var VOICE = (function () {
+  var synth = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis : null;
+  var cfg = { on: true, level: 'full', rate: 1, uri: null }, voices = [], unlocked = false;
+  var onSpeak = null, watch = null, talking = false;
+  /* Стежимо, коли голос замовк, — щоб плавно повернути гучність радіо. */
+  function setTalking(v) { if (v === talking) return; talking = v; if (onSpeak) try { onSpeak(v); } catch (e) { /* немає */ } }
+  function startWatch() {
+    clearInterval(watch); setTalking(true);
+    var quiet = 0;
+    watch = setInterval(function () {
+      if (synth && (synth.speaking || synth.pending)) { quiet = 0; return; }
+      if (++quiet >= 2) { clearInterval(watch); watch = null; setTalking(false); }
+    }, 200);
+  }
+
+  function plural(n, a, b, c) { var x = Math.abs(n) % 10, y = Math.abs(n) % 100; return x === 1 && y !== 11 ? a : x >= 2 && x <= 4 && (y < 12 || y > 14) ? b : c; }
+  /* Число вголос: 12,5 → «12 з половиною», 13,25 → «13 і чверть», 13,75 → «13 і три чверті». */
+  function numWords(x) {
+    var n = Math.round(Number(x) * 100) / 100, whole = Math.floor(n), fr = Math.round((n - whole) * 100);
+    if (fr === 0) return String(whole);
+    if (fr === 50) return whole + ' з половиною';
+    if (fr === 25) return (whole ? whole + ' і ' : '') + 'чверть';
+    if (fr === 75) return (whole ? whole + ' і ' : '') + 'три чверті';
+    return String(n).replace('.', ',');
+  }
+  function kg(x) {
+    var n = Math.round(Number(x) * 100) / 100;
+    if (n !== Math.floor(n)) return numWords(n) + ' кілограма';
+    return n + ' ' + plural(n, 'кілограм', 'кілограми', 'кілограмів');
+  }
+  function secs(n) { return n + ' ' + plural(n, 'секунда', 'секунди', 'секунд'); }
+  function reps(n) { return n + ' ' + plural(n, 'повторення', 'повторення', 'повторень'); }
+  /* Ціль підходу: ex — вправа, s — підхід {load, reps, type}, it — {min, max}. */
+  function target(ex, s, it, side) {
+    var parts = [];
+    if (ex.type === 'band') { if (s.load !== null && s.load !== undefined && s.load !== '') parts.push('рівень ' + numWords(s.load)); }
+    else if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) {
+      if (s.load === null || s.load === undefined || s.load === '') { if (ex.type === 'dbopt') parts.push('без гантелі'); }
+      else if (Number(s.load) === 0) parts.push('лише гриф');
+      else parts.push(kg(s.load) + ' дисків' + (side && side.length ? ', на кожен бік ' + side.map(numWords).join(' плюс ') : ''));
+    }
+    if (ex.type === 'amrap') parts.push('скільки зможете, із запасом два');
+    else if (s.type === 'M') parts.push('до відмови');
+    else if (ex.type === 'time') parts.push(it.min === it.max || !it.max ? secs(s.reps || it.max) : 'від ' + it.min + ' до ' + secs(it.max));
+    else if (s.type === 'W') parts.push(reps(s.reps || 12) + ', легко');
+    else if (it.max) parts.push(it.min === it.max ? reps(it.max) : 'від ' + it.min + ' до ' + reps(it.max));
+    if (ex.side) parts.push('на кожен бік');
+    return parts.join(', ');
+  }
+  /* Коротка порада: перші речення поради, доки не набереться ≈ 50 знаків. */
+  function firstSentence(t) {
+    var parts = String(t || '').match(/[^.!?]+[.!?]+/g) || [String(t || '')], out = '';
+    for (var i = 0; i < parts.length && out.length < 50; i++) out += (out ? ' ' : '') + parts[i].trim();
+    return out;
+  }
+
+  /* ---------- браузер ---------- */
+  function ukVoices() { return voices.filter(function (v) { return /^uk/i.test(v.lang || ''); }); }
+  function chosen() {
+    var uk = ukVoices(); if (!uk.length) return null;
+    for (var i = 0; i < uk.length; i++) if (uk[i].voiceURI === cfg.uri) return uk[i];
+    return uk[0];
+  }
+  function loadVoices() { if (synth) { try { voices = synth.getVoices() || []; } catch (e) { voices = []; } } }
+  function init(c) {
+    if (c) cfg = c;
+    if (!synth) return;
+    loadVoices();
+    try { synth.addEventListener('voiceschanged', loadVoices); } catch (e) { synth.onvoiceschanged = loadVoices; }
+  }
+  function ready() { loadVoices(); return !!(synth && cfg.on && chosen()); }
+  /* iOS дозволяє синтез лише після першого виклику під час дотику; далі — і з таймера. */
+  function unlock() {
+    if (!synth || unlocked || !cfg.on) return;
+    try { var u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); unlocked = true; } catch (e) { /* немає */ }
+  }
+  function say(text, keep) {
+    if (!text || !ready()) return false;
+    try {
+      if (!keep) synth.cancel();
+      var v = chosen(), u = new SpeechSynthesisUtterance(text);
+      u.voice = v; u.lang = v.lang; u.rate = cfg.rate || 1;
+      synth.speak(u); unlocked = true; startWatch();
+      return true;
+    } catch (e) { return false; }
+  }
+  function stop() { if (synth) try { synth.cancel(); } catch (e) { /* немає */ } }
+  function busy() { return !!(synth && (synth.speaking || synth.pending)); }
+  function list() { loadVoices(); return ukVoices().map(function (v) { return { uri: v.voiceURI, name: v.name }; }); }
+
+  return { plural: plural, numWords: numWords, kg: kg, secs: secs, reps: reps, target: target, firstSentence: firstSentence,
+           init: init, ready: ready, unlock: unlock, say: say, stop: stop, list: list, busy: busy,
+           onSpeaking: function (f) { onSpeak = f; },
+           get supported() { return !!synth; }, get cfg() { return cfg; } };
+})();
+if (typeof module !== 'undefined') module.exports = VOICE;

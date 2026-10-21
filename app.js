@@ -1,11 +1,13 @@
-/* Журнал тренувань 2.0 — інтерфейс. Дані лише в цьому телефоні + резервна копія файлом. */
+/* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '2.2.0';
+  const VERSION = '3.1.0';
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = fixProfiles(STORE.load());
   function fixProfiles(db) { Object.keys(db.profiles || {}).forEach((id) => { const p = db.profiles[id]; if (p && !Array.isArray(p.days) && PROGRAMS[id]) p.days = PROGRAMS[id].days.slice(); }); return db; }
+  VOICE.init(DB.settings.voice);
+  RADIO.setDuck(DB.settings.radio.duck);
   let view = DB.active ? 'home' : 'onboard';
   const ui = { ob: 1, obProg: null, progTab: 'ex', progEx: null, metric: 'e1rm', range: 'all', musDays: 7, repMonth: null, bodyTab: 'm', planTab: 'w', calMonth: null, summary: null, photoPose: 'front', cmp: 50 };
   let audio = null, wakeLock = null, kp = null;
@@ -53,7 +55,7 @@
       if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
     } catch (e) { wakeLock = null; }
   }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (view === 'workout' && P() && P().draft) keepAwake(true); tickTimer(); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (view === 'workout' && P() && P().draft) keepAwake(true); if (audio && audio.state === 'suspended' && RADIO.state === 'playing') audio.resume(); tickTimer(); } });
 
   /* ---------- шторка ---------- */
   function openSheet(html) { sheetEl.innerHTML = '<div class="grab"></div>' + html; document.body.classList.add('sheet'); }
@@ -62,20 +64,29 @@
 
   /* ---------- таймер відпочинку ---------- */
   const timerEl = document.getElementById('timer');
-  const T = { end: 0, total: 0, id: null, alarmed: false, next: '' };
-  function startTimer(sec, next) {
+  const T = { end: 0, total: 0, id: null, alarmed: false, next: '', kind: 'rest', said10: false };
+  function startTimer(sec, next, kind) {
     if (!(sec > 0)) { stopTimer(); return; }
-    T.end = Date.now() + sec * 1000; T.total = sec; T.alarmed = false; T.next = next || '';
+    T.end = Date.now() + sec * 1000; T.total = sec; T.alarmed = false; T.said10 = false; T.next = next || ''; T.kind = kind || 'rest';
     timerEl.className = 'on'; clearInterval(T.id); T.id = setInterval(tickTimer, 250); tickTimer();
   }
   function stopTimer() { clearInterval(T.id); T.id = null; timerEl.className = ''; }
+  const coachOn = () => view === 'workout' && S().mode !== 'list' && P() && P().draft;
   function tickTimer() {
     if (!T.id) return;
     const left = Math.ceil((T.end - Date.now()) / 1000);
+    if (left === 10 && T.total >= 30 && !T.said10 && T.kind === 'rest') { T.said10 = true; if (!VOICE.busy()) talk('Десять секунд.'); }
+    if (coachOn()) {
+      if (left <= 0) { if (!T.alarmed) { T.alarmed = true; const k = T.kind; beep(); haptic(); stopTimer(); onTimerEnd(k); } return; }
+      const tEl = document.getElementById('cTime'), arc = document.getElementById('cArc');
+      if (tEl) tEl.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
+      if (arc) { const c = 2 * Math.PI * 52, f = Math.max(0, Math.min(1, left / T.total)); arc.setAttribute('stroke-dasharray', (c * f).toFixed(1) + ' ' + c.toFixed(1)); }
+      return;
+    }
     const f = Math.max(0, Math.min(1, left / T.total)), r = 22, c = 2 * Math.PI * r;
     const ring = `<svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:rgba(127,127,127,.35)" stroke-width="5"/><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 27 27)"/></svg>`;
     if (left <= 0) {
-      if (!T.alarmed) { T.alarmed = true; beep(); haptic(); }
+      if (!T.alarmed) { T.alarmed = true; beep(); haptic(); if (T.kind === 'myo') talk('Ще від трьох до пʼяти повторень.'); else talk(T.next ? 'Час! ' + sp(T.next) : 'Час!'); }
       timerEl.className = 'on al';
       timerEl.innerHTML = ring + `<div><div class="tt">Час!</div><div class="tn">${esc(T.next || 'Наступний підхід')}</div></div><div class="tb2"><button type="button" data-t="x">Готово</button></div>`;
       if (left < -30) stopTimer();
@@ -84,10 +95,11 @@
     timerEl.innerHTML = ring + `<div><div class="tt">${Math.floor(left / 60)}:${pad(left % 60)}</div><div class="tn">${esc(T.next ? 'Далі: ' + T.next : 'Відпочинок')}</div></div>
       <div class="tb2"><button type="button" data-t="-15">−15</button><button type="button" data-t="+15">+15</button><button type="button" data-t="x">✕</button></div>`;
   }
+  function addTime(sec) { T.end = Math.max(Date.now() + 1000, T.end + sec * 1000); T.total = Math.max(T.total, Math.ceil((T.end - Date.now()) / 1000)); T.alarmed = false; T.said10 = false; tickTimer(); }
   timerEl.addEventListener('click', (e) => {
     const b = e.target.closest('[data-t]'); if (!b) return;
     if (b.dataset.t === 'x') return stopTimer();
-    const d = b.dataset.t === '+15' ? 15000 : -15000; T.end = Math.max(Date.now() + 1000, T.end + d); T.total = Math.max(T.total, Math.ceil((T.end - Date.now()) / 1000)); T.alarmed = false; tickTimer();
+    addTime(b.dataset.t === '+15' ? 15 : -15);
   });
 
   /* ---------- навігація ---------- */
@@ -100,11 +112,13 @@
     const nav = document.getElementById('tabs');
     nav.style.display = (view === 'onboard' || view === 'workout' || view === 'summary') ? 'none' : '';
     document.body.classList.toggle('wkv', view === 'workout');
+    document.body.classList.toggle('coachv', view === 'workout' && S().mode !== 'list');
     app.classList.toggle('wv', view === 'workout');
     nav.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === view));
     clearInterval(elapsedT);
     if (view !== 'workout') keepAwake(false);
     ({ onboard: rOnboard, home: rHome, workout: rWorkout, summary: rSummary, plan: rPlan, progress: rProgress, body: rBody, more: rMore }[view] || rHome)();
+    updateRadio();
   }
 
   /* ---------- знайомство ---------- */
@@ -155,32 +169,61 @@
   }
 
   /* ---------- чернетка тренування ---------- */
-  function buildDraft(wid) {
+  function plateSide(ex, it, load) {
+    if (!hasKg(ex) || load === null || load === undefined || load === '') return null;
+    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap);
+    return pl.ok ? pl.side : null;
+  }
+  function makeItem(it, ss, plan, step, o) {
+    const prog = G(), p = P(), ex = prog.ex[it.ex];
+    const nS = prog.setsFor(it, plan.week), hist = ENGINE.history(p, it.ex);
+    const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step);
+    const last = hist.length ? hist[hist.length - 1].sets : [];
+    const sets = sug.sets.map((s, j) => { const pv = last[j] || last[last.length - 1] || null; return { type: 'N', load: s.load, reps: s.reps, rir: null, done: false, pr: [], prev: pv ? { load: pv.load, reps: pv.reps } : null, touched: false }; });
+    let note = sug.note, skipped = !!it.optional;
+    if (o.ra && o.ra.act === 'skip') { skipped = true; note = 'Сьогодні без цієї вправи — бережемо поперек.'; }
+    if (o.ra && o.ra.act === 'light') {
+      let less = false; sets.forEach((s) => { if (typeof s.load === 'number' && s.load > 0) { s.load = Math.max(0, Math.round((s.load - step) * 100) / 100); less = true; } });
+      note = (less ? 'Спина ниє: вага на крок нижча, запас 3. ' : 'Спина ниє: запас 3, рух повільний і плавний. ') + note;
+    }
+    if (o.from) note = 'Замість «' + prog.ex[o.from].name + '». ' + note;
+    if (o.myo && ex.iso && ex.type !== 'amrap' && sets.length) sets[sets.length - 1].type = 'M';
+    return { ex: it.ex, variant: defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets };
+  }
+  function buildDraft(wid, ready) {
     const prog = G(), p = P(), n = nextN(), plan = ENGINE.planFor(prog, n);
     wid = wid || plan.workout;
     const items = prog.workouts[wid].items.slice();
     const pairs = prog.supersets(plan.week, wid);
-    pairs.forEach((pr) => {
-      if (items.some((i) => i.ex === pr[0]) && !items.some((i) => i.ex === pr[1]) && prog.ex[pr[1]]) {
-        const a = items.find((i) => i.ex === pr[0]); items.push({ ex: pr[1], sets: a.sets, min: 0, max: 0, rest: a.rest });
-      }
-    });
     const step = ENGINE.stepFor(p.inv);
     const ordered = ENGINE.orderItems(items, pairs);
-    return {
-      n, week: plan.week, cycle: plan.cycle, workout: wid, deload: plan.deload, date: today(), started: Date.now(),
-      items: ordered.map((o) => {
-        const it = o.it, nS = prog.setsFor(it, plan.week), hist = ENGINE.history(p, it.ex);
-        const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step);
-        const last = hist.length ? hist[hist.length - 1].sets : [];
-        return { ex: it.ex, variant: defaultVariant(it.ex, plan), skipped: !!it.optional, optional: !!it.optional, note: sug.note, ss: o.ss, min: it.min, max: it.max, rest: it.rest,
-          sets: sug.sets.map((s, j) => { const pv = last[j] || last[last.length - 1] || null; return { type: 'N', load: s.load, reps: s.reps, rir: null, done: false, pr: [], prev: pv ? { load: pv.load, reps: pv.reps } : null, touched: false }; }) };
-      })
-    };
+    const present = ordered.map((o) => o.it.ex);
+    const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload;
+    const list = ordered.map((o) => {
+      const ra = ENGINE.readyAction(prog, o.it.ex, ready, present);
+      const it = Object.assign({}, o.it); let from = null;
+      if (ra && ra.act === 'swap') { from = it.ex; it.ex = ra.to; }
+      return makeItem(it, o.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from, myo });
+    });
+    /* розминковий підхід — перед першою базовою вправою з вагою */
+    for (const st of ENGINE.stepOrder(list)) {
+      const it = list[st.i], ex = prog.ex[it.ex], fw = it.sets.find((s) => s.type !== 'W');
+      const ws = ENGINE.warmups(ex, fw ? fw.load : null, step, prog.warm);
+      if (ws.length) { it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); break; }
+    }
+    return { n, week: plan.week, cycle: plan.cycle, workout: wid, deload: plan.deload, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
   }
-  function startWorkout(wid) {
-    ensureAudio();
-    P().draft = buildDraft(wid); save(); view = 'workout'; render(); window.scrollTo(0, 0);
+  /* Текст для голосу: символи й скорочення — словами (5 хв → 5 хвилин, 20–30 с → від 20 до 30 секунд). */
+  const UNITS = [[/(\d+)\s*хв\.?(?=[\s.,;:!?)]|$)/g, ['хвилина', 'хвилини', 'хвилин']], [/(\d+)\s*с(?=[\s.,;:!?)]|$)/g, ['секунда', 'секунди', 'секунд']], [/(\d+)\s*кг(?=[\s.,;:!?)]|$)/g, ['кілограм', 'кілограми', 'кілограмів']]];
+  const sp = (t) => UNITS.reduce((a, [re, w]) => a.replace(re, (m, n) => n + ' ' + VOICE.plural(Number(n), w[0], w[1], w[2])),
+    String(t).replace(/\s{2,}/g, ' ').replace(/\s·\s/g, ', ').replace(/×/g, ' на ').replace(/≈\s*/g, 'приблизно ').replace(/(\d)°/g, '$1 градусів').replace(/\s–\s/g, ', ').replace(/(\d+)–(\d+)/g, 'від $1 до $2'));
+  const talk = (t) => VOICE.say(sp(t));
+  function startWorkout(wid, ready) {
+    ensureAudio(); VOICE.unlock();
+    P().draft = buildDraft(wid, ready); save(); view = 'workout'; render(); window.scrollTo(0, 0);
+    const d = P().draft, prog = G(), mins = ENGINE.estimateMins(prog, d.items), nEx = d.items.filter((x) => !x.skipped).length;
+    talk(sp(prog.workouts[d.workout].title + ': ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + ', приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
+      + (ready === 'r' ? ' Сьогодні без вправ на поперек. ' + L('r', 0) : ready === 'y' ? ' Вправи на поперек сьогодні легше. ' + L('y', 0) : ' ') + (hard() ? L('start', d.n) : 'Починаємо.') + (S().mode === 'list' ? '' : ' Спершу розминка.')));
   }
   function draftStats(d) {
     let done = 0, total = 0;
@@ -191,24 +234,273 @@
     const s = it.sets[k]; if (!s) return '';
     return s.type === 'W' ? 'розминка' : 'підхід ' + it.sets.slice(0, k + 1).filter((x) => x.type !== 'W').length;
   }
-  function nextLabel(d, i, j) {
-    const it = d.items[i], nm = (x) => G().ex[x.ex].name;
-    const firstOpen = (x) => x.sets.findIndex((s) => !s.done);
-    if (it.ss && it.ss.k === 1) { const b = d.items[i + 1]; if (b && !b.skipped) { const k = firstOpen(b); if (k >= 0) return nm(b) + ' · ' + setName(b, k); } }
-    if (it.ss && it.ss.k === 2) { const a = d.items[i - 1]; const k = firstOpen(a); if (k >= 0) return nm(a) + ' · ' + setName(a, k); }
-    const k = firstOpen(it); if (k >= 0) return nm(it) + ' · ' + setName(it, k);
-    for (let x = i + 1; x < d.items.length; x++) { const y = d.items[x]; if (y.skipped) continue; const q = firstOpen(y); if (q >= 0) return nm(y) + ' · ' + setName(y, q); }
-    return '';
+  const workCount = (it) => it.sets.filter((x) => x.type !== 'W').length;
+  const curStep = (d) => ENGINE.stepOrder(d.items).find((st) => !d.items[st.i].sets[st.j].done) || null;
+  function stepTitle(d, st) {
+    const it = d.items[st.i], s = it.sets[st.j];
+    return s.type === 'W' ? 'Розминковий підхід' : 'Підхід ' + it.sets.slice(0, st.j + 1).filter((x) => x.type !== 'W').length + ' з ' + workCount(it);
+  }
+  function nextLabel(d) {
+    const st = curStep(d); if (!st) return '';
+    const it = d.items[st.i]; return G().ex[it.ex].name + ' · ' + setName(it, st.j);
+  }
+  /* Тренер: характер (жорсткий з гумором або спокійний) і сценарій вправи. */
+  const hard = () => S().voice.tone !== 'calm';
+  const L = (kind, seed) => (hard() ? COACH.line(kind, G().sex, seed) + ' ' : '');
+  const script = (exId) => COACH.get(DB.active, exId);
+  /* Фраза про наступний підхід. Перший раз у вправі — навіщо, положення, рух і дихання; другий — чого не робити й чому;
+     останній робочий — характер. brief — лише ціль (для «Почати раніше» й повтору). */
+  function setSpeech(d, st, brief) {
+    const it = d.items[st.i], ex = G().ex[it.ex], s = it.sets[st.j], full = S().voice.level !== 'short', sc = script(it.ex);
+    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null) + '.';
+    if (s.type === 'M') t += ' Міо-підхід: до відмови, далі короткі паузи.';
+    if (ex.spine && s.type !== 'W') t += ' Запас два.';
+    if (it.ss && it.ss.k === 1) { const b = d.items[st.i + 1]; if (b && !b.skipped) t += ' Суперсет: одразу після — ' + G().ex[b.ex].name + '.'; }
+    if (brief) return sp(t);
+    const doneN = it.sets.filter((x) => x.done).length, lastWork = s.type !== 'W' && !it.sets.slice(st.j + 1).some((x) => x.type !== 'W');
+    if (ex.spine && s.type !== 'W' && !it.sets.some((x) => x.done && x.type !== 'W')) t += ' ' + COACH.line('spine', G().sex);
+    if (doneN === 0) {
+      if (sc) t += ' ' + (full ? COACH.howText(sc) : 'Як: ' + sc.move);
+      else t += ' ' + VOICE.firstSentence(ex.tip);
+    } else if (doneN === 1 && sc && sc.dont) {
+      t += ' ' + (full ? COACH.dontText(sc) : sc.dont[0][0] + ' — ' + sc.dont[0][1] + '.');
+    } else if (lastWork && workCount(it) > 1) t += ' ' + L('last', d.n + st.i);
+    else if (sc && sc.breath && full) t += ' ' + sc.breath;
+    return sp(t);
+  }
+  function coolText() {
+    const w = (G().guide || []).find((g) => g.id === 'warm'); if (!w) return '';
+    const k = w.items.findIndex((x) => /^#Заминка/.test(x)); if (k < 0) return '';
+    return w.items.slice(k + 1).join(' ');
+  }
+  function warmList() {
+    const w = (G().guide || []).find((g) => g.id === 'warm'); if (!w) return { title: 'Розминка', items: [] };
+    let title = 'Розминка'; const items = [];
+    for (const x of w.items) {
+      if (x.charAt(0) === '#') { if (/^#Заминка/.test(x)) break; title = x.slice(1); continue; }
+      if (/^Перед першою/.test(x)) continue;
+      items.push(x);
+    }
+    return { title, items };
+  }
+
+  /* ---------- позначка підходу ---------- */
+  function markDone(i, j) {
+    const p = P(), d = p.draft, it = d.items[i], s = it.sets[j], ex = G().ex[it.ex];
+    ensureAudio(); s.done = true; haptic(); s.pr = [];
+    const histAll = ENGINE.history(p, it.ex, 'all');
+    /* рекорд — лише коли вправа вже була в попередніх тренуваннях */
+    if (s.type !== 'W' && histAll.length) {
+      const earlier = it.sets.slice(0, j).filter((x) => x.done && x.type !== 'W').map((x) => ({ load: x.load, reps: x.reps, variant: it.variant, type: x.type }));
+      s.pr = ENGINE.prTypes(ex, { load: s.load, reps: Number(s.reps), variant: it.variant, type: s.type }, histAll.concat(earlier.length ? [{ date: d.date, sets: earlier }] : []), p.handle);
+    }
+    const nx = it.sets[j + 1]; if (nx && !nx.done && !nx.touched && (nx.type === s.type || (s.type === 'N' && nx.type === 'M'))) nx.load = s.load;
+    if (d.coach) d.coach.last = { i, j };
+    save();
+    if (s.pr.length) toast('🏆 Рекорд: ' + ex.name, true);
+    return s;
+  }
+  /* Список: позначка будь-якого підходу. */
+  function toggleDone(i, j) {
+    const d = P().draft, s = d.items[i].sets[j];
+    if (s.done) { s.done = false; s.pr = []; save(); rWorkout(); return; }
+    if (!(Number(s.reps) > 0)) { openKp(i, j, 'reps'); return; }
+    VOICE.unlock(); markDone(i, j);
+    const st = draftStats(d);
+    if (st.done < st.total) { const rest = ENGINE.restAfter(d.items, i, j); if (rest > 0) startTimer(rest, nextLabel(d), 'rest'); else stopTimer(); }
+    else stopTimer();
+    rWorkout();
+    if (s.pr.length) talk(hard() ? COACH.line('pr', G().sex, d.n + i) : 'Новий рекорд!');
+  }
+  /* Тренер: позначка поточного підходу й наступний крок. */
+  function coachDone() {
+    const d = P().draft, cs = curStep(d); if (!cs) return;
+    const s = d.items[cs.i].sets[cs.j];
+    if (!(Number(s.reps) > 0)) { openKp(cs.i, cs.j, 'reps'); return; }
+    VOICE.unlock(); markDone(cs.i, cs.j);
+    const pr = s.pr.length ? (hard() ? COACH.line('pr', G().sex, d.n + cs.i) + ' ' : 'Новий рекорд! ') : '';
+    if (s.type === 'M') { d.coach.myo = { i: cs.i, j: cs.j, k: 0 }; s.mini = []; save(); startTimer(15, 'Міо: пауза', 'myo'); rWorkout(); talk(pr + L('myo', 0) + 'Пауза 15 секунд. Глибоко дихай.'); return; }
+    afterSet(d, cs.i, cs.j, pr);
+  }
+  function afterSet(d, i, j, pre) {
+    const st = draftStats(d), nx = curStep(d);
+    let t = pre || '';
+    if (!d.coach.half && st.total >= 6 && st.done * 2 >= st.total && nx) { d.coach.half = true; t += hard() ? L('half', 0) : 'Половина тренування позаду. '; }
+    save();
+    if (!nx) { stopTimer(); rWorkout(); talk(t + 'Усі підходи зроблено. ' + (coolText() ? 'Заминка: ' + coolText() : 'Можна завершувати.')); return; }
+    const left = ENGINE.stepOrder(d.items).filter((x) => !d.items[x.i].sets[x.j].done).length;
+    const rest = ENGINE.restAfter(d.items, i, j), lastTxt = left === 1 ? 'останній підхід тренування. ' : '';
+    const nIt = d.items[nx.i], restLine = nIt.sets.filter((x) => x.done).length >= 2 ? L('rest', d.n + i + j) : '';
+    if (rest > 0) { startTimer(rest, nextLabel(d), 'rest'); rWorkout(); talk(t + 'Відпочинок ' + VOICE.secs(rest) + '. ' + restLine + 'Далі — ' + lastTxt + setSpeech(d, nx)); }
+    else { stopTimer(); rWorkout(); talk(t + 'Одразу — ' + lastTxt + setSpeech(d, nx)); }
+  }
+  function myoRep(r) {
+    const d = P().draft, m = d.coach.myo; if (!m) return;
+    const s = d.items[m.i].sets[m.j]; s.mini = (s.mini || []).concat([r]); m.k++; haptic(); save();
+    if (m.k >= 3 || r < 3) return myoEnd();
+    startTimer(15, 'Міо: пауза', 'myo'); rWorkout(); talk('Пауза 15 секунд.');
+  }
+  function myoEnd() {
+    const d = P().draft, m = d.coach.myo; if (!m) return;
+    d.coach.myo = null; stopTimer();
+    const s = d.items[m.i].sets[m.j], tot = (s.mini || []).reduce((a, x) => a + x, 0);
+    afterSet(d, m.i, m.j, 'Міо-підхід завершено' + (tot ? ', у міні-підходах — ' + VOICE.reps(tot) : '') + '. ');
+  }
+  function onTimerEnd(kind) {
+    const d = P() && P().draft; if (!d) return;
+    if (kind === 'myo') { talk('Ще від трьох до пʼяти повторень.'); rWorkout(); return; }
+    const cs = curStep(d);
+    talk(cs ? 'Час! ' + sp(G().ex[d.items[cs.i].ex].name) + '.' : 'Час!');
+    if (view === 'workout') rWorkout();
   }
 
   /* ---------- екран тренування ---------- */
+  function rWorkout() { if (!P() || !P().draft) { view = 'home'; return render(); } document.body.classList.toggle('coachv', S().mode !== 'list'); return S().mode === 'list' ? rList() : rCoach(); }
+  const ICON = {
+    list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+    coach: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
+    radio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>'
+  };
+  function wbar(d, prog, st) {
+    const list = S().mode === 'list';
+    return `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
+      <div class="t"><b>${esc(prog.workouts[d.workout].title)}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}</span></div>
+      <div class="wbr"><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" id="radBtn" data-act="radio" aria-label="радіо">${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? 'режим тренера' : 'список усіх вправ'}">${list ? ICON.coach : ICON.list}</button><button type="button" class="pri" data-act="finish">Готово</button></div></div>
+      <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>`;
+  }
+  function startElapsed(d) {
+    const el = () => { const e = document.getElementById('elapsed'); if (!e) return; const s = Math.floor((Date.now() - d.started) / 1000); e.textContent = (s >= 3600 ? Math.floor(s / 3600) + ':' + pad(Math.floor(s / 60) % 60) : Math.floor(s / 60)) + ':' + pad(s % 60); };
+    el(); clearInterval(elapsedT); elapsedT = setInterval(el, 1000);
+  }
+  const q = (k) => `<button type="button" class="q" data-act="gl" data-k="${k}" aria-label="що це">?</button>`;
+  function phaseBox(d) {
+    const plan = ENGINE.planFor(G(), d.n);
+    return `<details class="card"><summary class="sp" style="list-style:none;cursor:pointer"><span><span class="chip a">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span> <span class="chip">${esc(plan.note.rir)}</span>${plan.deload ? ' <span class="chip w">легкий</span>' : ''}${d.ready && d.ready !== 'g' ? ' <span class="chip b">спина ' + (d.ready === 'y' ? '🟡' : '🔴') + '</span>' : ''}</span><span class="muted small">ⓘ</span></summary>
+      <p class="small"><b>${esc(plan.note.phase)}.</b> ${esc(plan.note.text)}</p></details>`;
+  }
+
+  /* --- режим «Тренер»: один крок на екрані --- */
+  function rCoach() {
+    const d = P().draft, prog = G(), st = draftStats(d);
+    if (!d.coach) d.coach = { warm: true, myo: null, half: false, last: null };
+    let body;
+    if (!d.coach.warm) body = warmCard();
+    else if (T.id && T.kind === 'myo') body = myoPauseCard(d);
+    else if (d.coach.myo) body = myoMiniCard(d);
+    else if (T.id && T.kind === 'rest') body = restCard(d);
+    else { const cs = curStep(d); body = cs ? setCard(d, cs) : coolCard(); }
+    app.innerHTML = wbar(d, prog, st) + body;
+    startElapsed(d); keepAwake(true);
+    if (T.id) tickTimer();
+    if (document.querySelector('.cdone')) tourMaybe('coach');
+  }
+  function chipsFor(d, cs) {
+    const it = d.items[cs.i], ex = G().ex[it.ex], s = it.sets[cs.j];
+    const order = d.items.filter((x) => !x.skipped), out = [`<span class="chip">Вправа ${order.indexOf(it) + 1} з ${order.length}</span>`,
+      s.type === 'W' ? `<button type="button" class="chip w" data-act="gl" data-k="warm">${esc(stepTitle(d, cs))} · ?</button>` : `<span class="chip a">${esc(stepTitle(d, cs))}</span>`];
+    if (it.ss) out.push(`<button type="button" class="chip p" data-act="gl" data-k="ss">Суперсет ${it.ss.g}${it.ss.k} · ?</button>`);
+    if (s.type === 'M') out.push('<button type="button" class="chip g" data-act="gl" data-k="myo">Міо-підхід · ?</button>');
+    if (ex.spine && s.type !== 'W') out.push('<button type="button" class="chip b" data-act="gl" data-k="spine">Поперек · запас 2 · ?</button>');
+    return `<div class="cchips">${out.join('')}</div>`;
+  }
+  function setCard(d, cs) {
+    const prog = G(), it = d.items[cs.i], ex = prog.ex[it.ex], s = it.sets[cs.j], ij = `data-i="${cs.i}" data-j="${cs.j}"`;
+    const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${cs.i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
+    const tgt = ex.type === 'amrap' ? 'скільки зможете' : s.type === 'M' ? 'до відмови' : s.type === 'W' ? 'легко' : (it.min === it.max ? it.max : it.min + '–' + it.max) + (ex.type === 'time' ? ' с' : '');
+    const pm = (f) => `<div class="cpm"><button type="button" data-act="cstep" data-f="${f}" data-d="-1" ${ij} aria-label="менше">−</button><button type="button" data-act="cstep" data-f="${f}" data-d="1" ${ij} aria-label="більше">+</button></div>`;
+    const kgOn = hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '';
+    const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? 'рівень еспандера' : 'диски на гантель, кг'}</span>
+      <button type="button" class="cval" data-act="kp" data-f="load" ${ij}>${esc(loadText(ex, s.load))}</button>${pm('load')}
+      <span class="tiny muted">${kgOn ? 'у руках ' + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + ' кг' : ex.type === 'band' ? 'сума номерів джгутів' : '&nbsp;'}</span></div>` : '';
+    const boxR = `<div class="cbox"><span class="cl2">${ex.type === 'time' ? 'секунди' : 'повторення'}${ex.side ? ' · на бік' : ''}</span>
+      <button type="button" class="cval" data-act="kp" data-f="reps" ${ij}>${s.reps === null || s.reps === undefined ? '—' : s.reps}</button>${pm('reps')}
+      <span class="tiny muted">ціль: ${esc(tgt)}</span></div>`;
+    const plat = ENGINE.plateau(ex, ENGINE.history(P(), it.ex), P().handle) ? '<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>' : '';
+    const userNote = P().notes[it.ex] ? `<div class="hint">📝 ${esc(P().notes[it.ex])}</div>` : '';
+    const rir = (s.type === 'W' || ex.type === 'amrap') ? '' : `<div class="crir"><span class="small muted">Скільки ще могли б зробити? ${q('rir')}</span>
+      <div class="seg">${[[0, '0'], [1, '1'], [2, '2'], [3, '3+']].map(([x, l]) => `<button type="button" class="${s.rir === x || (x === 3 && s.rir > 3) ? 'on' : ''}" data-act="crir" data-v="${x}" ${ij}>${l}</button>`).join('')}</div></div>`;
+    return `<div class="coach">${chipsFor(d, cs)}
+      <h1 class="cname">${esc(ex.name)}</h1><div class="cmus">${esc(ex.m.p.map(mName).join(' · '))}${ex.side ? ' · кожен бік' : ''}</div>
+      ${vsel}${it.note ? `<div class="hint">💡 ${esc(it.note)}</div>` : ''}${plat}${userNote}
+      <div class="ctarget${isLoad(ex) ? '' : ' one'}">${boxL}${boxR}</div>
+      ${plateLine(ex, it, s.load)}
+      ${s.prev && s.type !== 'W' ? `<button type="button" class="ghost cprev" data-act="copyprev" ${ij}>Минулого: ${esc(setText(ex, s.prev))} — повторити</button>` : ''}
+      ${rir}
+      <button type="button" class="pri wide big cdone" data-act="cdone">✓ ${s.type === 'W' ? 'Розминковий підхід зроблено' : 'Підхід виконано'}</button>
+      ${techHtml(it.ex, !it.sets.some((x) => x.done))}
+      <div class="grid3 cacts"><button type="button" data-act="say" data-what="tip">🔊 Як робити</button><button type="button" data-act="say" data-what="set">🔁 Повторити</button><button type="button" id="cMore" data-act="exmenu" data-i="${cs.i}">⋯ Ще</button></div>
+      </div>${upcoming(d, cs)}${phaseBox(d)}`;
+  }
+  function skippedBox(d) {
+    const sk = d.items.map((it, i) => ({ it, i })).filter((x) => x.it.skipped); if (!sk.length) return '';
+    return `<h2>Пропущено й за бажанням</h2><div class="card"><ul class="list">${sk.map(({ it, i }) => `<li><span>${esc(G().ex[it.ex].name)}<div class="tiny muted">${it.optional ? 'за бажанням' : esc(it.note || 'пропущено')}</div></span><button type="button" class="sm" data-act="unskip" data-i="${i}">${it.optional ? 'Додати' : 'Повернути'}</button></li>`).join('')}</ul></div>`;
+  }
+  /* Техніка на екрані: навіщо, положення, рух, дихання, чого не робити й чому. */
+  function techHtml(exId, open) {
+    const sc = script(exId), ex = G().ex[exId];
+    if (!sc) return ex.tip ? `<div class="note small">${esc(ex.tip)}</div>` : '';
+    return `<details class="tech"${open ? ' open' : ''}><summary><b>Як робити й чого не робити</b><span class="small muted">${esc(sc.why)}</span></summary>
+      <p><b>Положення.</b> ${esc(sc.setup)}</p><p><b>Рух.</b> ${esc(sc.move)}</p>${sc.breath ? `<p><b>Дихання.</b> ${esc(sc.breath)}</p>` : ''}
+      ${sc.dont && sc.dont.length ? `<p><b>Чого не робити:</b></p><ul>${sc.dont.map((x) => `<li><b>${esc(x[0])}</b> — ${esc(x[1])}.</li>`).join('')}</ul>` : ''}
+      ${ex.tip ? `<p class="tiny muted"><b>З програми:</b> ${esc(ex.tip)}</p>` : ''}</details>`;
+  }
+  function upcoming(d, cs) {
+    const all = ENGINE.stepOrder(d.items).filter((x) => !d.items[x.i].sets[x.j].done), k = all.findIndex((x) => x.i === cs.i && x.j === cs.j);
+    const nx = all.slice(k + 1, k + 4); if (!nx.length) return skippedBox(d);
+    return `<h2>Далі</h2><div class="card"><ul class="list">${nx.map((x) => { const it = d.items[x.i], ex = G().ex[it.ex], s = it.sets[x.j]; return `<li><span>${esc(ex.name)}<div class="tiny muted">${esc(stepTitle(d, x))}${it.ss ? ' · суперсет ' + it.ss.g : ''}</div></span><span class="small">${esc(setText(ex, s))}</span></li>`; }).join('')}</ul></div>` + skippedBox(d);
+  }
+  function ringSvg() {
+    const r = 52, c = 2 * Math.PI * r;
+    return `<svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--soft)" stroke-width="9"/><circle id="cArc" cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--accent)" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 60 60)"/></svg>`;
+  }
+  function restCard(d) {
+    const nx = curStep(d), prog = G(), last = d.coach.last;
+    let nxt = '';
+    if (nx) { const it = d.items[nx.i], ex = prog.ex[it.ex], s = it.sets[nx.j]; nxt = `<div class="cnext"><span class="tiny muted">Далі${it.ss ? ' · суперсет ' + it.ss.g : ''}</span><b>${esc(ex.name)}</b><span class="small">${esc(stepTitle(d, nx))} · ${esc(setText(ex, s))}${ex.side ? ' на бік' : ''}</span>${plateLine(ex, it, s.load)}</div>`; }
+    return `<div class="coach crest"><div class="cring">${ringSvg()}<div class="ctime"><b id="cTime">0:00</b><span>відпочинок</span></div></div>
+      <div class="grid3"><button type="button" data-act="tadd" data-v="-15">−15 с</button><button type="button" data-act="tadd" data-v="15">+15 с</button><button type="button" class="pri" data-act="tskip">Почати</button></div>
+      ${nxt}${last ? `<button type="button" class="ghost wide" data-act="kp" data-f="reps" data-i="${last.i}" data-j="${last.j}">✎ Виправити щойно зроблений підхід</button>` : ''}
+      <div class="grid2 cacts"><button type="button" data-act="say" data-what="set">🔊 Що далі</button><button type="button" data-act="mode">☰ Усі вправи</button></div></div>`;
+  }
+  function myoPauseCard(d) {
+    const m = d.coach.myo, k = m ? m.k : 0;
+    return `<div class="coach crest">${'<div class="cchips"><button type="button" class="chip g" data-act="gl" data-k="myo">Міо-підхід · ?</button></div>'}
+      <div class="cring">${ringSvg()}<div class="ctime"><b id="cTime">0:15</b><span>пауза</span></div></div>
+      <p class="center">Глибоко вдихніть 3–5 разів. Далі — 3–5 повторень тією самою вагою.</p><p class="center small muted">Міні-підходів: ${k} з 3</p>
+      <button type="button" class="pri wide big" data-act="tskip">Почати раніше</button><p></p><button type="button" class="ghost wide" data-act="myoEnd">Досить — завершити міо</button></div>`;
+  }
+  function myoMiniCard(d) {
+    const m = d.coach.myo, s = d.items[m.i].sets[m.j], ex = G().ex[d.items[m.i].ex];
+    return `<div class="coach">${'<div class="cchips"><button type="button" class="chip g" data-act="gl" data-k="myo">Міо-підхід · ?</button></div>'}
+      <h1 class="cname">${esc(ex.name)}</h1><div class="cmus">Міні-підхід ${m.k + 1} з 3 · та сама вага${(s.mini || []).length ? ' · вже: ' + s.mini.join(' + ') : ''}</div>
+      <p class="small">Скільки повторень вийшло? Торкніться числа.</p>
+      <div class="cnums">${[1, 2, 3, 4, 5, 6].map((r) => `<button type="button" data-act="myoRep" data-v="${r}">${r}</button>`).join('')}</div>
+      <p class="tiny muted">Менше трьох — міо-підхід завершується сам: мʼяз уже втомлений достатньо.</p>
+      <button type="button" class="ghost wide" data-act="myoEnd">Досить — завершити міо</button></div>`;
+  }
+  function warmCard() {
+    const w = warmList();
+    return `<div class="coach"><div class="cchips"><span class="chip a">Крок 1 · розминка</span></div><h1 class="cname">${esc(w.title)}</h1>
+      <ul class="clist">${w.items.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
+      <button type="button" class="pri wide big" data-act="cwarm">✓ Розминку зроблено</button>
+      <div class="grid2 cacts"><button type="button" data-act="say" data-what="warm">🔊 Прослухати</button><button type="button" data-act="cwarm" data-skip="1">Пропустити</button></div></div>${phaseBox(P().draft)}`;
+  }
+  function coolCard() {
+    const c = coolText();
+    return `<div class="coach"><div class="cchips"><span class="chip ok">Усі підходи зроблено</span></div><h1 class="cname">Майже все 🎉</h1>
+      ${c ? `<p><b>Заминка.</b> ${esc(c)}</p>` : '<p>Можна завершувати тренування.</p>'}
+      <button type="button" class="pri wide big" data-act="finish">Завершити тренування</button><p></p>
+      <button type="button" class="ghost wide" data-act="mode">☰ Переглянути всі підходи</button></div>`;
+  }
+
+  /* --- режим «Список»: усі вправи й підходи --- */
   function exCard(d, i) {
     const it = d.items[i], prog = G(), ex = prog.ex[it.ex];
     const range = ex.type === 'amrap' ? 'скільки зможете, запас 2' : (it.min === it.max ? it.max : it.min + '–' + it.max) + (ex.type === 'time' ? ' с' : '');
     const mus = ex.m.p.map(mName).join(' · ');
     const ssb = it.ss ? `<span class="ssb">${it.ss.g}${it.ss.k}</span>` : '';
     if (it.skipped) {
-      return `<div class="exc skip"><div class="exh"><div>${ssb}<h3 style="display:inline">${esc(ex.name)}</h3><div class="mus">${it.sets.length} × ${range}${it.optional ? ' · за бажанням' : ''}</div></div>
+      return `<div class="exc skip"><div class="exh"><div>${ssb}<h3 style="display:inline">${esc(ex.name)}</h3><div class="mus">${workCount(it)} × ${range}${it.optional ? ' · за бажанням' : ''}</div>${it.note && !it.optional ? `<div class="hint">${esc(it.note)}</div>` : ''}</div>
         <button type="button" class="sm" data-act="unskip" data-i="${i}">${it.optional ? 'Додати' : 'Повернути'}</button></div></div>`;
     }
     const plat = ENGINE.plateau(ex, ENGINE.history(P(), it.ex), P().handle) ? '<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>' : '';
@@ -217,68 +509,41 @@
     const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
     const hdr = `<div class="tr h"><span>підхід</span><span>минулого</span><span>${ex.type === 'band' ? 'рівень' : hasKg(ex) ? 'диски, кг' : ''}</span><span>${ex.type === 'time' ? 'секунди' : 'повтор.'}</span><span></span></div>`;
     const rows = it.sets.map((s, j) => {
-      const lab = s.type === 'N' ? String(it.sets.slice(0, j + 1).filter((x) => x.type !== 'W').length) : ({ W: 'Р', D: 'Д', F: 'В' }[s.type]);
+      const lab = s.type === 'N' ? String(it.sets.slice(0, j + 1).filter((x) => x.type !== 'W').length) : ({ W: 'Р', D: 'Д', F: 'В', M: 'М' }[s.type]);
       const loadCell = isLoad(ex) ? `<button type="button" class="cl" data-act="kp" data-f="load" data-i="${i}" data-j="${j}">${esc(loadText(ex, s.load))}${hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '' ? '<small>+ гриф</small>' : ''}</button>` : '<span class="cl na">—</span>';
-      const repCell = `<button type="button" class="cl" data-act="kp" data-f="reps" data-i="${i}" data-j="${j}">${s.reps === null || s.reps === undefined ? '—' : s.reps + (ex.type === 'time' ? ' с' : '')}${s.rir !== null && s.rir !== undefined ? `<small>запас ${s.rir === 4 ? '4+' : s.rir}</small>` : ''}</button>`;
+      const repCell = `<button type="button" class="cl" data-act="kp" data-f="reps" data-i="${i}" data-j="${j}">${s.reps === null || s.reps === undefined ? '—' : s.reps + (ex.type === 'time' ? ' с' : '')}${s.rir !== null && s.rir !== undefined ? `<small>запас ${s.rir >= 4 ? '4+' : s.rir}</small>` : ''}</button>`;
       const pr = s.pr && s.pr.length ? `<div class="prb">🏆 ${s.pr.map((t) => ({ e1rm: 'рекорд максимуму', weight: 'рекорд ваги', reps: 'рекорд повторень' }[t])).join(' · ')}</div>` : '';
+      const mini = s.type === 'M' ? `<div class="prb mi"><button type="button" class="sm" data-act="minis" data-i="${i}" data-j="${j}">міні-підходи: ${(s.mini || []).length ? s.mini.join(' + ') : 'записати'}</button></div>` : '';
       return `<div class="tr${s.done ? ' dn' : ''}${s.pr && s.pr.length ? ' pr' : ''}"><button type="button" class="st ${s.type}" data-act="stype" data-i="${i}" data-j="${j}" aria-label="тип підходу">${lab}</button>
         <button type="button" class="pv" data-act="copyprev" data-i="${i}" data-j="${j}">${s.type === 'W' ? '' : esc(setText(ex, s.prev))}</button>${loadCell}${repCell}
-        <button type="button" class="ck" data-act="done" data-i="${i}" data-j="${j}" aria-label="виконано">✓</button>${pr}</div>`;
+        <button type="button" class="ck" data-act="done" data-i="${i}" data-j="${j}" aria-label="виконано">✓</button>${pr}${mini}</div>`;
     }).join('');
-    const firstWork = it.sets.find((s) => s.type !== 'W');
-    const canWarm = ENGINE.warmups(ex, firstWork ? firstWork.load : null, ENGINE.stepFor(P().inv), G().warm).length && !it.sets.some((s) => s.type === 'W');
     const userNote = P().notes[it.ex] ? `<div class="hint">📝 ${esc(P().notes[it.ex])}</div>` : '';
+    const firstWork = it.sets.find((s) => s.type !== 'W');
     return `<div class="exc${it.ss ? ' ss' : ''}">
-      <div class="exh"><div>${ssb}<h3 style="display:inline">${esc(ex.name)}</h3><div class="mus">${esc(mus)} · ${it.sets.filter((s) => s.type !== 'W').length} × ${range}${ex.side ? ' · на бік' : ''} · ${it.ss && it.ss.k === 1 ? 'одразу в пару' : 'відпочинок ' + it.rest + ' с'}</div></div>
+      <div class="exh"><div>${ssb}<h3 style="display:inline">${esc(ex.name)}</h3><div class="mus">${esc(mus)} · ${workCount(it)} × ${range}${ex.side ? ' · на бік' : ''} · ${it.ss && it.ss.k === 1 ? 'одразу в пару' : 'відпочинок ' + it.rest + ' с'}${ex.spine ? ' · поперек: запас 2' : ''}</div></div>
       <button type="button" class="dots" data-act="exmenu" data-i="${i}" aria-label="меню вправи">⋯</button></div>
       ${vsel}${note ? `<div class="hint">💡 ${esc(note)}</div>` : ''}${plat}${userNote}
       <div class="tb">${hdr}${rows}</div>
-      <div class="exf"><div class="row"><button type="button" class="sm" data-act="addset" data-i="${i}">+ Підхід</button>${canWarm ? `<button type="button" class="sm" data-act="warm" data-i="${i}">+ Розминка</button>` : ''}</div>
+      <div class="exf"><div class="row"><button type="button" class="sm" data-act="addset" data-i="${i}">+ Підхід</button></div>
       ${plateLine(ex, it, firstWork ? firstWork.load : null)}</div></div>`;
   }
-  function rWorkout() {
-    const p = P(), d = p.draft; if (!d) { view = 'home'; return render(); }
-    const prog = G(), plan = ENGINE.planFor(prog, d.n), st = draftStats(d);
-    app.innerHTML = `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
-      <div class="t"><b>${esc(prog.workouts[d.workout].title)}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}</span></div>
-      <button type="button" class="pri" data-act="finish">Готово</button></div>
-      <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>
-      <details class="card"><summary class="sp" style="list-style:none;cursor:pointer"><span><span class="chip a">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span> <span class="chip">${esc(plan.note.rir)}</span>${plan.deload ? ' <span class="chip w">легкий</span>' : ''}</span><span class="muted small">ⓘ</span></summary>
-      <p class="small"><b>${esc(plan.note.phase)}.</b> ${esc(plan.note.text)}</p><p class="tiny muted">Типи підходів: торкніться номера — Р (розминка), Д (дроп), В (до відмови). Колонка «минулого» — торкніться, щоб повторити.</p></details>
-      ${guideChips(['warm', 'safety', 'gear'])}
+  function rList() {
+    const d = P().draft, prog = G(), st = draftStats(d);
+    app.innerHTML = `${wbar(d, prog, st)}${phaseBox(d)}
+      <p class="tiny muted">Номер підходу — тип: Р розминка, Д дроп, В до відмови, М міо ${q('myo')}. «Минулого» — торкніться, щоб повторити.</p>
       ${d.items.map((_, i) => exCard(d, i)).join('')}
-      ${cooldownNote()}
+      ${coolText() ? `<div class="note ok small"><b>Заминка:</b> ${esc(coolText())}</div>` : ''}
       <button type="button" class="pri wide big" data-act="finish">Завершити тренування</button><p></p>
       <button type="button" class="ghost wide" data-act="discard">Скасувати тренування</button>`;
-    const el = () => { const e = document.getElementById('elapsed'); if (!e) return; const s = Math.floor((Date.now() - d.started) / 1000); e.textContent = (s >= 3600 ? Math.floor(s / 3600) + ':' + pad(Math.floor(s / 60) % 60) : Math.floor(s / 60)) + ':' + pad(s % 60); };
-    el(); elapsedT = setInterval(el, 1000);
-    keepAwake(true);
+    startElapsed(d); keepAwake(true);
   }
-  function cooldownNote() {
-    const w = (G().guide || []).find((g) => g.id === 'warm'); if (!w) return '';
-    const k = w.items.findIndex((x) => /^#Заминка/.test(x)); if (k < 0) return '';
-    return `<div class="note ok small"><b>${esc(w.items[k].slice(1))}:</b> ${esc(w.items.slice(k + 1).join(' '))}</div>`;
-  }
-  function toggleDone(i, j) {
-    const p = P(), d = p.draft, it = d.items[i], s = it.sets[j], ex = G().ex[it.ex];
-    if (s.done) { s.done = false; s.pr = []; save(); rWorkout(); return; }
-    if (!(Number(s.reps) > 0)) { openKp(i, j, 'reps'); return; }
-    ensureAudio(); s.done = true; haptic();
-    s.pr = [];
-    if (s.type !== 'W') {
-      const histAll = ENGINE.history(p, it.ex, 'all');
-      const earlier = it.sets.slice(0, j).filter((x) => x.done && x.type !== 'W').map((x) => ({ load: x.load, reps: x.reps, variant: it.variant, type: x.type }));
-      s.pr = ENGINE.prTypes(ex, { load: s.load, reps: Number(s.reps), variant: it.variant, type: s.type }, histAll.concat(earlier.length ? [{ date: d.date, sets: earlier }] : []), p.handle);
-    }
-    const nx = it.sets[j + 1]; if (nx && !nx.done && !nx.touched && nx.type === s.type) nx.load = s.load;
-    save();
-    const st = draftStats(d);
-    if (st.done < st.total) {
-      const rest = s.type === 'W' ? 45 : (it.ss && it.ss.k === 1 ? 0 : it.rest);
-      if (rest > 0) startTimer(rest, nextLabel(d, i, j)); else stopTimer();
-    } else stopTimer();
-    rWorkout();
-    if (s.pr.length) toast('🏆 Рекорд: ' + ex.name, true);
+  function minisSheet(i, j) {
+    const s = P().draft.items[i].sets[j], m = (s.mini || []).slice();
+    ui.minis = { i, j, m };
+    const row = (k) => `<div class="sp" style="margin:8px 0"><span>Міні-підхід ${k + 1}</span><div class="row">${[0, 1, 2, 3, 4, 5, 6].map((r) => `<button type="button" class="sm${m[k] === r ? ' pri' : ''}" data-act="miniSet" data-k="${k}" data-v="${r}">${r}</button>`).join('')}</div></div>`;
+    openSheet(`<div class="sp"><b>Міо: міні-підходи</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div><p class="small muted">Після основного підходу — пауза 15 с і 3–5 повторень; до трьох разів. 0 — не робили.</p>${[0, 1, 2].map(row).join('')}
+      <button type="button" class="pri wide" data-act="miniSave">Зберегти</button>`);
   }
   function finishWorkout() {
     const p = P(), d = p.draft, prog = G();
@@ -286,16 +551,17 @@
     d.items.forEach((it) => {
       if (it.skipped) return;
       const types = new Set();
-      it.sets.forEach((s) => { if (!s.done || !(Number(s.reps) > 0)) return; sets.push({ ex: it.ex, variant: it.variant || undefined, type: s.type || 'N', load: s.load === '' ? null : s.load, reps: Number(s.reps), rir: s.rir === null || s.rir === undefined ? null : Number(s.rir) }); (s.pr || []).forEach((t) => types.add(t)); });
+      it.sets.forEach((s) => { if (!s.done || !(Number(s.reps) > 0)) return; const x = { ex: it.ex, variant: it.variant || undefined, type: s.type || 'N', load: s.load === '' ? null : s.load, reps: Number(s.reps), rir: s.rir === null || s.rir === undefined ? null : Number(s.rir) }; if (s.mini && s.mini.length) x.mini = s.mini.filter((r) => r > 0); sets.push(x); (s.pr || []).forEach((t) => types.add(t)); });
       if (types.size) prList.push({ ex: it.ex, types: Array.from(types) });
     });
     if (!sets.length) { if (confirm('Жодного підходу не відмічено. Закрити тренування без збереження?')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); } return; }
     const st = draftStats(d);
     if (st.done < st.total && !confirm('Відмічено ' + st.done + ' з ' + st.total + ' підходів. Завершити тренування?')) return;
-    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, deload: d.deload, mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
+    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, deload: d.deload, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
     p.sessions.push(sess); p.sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
     p.draft = null; save(); stopTimer(); keepAwake(false);
     ui.summary = sess.id; view = 'summary'; render(); window.scrollTo(0, 0);
+    talk('Тренування завершено: ' + sess.mins + ' ' + VOICE.plural(sess.mins, 'хвилина', 'хвилини', 'хвилин') + (sess.prs ? ', рекордів: ' + sess.prs : '') + '. ' + (hard() ? COACH.line('end', G().sex, sess.n) : 'Гарна робота!'));
   }
 
   /* ---------- клавіатура (шторка) ---------- */
@@ -416,6 +682,96 @@
     return '<div class="quick">' + list.map((g) => `<button type="button" class="sm" data-act="guide" data-id="${g.id}">${esc(g.title)}</button>`).join('') + '</div>';
   }
 
+  /* ---------- словник і навчання ---------- */
+  function glSheet(k) {
+    const g = GLOSSARY[k]; if (!g) return;
+    openSheet(`<div class="sp"><b>${esc(g[0])}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div><p>${esc(g[1])}</p>
+      <button type="button" class="wide" data-act="say" data-what="gl" data-k="${k}">🔊 Прослухати</button>`);
+  }
+  function glAll() {
+    openSheet(`<div class="sp"><b>Словник</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+      <ul class="list">${Object.keys(GLOSSARY).map((k) => `<li style="display:block"><b>${esc(GLOSSARY[k][0])}</b><div class="small muted" style="margin-top:3px">${esc(GLOSSARY[k][1])}</div></li>`).join('')}</ul>`);
+  }
+  const TOURS = {
+    home: [['.hero .pri', 'Почніть тут. Застосунок спитає про спину, підставить вагу й поведе тренування голосом — крок за кроком.'],
+      ['.dly', 'Щоденні звички: відмічайте галочкою. «Як робити» — коротка інструкція.'],
+      ['#tabs', 'План — 12 тижнів і історія. Прогрес — графіки й рекорди. Тіло — заміри, харчування, фото. Більше — голос і налаштування.']],
+    coach: [['.ctarget', 'Ціль підходу. Вага — скільки дисків на гантель; поруч — повторення. Міняйте кнопками − і + або торкніться числа.'],
+      ['.coach .plt', 'Скільки дисків надіти з кожного боку гантелі.'],
+      ['.cdone', 'Зробили підхід — натисніть. Тренер сам запустить відпочинок і скаже, що далі.'],
+      ['#cMore', 'Тут — як робити, заміна вправи, пропуск, нотатка.'],
+      ['#modeBtn', 'Перемикач: усі вправи списком, як у класичному журналі. Повернутися — тією самою кнопкою.']]
+  };
+  function tourMaybe(id) { if (S().tour[id] || document.getElementById('tour') || document.body.classList.contains('sheet')) return; setTimeout(() => { if (!S().tour[id]) tour(id, 0); }, 400); }
+  function tour(id, k) {
+    const old = document.getElementById('tour'); if (old) old.remove();
+    const steps = TOURS[id];
+    if (!steps || k >= steps.length) { S().tour[id] = true; save(); return; }
+    const t = document.querySelector(steps[k][0]);
+    if (!t || !t.getClientRects().length) return tour(id, k + 1);
+    t.scrollIntoView({ block: 'center' });
+    const r = t.getBoundingClientRect(), H = window.innerHeight, below = r.bottom + 170 < H;
+    const ov = document.createElement('div'); ov.id = 'tour';
+    ov.innerHTML = `<div class="th" style="left:${Math.max(4, r.left - 6)}px;top:${r.top - 6}px;width:${Math.min(window.innerWidth - 8, r.width + 12)}px;height:${r.height + 12}px"></div>
+      <div class="tbx" style="${below ? 'top:' + Math.round(r.bottom + 14) + 'px' : 'bottom:' + Math.round(H - r.top + 14) + 'px'}"><p>${esc(steps[k][1])}</p>
+      <div class="sp"><span class="tiny">${k + 1} з ${steps.length}</span><span class="row"><button type="button" class="sm ghost" data-tour="skip">Пропустити</button><button type="button" class="sm pri" data-tour="next">${k + 1 === steps.length ? 'Зрозуміло' : 'Далі'}</button></span></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) return; if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
+  }
+  function whatsNew() {
+    openSheet(`<div class="sp"><b>Що нового у версії 3</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+      <ul class="list">
+        <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: розминка, вага й диски, відпочинок, «10 секунд», «Час!», рекорди. На екрані — лише поточний крок.</div></li>
+        <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Перед тренуванням. Від відповіді застосунок сам полегшує або прибирає вправи на поперек.</div></li>
+        <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети з першого тижня, міо-підходи в ізоляції з тижня 5 — менше часу, та сама робота.</div></li>
+        <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
+        <li style="display:block"><b>❓ Підказки</b><div class="small muted">Кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
+      </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
+    S().tour.v3 = true; save();
+  }
+  function readySheet(wid) {
+    const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl;
+    openSheet(`<b>${her ? 'Як спина й суглоби сьогодні?' : 'Як спина сьогодні?'}</b> ${q('ready')}
+      <p class="small muted">Від відповіді залежать вправи на поперек.</p>
+      <div class="pick rd">
+        <button type="button" data-act="go" data-r="g" data-w="${wid || ''}"><b>🟢 Добре</b><span class="small muted">тренування за планом</span></button>
+        <button type="button" data-act="go" data-r="y" data-w="${wid || ''}"><b>🟡 Ниє, але терпимо</b><span class="small muted">${sw ? 'румунська тяга → міст, решта вправ на поперек — на крок легше' : 'вправи на поперек — на крок легше, запас 3'}</span></button>
+        <button type="button" data-act="go" data-r="r" data-w="${wid || ''}"><b>🔴 Болить або віддає в ногу</b><span class="small muted">сьогодні без вправ на поперек</span></button>
+      </div>
+      <div class="note b small"><b>Негайно до лікаря:</b> оніміння в паху чи між ногами, порушення сечовипускання чи стільця, слабкість у нозі, що наростає.</div>`);
+  }
+
+  /* ---------- радіо ---------- */
+  function radioSheet() {
+    const cur = RADIO.cur, st = RADIO.state, R = S().radio;
+    const groups = []; RADIO.STATIONS.forEach((x) => { let g = groups.find((y) => y.g === x.g); if (!g) { g = { g: x.g, list: [] }; groups.push(g); } g.list.push(x); });
+    const stTxt = { off: 'вимкнено', loading: 'підключаюся…', playing: 'грає', paused: 'пауза', error: 'станція не відповідає — оберіть іншу' }[st] || '';
+    openSheet(`<div class="sp"><b>Радіо для тренувань</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+      ${cur ? `<div class="card rnow"><div class="sp"><div><b>${esc(cur.name)}</b><div class="small muted">${esc(cur.genre)} · ${stTxt}</div></div>
+        <div class="row" style="flex-wrap:nowrap">${st === 'playing' || st === 'loading' ? '<button type="button" class="ic" data-act="rpause" aria-label="пауза">⏸</button>' : '<button type="button" class="ic" data-act="rresume" aria-label="грати">▶</button>'}<button type="button" class="ic" data-act="rstop" aria-label="вимкнути">✕</button></div></div></div>` : ''}
+      ${groups.map((g) => `<h3 class="rg">${esc(g.g)}</h3><div class="rlist">${g.list.map((x) => `<button type="button" class="rst${cur && cur.id === x.id ? ' on' : ''}" data-act="rplay" data-id="${x.id}"><b>${esc(x.name)}</b><span class="small muted">${esc(x.genre)}</span></button>`).join('')}</div>`).join('')}
+      <label class="f">Коли говорить тренер, радіо тихіше на</label>
+      <div class="seg">${[[0.7, '30 %'], [0.5, '50 %'], [0.3, '70 %']].map(([v, l]) => `<button type="button" class="${R.duck === v ? 'on' : ''}" data-act="rduck" data-v="${v}">${l}</button>`).join('')}</div>
+      <p class="tiny muted">Притишення плавне, звук повертається, щойно тренер замовк. Що радять науковці: улюблена енергійна музика зі швидким темпом (120+ ударів на хвилину) покращує настрій і трохи — результат, а втома відчувається менше. Найкраще працює та, яку обираєте самі, — тому можна вмикати й свою з іншого застосунку. Радіо потребує інтернету.</p>`);
+  }
+  const rbar = document.getElementById('rbar');
+  function updateRadio() {
+    const st = RADIO.state, cur = RADIO.cur, on = st === 'playing' || st === 'loading';
+    document.querySelectorAll('[data-act="radio"]').forEach((b) => b.classList.toggle('rad', on));
+    const show = cur && st !== 'off' && view !== 'workout' && view !== 'onboard' && view !== 'summary';
+    rbar.className = show ? 'on' : '';
+    if (show) rbar.innerHTML = `<button type="button" class="rbt" data-r="open"><span class="rdot2${on ? ' p' : ''}"></span><b>${esc(cur.name)}</b><span class="small muted">${st === 'error' ? 'не відповідає' : st === 'loading' ? 'підключаюся…' : st === 'paused' ? 'пауза' : esc(cur.genre)}</span></button>
+      ${on ? '<button type="button" class="ic" data-r="pause" aria-label="пауза">⏸</button>' : '<button type="button" class="ic" data-r="resume" aria-label="грати">▶</button>'}<button type="button" class="ic" data-r="stop" aria-label="вимкнути">✕</button>`;
+    if (document.body.classList.contains('sheet') && document.querySelector('#sheet .rlist')) radioSheet();
+  }
+  RADIO.on(updateRadio);
+  rbar.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-r]'); if (!b) return;
+    if (b.dataset.r === 'open') return radioSheet();
+    if (b.dataset.r === 'pause') RADIO.pause(); else if (b.dataset.r === 'resume') { ensureAudio(); RADIO.resume(); } else RADIO.stop();
+  });
+  VOICE.onSpeaking((on) => RADIO.duck(on));
+
   /* ---------- головна ---------- */
   function nextDayText(days) {
     if (!days || !days.length) return '';
@@ -426,19 +782,21 @@
   function dailyCard() {
     const p = P(), prog = G(), t = today(), rec = p.daily[t] || {};
     const wk = ENGINE.planFor(prog, Math.max(0, nextN() - 1)).week;
-    return `<h2>Щодня</h2><div class="card">${prog.daily.map((it) => {
+    return `<h2>Щодня</h2><div class="card dly">${prog.daily.map((it) => {
       if (it.jumps) {
         const j = prog.jumpsFor(wk), done = rec.jumps || 0;
         return `<div class="chk" style="flex-wrap:wrap"><div style="flex:1 1 100%"><b>${esc(it.label)}</b><div class="tiny muted">Тиждень ${wk}: ${j.n} стрибків × ${j.times} на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">як стрибати</button></div></div>
           <div class="row">${Array.from({ length: j.times }, (_, k) => `<button type="button" class="sm${k < done ? ' pri' : ''}" data-act="jump" data-k="${k + 1}">${k < done ? '✓ ' : ''}${k + 1}-й раз</button>`).join('')}</div></div>`;
       }
-      const how = it.id === 'posture' && prog.posture ? ' <button type="button" class="sm ghost" data-act="guide" data-id="posture">як робити</button>' : '';
+      const how = it.how && (G().guide || []).some((g) => g.id === it.how) ? ` <button type="button" class="sm ghost" data-act="guide" data-id="${it.how}">як робити</button>` : '';
       return `<div class="chk"><label class="row" style="flex:1;flex-wrap:nowrap;gap:12px"><input type="checkbox" data-act="daily" data-id="${it.id}"${rec[it.id] ? ' checked' : ''}><span>${esc(it.label)}</span></label>${how}</div>`;
     }).join('')}</div>`;
   }
   function alerts() {
     const out = [], p = P(), prog = G();
     if (ENGINE.fatigue(prog, p, p.handle)) out.push('<div class="note b">Два тренування поспіль головні вправи падають. Зробіть легкий тиждень: половина підходів, вага та сама або на крок нижча.</div>');
+    const reds = p.sessions.slice(-3).filter((s) => s.ready === 'r').length;
+    if (reds >= 2) out.push('<div class="note b">Спина болить уже кілька тренувань поспіль. Варто показатися неврологу чи ортопеду — з МРТ.</div>');
     const wk = ENGINE.planFor(prog, nextN()).week;
     if (prog.tests && [1, 4, 8, 12].indexOf(wk) >= 0 && !(p.body.tests || []).some((t) => Date.now() - tms(t.d) < 21 * 864e5)) out.push('<div class="note w">Цього тижня — тести готовності до старіння: «Тіло» → «Тести».</div>');
     if (p.sessions.length >= 3 && (!DB.lastBackup || Date.now() - tms(DB.lastBackup) > 14 * 864e5)) out.push('<div class="note w">Резервної копії не було понад 2 тижні — «Більше» → «Зберегти резервну копію».</div>');
@@ -452,24 +810,21 @@
     const wkKey = ENGINE.weekKey(today()), thisWeek = p.sessions.filter((s) => ENGINE.weekKey(s.date) === wkKey).length;
     const streak = ENGINE.streakWeeks(p.sessions, today());
     const ym = today().slice(0, 7), mprs = p.sessions.filter((s) => s.date.slice(0, 7) === ym).reduce((a, s) => a + (s.prs || 0), 0);
-    const est = Math.round(wo.items.reduce((a, it) => a + prog.setsFor(it, plan.week) * (it.rest + 45), 0) / 60);
+    const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
+    const warmMin = (warmList().title.match(/(\d+)\s*хв/) || [])[1];
     const nd = nextDayText(p.days);
-    const recent = []; p.sessions.slice().reverse().forEach((s) => (s.prList || []).forEach((x) => { if (recent.length < 5) recent.push({ d: s.date, ex: x.ex, t: x.types }); }));
-    const w = p.body.weight.slice().sort((a, b) => (a.d < b.d ? -1 : 1));
-    const avg = ENGINE.rolling7(w);
-    app.innerHTML = `<p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>${greet}!</h1>
+    app.innerHTML = `<p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div>
       ${alerts()}
       ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(prog.workouts[d.workout].title)} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
       <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з 3</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
-        <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${wo.items.filter((x) => !x.optional).length} вправ · ≈ ${est} хв · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
+        <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
         <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
-        ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><p></p><button type="button" class="wide" style="background:rgba(255,255,255,.15);color:#fff;border:0" data-act="other">Інше тренування</button>'}</div>
+        ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
+      ${S().tour.v3 ? '' : '<div class="card"><div class="sp"><div><b>Нове: тренер голосом</b><div class="small muted">Питання про спину, суперсети, міо-підходи, підказки.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, 3, thisWeek + '/3', 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
-      ${dailyCard()}
-      <h2>Порадник</h2><div class="card" style="padding:10px 12px">${guideChips()}<button type="button" class="sm" style="margin-top:6px" data-act="food">Харчування</button></div>
-      ${recent.length ? `<h2>Останні рекорди</h2><div class="card"><ul class="list">${recent.map((r) => `<li><span>${esc(prog.ex[r.ex].name)}<div class="tiny muted">${dm(r.d)}</div></span><span class="chip g">🏆 ${r.t.map((t) => ({ e1rm: 'максимум', weight: 'вага', reps: 'повторення' }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}
-      ${w.length >= 2 ? `<h2>Вага тіла</h2><div class="card">${CHARTS.line([{ pts: avg.map((q) => ({ t: tms(q.d), v: q.v })), color: 'var(--accent)', area: true, dots: false }], { h: 120, label: 'вага' })}<p class="tiny muted">Середня за 7 днів: ${fmt(avg[avg.length - 1].v)} кг</p></div>` : ''}`;
+      ${dailyCard()}`;
+    tourMaybe('home');
   }
   function otherSheet() {
     const prog = G();
@@ -508,10 +863,10 @@
     const groups = []; s.sets.forEach((x, k) => { let g = groups.find((y) => y.ex === x.ex); if (!g) { g = { ex: x.ex, sets: [] }; groups.push(g); } g.sets.push({ x, k }); });
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
     openSheet(`<div class="sp"><b>${esc(prog.workouts[s.workout] ? prog.workouts[s.workout].title : s.workout)}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
-      <p class="small muted">${dm(s.date)} · тиждень ${s.week} · ${s.mins || '?'} хв${vol ? ' · обсяг ' + fmt(Math.round(vol)) + ' кг' : ''}</p>
+      <p class="small muted">${dm(s.date)} · тиждень ${s.week} · ${s.mins || '?'} хв${vol ? ' · обсяг ' + fmt(Math.round(vol)) + ' кг' : ''}${s.ready ? ' · спина ' + ({ g: '🟢', y: '🟡', r: '🔴' }[s.ready] || '') : ''}</p>
       ${groups.map((g) => { const ex = prog.ex[g.ex] || { name: g.ex, type: 'bw' }; return `<div class="card" style="padding:10px 12px"><b class="small">${esc(ex.name)}</b>${g.sets.map(({ x, k }) => edit
         ? `<div class="row" style="flex-wrap:nowrap;margin-top:6px"><span class="tiny muted" style="width:22px">${x.type === 'W' ? 'Р' : x.type === 'D' ? 'Д' : x.type === 'F' ? 'В' : '•'}</span>${isLoad(ex) ? `<input inputmode="decimal" data-ed="load" data-sk="${k}" value="${x.load === null || x.load === undefined ? '' : fmt(x.load)}" placeholder="${ex.type === 'band' ? 'рівень' : 'кг'}">` : ''}<input inputmode="numeric" data-ed="reps" data-sk="${k}" value="${x.reps}"></div>`
-        : `<div class="small" style="margin-top:4px">${x.type === 'W' ? '<span class="chip w">Р</span> ' : x.type === 'D' ? '<span class="chip">Д</span> ' : x.type === 'F' ? '<span class="chip">В</span> ' : ''}${esc(setText(ex, x))}${x.rir !== null && x.rir !== undefined ? ' · запас ' + x.rir : ''}</div>`).join('')}</div>`; }).join('')}
+        : `<div class="small" style="margin-top:4px">${x.type === 'W' ? '<span class="chip w">Р</span> ' : x.type === 'D' ? '<span class="chip">Д</span> ' : x.type === 'F' ? '<span class="chip">В</span> ' : x.type === 'M' ? '<span class="chip g">М</span> ' : ''}${esc(setText(ex, x))}${x.mini && x.mini.length ? ' + ' + x.mini.join(' + ') : ''}${x.rir !== null && x.rir !== undefined ? ' · запас ' + x.rir : ''}</div>`).join('')}</div>`; }).join('')}
       ${edit ? `<button type="button" class="pri wide" data-act="sessSave" data-id="${s.id}">Зберегти зміни</button>` : `<button type="button" class="wide" data-act="sessEdit" data-id="${s.id}">Редагувати</button>`}<p></p>
       <button type="button" class="ghost wide" style="color:var(--bad)" data-act="sessDel" data-id="${s.id}">Видалити тренування</button>`);
   }
@@ -523,7 +878,7 @@
     let body = '';
     if (ui.progTab === 'ex') {
       const used = {}; p.sessions.forEach((s) => s.sets.forEach((x) => { if (x.type !== 'W') used[x.ex] = 1; }));
-      const ids = Object.keys(prog.ex).sort((a, b) => (used[b] ? 1 : 0) - (used[a] ? 1 : 0) || (prog.ex[b].main ? 1 : 0) - (prog.ex[a].main ? 1 : 0));
+      const ids = Object.keys(prog.ex).filter((id) => !prog.ex[id].retired || used[id]).sort((a, b) => (used[b] ? 1 : 0) - (used[a] ? 1 : 0) || (prog.ex[b].main ? 1 : 0) - (prog.ex[a].main ? 1 : 0));
       if (!ui.progEx || !prog.ex[ui.progEx]) ui.progEx = ids[0];
       const ex = prog.ex[ui.progEx], histAll = ENGINE.history(p, ui.progEx, 'all');
       const metrics = ex.type === 'db' ? [['e1rm', 'Максимум'], ['heavy', 'Вага'], ['vol', 'Обсяг']] : ex.type === 'dbopt' ? [['reps', 'Повторення'], ['heavy', 'Вага']] : ex.type === 'band' ? [['e1rm', 'Рівень × повт.']] : ex.type === 'time' ? [['e1rm', 'Секунди']] : [['e1rm', 'Повторення']];
@@ -544,7 +899,7 @@
       const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
       body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}${used[id] ? '' : ' (ще не виконували)'}</option>`).join('')}</select>
         <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}">${l}</button>`).join('')}</div>
-        <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)} · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">${[['4', '4 т'], ['12', '12 т'], ['all', 'усе']].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
+        <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)} · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">${[['4', '4 т'], ['12', '12 т'], ['all', 'усе']].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;min-width:44px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
         ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: 'Ще немає підходів у цій вправі' })}</div>
         ${histAll.length ? `<div class="grid3">
           <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' ? 'рекорд максимуму, кг' : 'найкращий показник'}</span></div>
@@ -571,6 +926,9 @@
         <div class="grid2"><div class="stat"><b>${r.sessions}${delta(r.sessions, r0.sessions)}</b><span>тренувань</span></div><div class="stat"><b>${r.mins}${delta(r.mins, r0.mins)}</b><span>хвилин</span></div>
         <div class="stat"><b>${r.volume ? fmt(Math.round(r.volume / 100) / 10) + ' т' : '—'}</b><span>обсяг</span></div><div class="stat"><b>${r.prs}${delta(r.prs, r0.prs)}</b><span>рекордів</span></div></div>
         ${r.gains && r.gains.length ? `<h2>Найбільший приріст</h2><div class="card"><ul class="list">${r.gains.slice(0, 5).map((g) => `<li><span>${esc(prog.ex[g.id].name)}</span><span class="chip ok">+${g.pct} %</span></li>`).join('')}</ul></div>` : ''}
+        ${(() => { const ms = p.sessions.filter((s) => s.date.slice(0, 7) === ym && s.ready); if (!ms.length) return ''; const c = { g: 0, y: 0, r: 0 }; ms.forEach((s) => { c[s.ready] = (c[s.ready] || 0) + 1; });
+          return `<h2>Самопочуття перед тренуваннями</h2><div class="card"><div class="row" style="gap:6px">${ms.map((s) => `<span class="rdot ${s.ready}" title="${dm(s.date)}"></span>`).join('')}</div><p class="small muted">🟢 ${c.g} · 🟡 ${c.y} · 🔴 ${c.r}${c.r >= 2 ? ' — болить часто: варто до лікаря з МРТ.' : ''}</p></div>`; })()}
+        ${(() => { const rc = []; p.sessions.slice().reverse().forEach((s) => (s.prList || []).forEach((x) => { if (rc.length < 6) rc.push({ d: s.date, ex: x.ex, t: x.types }); })); return rc.length ? `<h2>Останні рекорди</h2><div class="card"><ul class="list">${rc.map((r) => `<li><span>${esc((prog.ex[r.ex] || { name: r.ex }).name)}<div class="tiny muted">${dm(r.d)}</div></span><span class="chip g">🏆 ${r.t.map((t) => ({ e1rm: 'максимум', weight: 'вага', reps: 'повторення' }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''; })()}
         <h2>Календар</h2><div class="card">${CHARTS.month(ym, marks, today())}</div>
         <p class="tiny muted">Порівняння — з попереднім місяцем. Приріст — найкращий показник вправи в цьому місяці проти всього, що було раніше.</p>`;
     }
@@ -659,27 +1017,43 @@
 
   /* ---------- більше ---------- */
   function rMore() {
-    const p = P(), prog = G();
+    const p = P(), prog = G(), V = S().voice;
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     const curWeek = ENGINE.planFor(prog, nextN()).week;
     const sw = (k, l, d) => `<label class="sw"><span>${l}<div class="tiny muted">${d}</div></span><input type="checkbox" data-set="${k}"${S()[k] ? ' checked' : ''}></label>`;
+    const seg = (key, opts, cur) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
+    const vl = VOICE.list();
+    const voiceBox = !VOICE.supported ? '<div class="note w small">Цей браузер не вміє озвучувати текст. На iPhone голос працює в Safari й у встановленому застосунку.</div>'
+      : !vl.length ? '<div class="note w small"><b>Українського голосу не знайдено.</b> На iPhone: Параметри → Доступність → розділ про озвучення вмісту (англ. Spoken Content) → Голоси → Українська — завантажте голос і перезапустіть застосунок.</div>'
+      : `<label class="f">Голос</label><select id="voiceSel">${vl.map((v) => `<option value="${esc(v.uri)}"${v.uri === V.uri ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
     app.innerHTML = `<h1>Більше</h1>
       ${standalone ? '' : '<div class="note w small"><b>Встановіть як застосунок:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>'}
-      <h2>Програма</h2><div class="card"><label class="f">Програма на цьому телефоні</label><select id="progSel">${Object.values(PROGRAMS).map((q) => `<option value="${q.id}"${q.id === DB.active ? ' selected' : ''}>${esc(q.title)}</option>`).join('')}</select>
+      <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">вага й диски, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
+        ${voiceBox}
+        <label class="f">Характер тренера</label>${seg('tone', [['hard', 'Жорсткий з гумором'], ['calm', 'Спокійний']], V.tone || 'hard')}
+        <label class="f">Скільки говорити</label>${seg('level', [['full', 'Детально'], ['short', 'Коротко']], V.level)}
+        <label class="f">Темп</label>${seg('rate', [[0.9, 'Повільніше'], [1, 'Звичайно'], [1.1, 'Швидше']], V.rate)}
+        <button type="button" class="wide" data-act="say" data-what="test">🔊 Перевірити голос</button>
+        <p class="tiny muted">Голос звучить, коли застосунок відкритий і екран увімкнений («Не гасити екран» нижче). Не чути — перевірте гучність і перемикач беззвучного режиму.</p></div>
+      <h2>Музика</h2><div class="card"><div class="sp"><div><b>Радіо для тренувань</b><div class="small muted">${RADIO.cur ? esc(RADIO.cur.name) + ' · ' + ({ playing: 'грає', loading: 'підключаюся', paused: 'пауза', error: 'не відповідає' }[RADIO.state] || '') : RADIO.STATIONS.length + ' станцій: денс, хіти, українські, рок, метал, драм-н-бейс'}</div></div><button type="button" class="sm pri" data-act="radio">Відкрити</button></div></div>
+      <h2>Тренування</h2><div class="card"><label class="f">Екран тренування</label>${seg('mode', [['coach', 'Тренер · крок за кроком'], ['list', 'Список вправ']], S().mode)}
+        ${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', 'на iPhone з iOS 18+, якщо підтримується')}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
+      <h2>Програма</h2><div class="card"><label class="f">Програма на цьому телефоні</label><select id="progSel">${Object.values(PROGRAMS).map((q2) => `<option value="${q2.id}"${q2.id === DB.active ? ' selected' : ''}>${esc(q2.title)}</option>`).join('')}</select>
         <label class="f">Наступне тренування — тиждень</label><select id="weekSel"${p.draft ? ' disabled' : ''}>${Array.from({ length: 12 }, (_, k) => `<option value="${k + 1}"${k + 1 === curWeek ? ' selected' : ''}>${k + 1}</option>`).join('')}</select>
         <label class="f">Дні тренувань</label><div class="row">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}">${DAYS[d]}</button>`).join('')}</div></div>
       <h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="${fmt(p.handle)}">
         <label class="f">Диски на обидві гантелі: 5 · 2,5 · 1,25 кг (штук)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="${p.inv[5]}"><input inputmode="numeric" data-inv="2.5" value="${p.inv[2.5]}"><input inputmode="numeric" data-inv="1.25" value="${p.inv[1.25]}"></div>
         <p class="tiny muted">Крок ваги зараз: ${fmt(ENGINE.stepFor(p.inv))} кг на гантель.</p></div>
-      <h2>Тренування</h2><div class="card">${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', 'на iPhone з iOS 18+, якщо підтримується')}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
-      <h2>Порадник</h2><div class="card" style="padding:10px 12px">${guideChips()}<button type="button" class="sm" style="margin-top:6px" data-act="food">Харчування</button></div>
+      <h2>Порадник і підказки</h2><div class="card" style="padding:10px 12px">${guideChips()}<div class="quick"><button type="button" class="sm" data-act="food">Харчування</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Що нового</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
       <h2>Резервна копія</h2><div class="card"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: ${DB.lastBackup ? dm(DB.lastBackup) : 'ще не було'}</p>
         <label class="sw"><span>Разом із фото<div class="tiny muted">файл буде більшим</div></span><input type="checkbox" id="bkPhotos"></label>
         <button type="button" class="pri wide" data-act="backup">Зберегти резервну копію</button><p></p>
         <label class="btn" style="display:block;text-align:center">Відновити з копії<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label><p></p>
         <button type="button" class="wide" data-act="csv">Вивантажити таблицю (CSV)</button></div>
-      <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації, реклами й передачі даних. Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.</p>
+      <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації, реклами й передачі даних. Голос — системний синтез телефону, без інтернету. Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.</p>
         <button type="button" class="ghost wide" style="color:var(--bad)" data-act="wipe">Стерти дані цієї програми</button></div>`;
+    document.getElementById('voiceOn').onchange = (e) => { V.on = e.target.checked; save(); if (V.on) { VOICE.unlock(); talk('Голос увімкнено.'); } else VOICE.stop(); };
+    const vs = document.getElementById('voiceSel'); if (vs) vs.onchange = () => { V.uri = vs.value; save(); talk('Так звучить цей голос.'); };
     document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); };
     document.getElementById('weekSel').onchange = (e) => { const w = Number(e.target.value); p.offset = (w - 1) * 3 - p.sessions.length; save(); toast('Наступне тренування — тиждень ' + w); };
     document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast('Вага грифа — від 0 до 10 кг'); e.target.value = fmt(p.handle); return; } p.handle = v; save(); toast('Збережено'); };
@@ -687,6 +1061,7 @@
     app.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { S()[el.dataset.set] = el.checked; save(); if (el.dataset.set === 'haptics' && el.checked) haptic(); }; });
     document.getElementById('restoreIn').onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
     if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then((v) => { const el = document.getElementById('persist'); if (el) el.textContent = v ? 'сховище захищене від автоочищення' : 'робіть резервні копії'; }).catch(() => {});
+    if (VOICE.supported && !vl.length) setTimeout(() => { if (view === 'more' && VOICE.list().length) rMore(); }, 800);
   }
   async function shareFile(name, blob, type) {
     try { const file = new File([blob], name, { type }); if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return true; } }
@@ -701,10 +1076,10 @@
     if (ok) { DB.lastBackup = today(); save(); toast('Резервну копію створено'); rMore(); }
   }
   function csv() {
-    const prog = G(), h = P().handle, rows = [['дата', 'тиждень', 'тренування', 'вправа', 'варіант', 'тип', 'підхід', 'диски_кг', 'у_руках_кг', 'повторення_або_с', 'запас']];
+    const prog = G(), h = P().handle, rows = [['дата', 'тиждень', 'тренування', 'спина', 'вправа', 'варіант', 'тип', 'підхід', 'диски_кг', 'у_руках_кг', 'повторення_або_с', 'запас', 'міні_підходи']];
     P().sessions.forEach((s) => { const cnt = {}; s.sets.forEach((x) => { const ex = prog.ex[x.ex] || { name: x.ex }; cnt[x.ex] = (cnt[x.ex] || 0) + 1;
       const tot = (x.load === null || x.load === undefined || ex.type === 'band') ? '' : String(ENGINE.totalLoad(ex, x.load, h, x.variant));
-      rows.push([s.date, s.week, s.workout, ex.name, x.variant || '', x.type || 'N', cnt[x.ex], x.load === null || x.load === undefined ? '' : x.load, tot, x.reps, x.rir === null || x.rir === undefined ? '' : x.rir]); }); });
+      rows.push([s.date, s.week, s.workout, s.ready || '', ex.name, x.variant || '', x.type || 'N', cnt[x.ex], x.load === null || x.load === undefined ? '' : x.load, tot, x.reps, x.rir === null || x.rir === undefined ? '' : x.rir, (x.mini || []).join('+')]); }); });
     const text = String.fromCharCode(65279) + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n');
     shareFile('trenuvannia-' + today() + '.csv', new Blob([text], { type: 'text/csv' }), 'text/csv');
   }
@@ -717,6 +1092,7 @@
         const cnt = Object.values(o.db.profiles).reduce((a, q) => a + ((q && q.sessions) ? q.sessions.length : 0), 0);
         if (!confirm('Відновити копію від ' + String(o.exported || '').slice(0, 10) + ' (' + plural(cnt, 'тренування', 'тренування', 'тренувань') + ')? Поточні дані на цьому телефоні буде замінено.')) return;
         DB = fixProfiles(ENGINE.migrate(o.db)); if (!DB.active || !DB.profiles[DB.active]) DB.active = Object.keys(DB.profiles)[0] || null;
+        VOICE.init(DB.settings.voice); RADIO.setDuck(DB.settings.radio.duck);
         if (o.photos && o.photos.length) { for (const x of o.photos) { try { await STORE.putPhoto({ id: x.id, profile: x.profile, date: x.date, pose: x.pose, blob: STORE.dataToBlob(x.data) }); } catch (e) { /* пропуск */ } } }
         save(); toast('Дані відновлено'); view = DB.active ? 'home' : 'onboard'; render();
       } catch (e) { toast('Це не схоже на резервну копію журналу'); }
@@ -727,11 +1103,52 @@
   /* ---------- дії ---------- */
   function exMenu(i) {
     const d = P().draft, it = d.items[i], ex = G().ex[it.ex];
-    openSheet(`<b>${esc(ex.name)}</b><p class="small muted">${esc(ex.m.p.map(mName).join(' · '))}${ex.m.s.length ? ' · допоміжні: ' + esc(ex.m.s.map(mName).join(', ')) : ''}</p>
-      <div class="note small">${esc(ex.tip || '')}</div>
+    const fw = it.sets.find((s) => s.type !== 'W');
+    const canWarm = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(P().inv), G().warm).length && !it.sets.some((s) => s.type === 'W');
+    const started = it.sets.some((s) => s.done);
+    openSheet(`<div class="sp"><b>${esc(ex.name)}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+      <p class="small muted">${esc(ex.m.p.map(mName).join(' · '))}${ex.m.s.length ? ' · допоміжні: ' + esc(ex.m.s.map(mName).join(', ')) : ''}</p>
+      ${techHtml(it.ex, true)}
+      <button type="button" class="wide" data-act="say" data-what="exTip" data-ex="${it.ex}">🔊 Прослухати техніку</button>
+      <div class="grid2" style="margin-top:10px">
+        <button type="button" data-act="swap" data-i="${i}"${started ? ' disabled' : ''}>🔄 Замінити</button>
+        <button type="button" data-act="skip" data-i="${i}">⏭ Пропустити</button>
+        <button type="button" data-act="addset" data-i="${i}">+ Підхід</button>
+        <button type="button" data-act="delset" data-i="${i}">− Останній підхід</button>
+        ${canWarm ? `<button type="button" data-act="warm" data-i="${i}">Розминковий підхід</button>` : ''}
+      </div>${started ? '<p class="tiny muted">Заміна — лише до першого підходу вправи.</p>' : ''}
       <label class="f">Моя нотатка до вправи (видно щоразу)</label><textarea id="exNote" placeholder="наприклад: крісло біля стіни, хват ширший">${esc(P().notes[it.ex] || '')}</textarea><p></p>
-      <button type="button" class="pri wide" data-act="noteSave" data-i="${i}">Зберегти нотатку</button><p></p>
-      <div class="grid2"><button type="button" data-act="delset" data-i="${i}">Прибрати останній підхід</button><button type="button" data-act="skip" data-i="${i}">Пропустити вправу</button></div>`);
+      <button type="button" class="pri wide" data-act="noteSave" data-i="${i}">Зберегти нотатку</button>`);
+  }
+  function swapSheet(i) {
+    const d = P().draft, it = d.items[i], prog = G();
+    const alts = ENGINE.alternatives(prog, it.ex, d.ready && d.ready !== 'g', d.items.map((x) => x.ex)).slice(0, 6);
+    openSheet(`<div class="sp"><b>Замінити «${esc(prog.ex[it.ex].name)}»</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+      <p class="small muted">Вправи на ті самі мʼязи з вашої програми${d.ready && d.ready !== 'g' ? ', без навантаження на поперек' : ''}.</p>
+      ${alts.length ? `<div class="pick">${alts.map((id) => `<button type="button" data-act="swapTo" data-i="${i}" data-ex="${id}"><b>${esc(prog.ex[id].name)}</b><span class="small muted">${esc(prog.ex[id].m.p.map(mName).join(' · '))}</span></button>`).join('')}</div>` : '<div class="empty">Рівноцінної заміни в програмі немає — можна пропустити вправу.</div>'}`);
+  }
+  function doSwap(i, to) {
+    const p = P(), d = p.draft, old = d.items[i], prog = G(), plan = ENGINE.planFor(prog, d.n);
+    const base = { ex: to, sets: workCount(old), min: old.min, max: old.max, rest: old.rest };
+    const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload;
+    const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: old.from || old.ex, myo });
+    nw.skipped = false; d.items[i] = nw; save(); closeSheet(); rWorkout();
+    talk(sp('Заміна: ' + prog.ex[to].name + '.'));
+  }
+  function sayWhat(b) {
+    const w = b.dataset.what, d = P() && P().draft;
+    if (w === 'gl') { const g = GLOSSARY[b.dataset.k]; if (g) say1(g[0] + '. ' + g[1]); return; }
+    if (w === 'exTip') { const ex = G().ex[b.dataset.ex], sc = script(b.dataset.ex); if (ex) say1(ex.name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : ex.tip)); return; }
+    if (w === 'test') { say1('Привіт! Я ваш тренер. Так звучатиме голос під час тренування.'); return; }
+    if (!d) return;
+    if (w === 'warm') { const wl = warmList(); say1(wl.title + '. ' + wl.items.join(' ')); return; }
+    const cs = curStep(d); if (!cs) { say1(coolText() ? 'Заминка: ' + coolText() : 'Усі підходи зроблено.'); return; }
+    if (w === 'tip') { const id = d.items[cs.i].ex, sc = script(id); say1(G().ex[id].name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : G().ex[id].tip)); return; }
+    say1((T.id && T.kind === 'rest' ? 'Далі — ' : '') + setSpeech(d, cs, true));
+  }
+  function say1(t) {
+    if (!S().voice.on) { toast('Голос вимкнено: «Більше» → «Голосовий тренер»'); return; }
+    if (!talk(sp(t))) toast(VOICE.supported ? 'Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»' : 'Цей браузер не вміє озвучувати текст');
   }
   function sheetAct(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -742,6 +1159,16 @@
     if (act === 'noop') return;
     if (act === 'closeSheet') return closeSheet();
     if (act === 'guide') return guideSheet(b.dataset.id);
+    if (act === 'gl') return glSheet(b.dataset.k);
+    if (act === 'glAll') return glAll();
+    if (act === 'say') return sayWhat(b);
+    if (act === 'whatsnew') return whatsNew();
+    if (act === 'radio') return radioSheet();
+    if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
+    if (act === 'rpause') { RADIO.pause(); return; }
+    if (act === 'rresume') { ensureAudio(); RADIO.resume(); return; }
+    if (act === 'rstop') { RADIO.stop(); return radioSheet(); }
+    if (act === 'rduck') { S().radio.duck = Number(b.dataset.v); RADIO.setDuck(S().radio.duck); save(); return radioSheet(); }
     if (act === 'food') { view = 'body'; ui.bodyTab = 'n'; render(); window.scrollTo(0, 0); return; }
     /* знайомство */
     if (act === 'obProg') { ui.obProg = b.dataset.id; ui.ob = 2; return rOnboard(); }
@@ -760,9 +1187,10 @@
     }
     const p = P();
     /* головна */
-    if (act === 'start') return startWorkout(null);
+    if (act === 'start') { VOICE.unlock(); return readySheet(null); }
+    if (act === 'go') { closeSheet(); return startWorkout(b.dataset.w || null, b.dataset.r); }
     if (act === 'other') return otherSheet();
-    if (act === 'startW') return startWorkout(b.dataset.w);
+    if (act === 'startW') { VOICE.unlock(); return readySheet(b.dataset.w); }
     if (act === 'resume') { view = 'workout'; return render(); }
     if (act === 'jump') { const k = Number(b.dataset.k), t = today(); const r = p.daily[t] = p.daily[t] || {}; r.jumps = (r.jumps || 0) >= k ? k - 1 : k; save(); haptic(); return rHome(); }
     /* тренування */
@@ -771,15 +1199,41 @@
     if (act === 'discard') { if (confirm('Скасувати тренування? Відмічені підходи не збережуться.')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); } return; }
     if (act === 'done') return toggleDone(i, j);
     if (act === 'kp') return openKp(i, j, b.dataset.f);
-    if (act === 'stype') { const s = p.draft.items[i].sets[j]; if (s.done) return; s.type = { N: 'W', W: 'D', D: 'F', F: 'N' }[s.type || 'N']; save(); haptic(); return rWorkout(); }
+    if (act === 'stype') { const s = p.draft.items[i].sets[j]; if (s.done) return; s.type = { N: 'W', W: 'D', D: 'F', F: 'M', M: 'N' }[s.type || 'N']; save(); haptic(); return rWorkout(); }
+    if (act === 'mode') { S().mode = S().mode === 'list' ? 'coach' : 'list'; if (S().mode === 'coach' && p.draft && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }
+    if (act === 'cdone') return coachDone();
+    if (act === 'cwarm') { p.draft.coach.warm = true; save(); rWorkout(); window.scrollTo(0, 0); const cs = curStep(p.draft); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || 'Добре. ') + 'Перша вправа: ' + setSpeech(p.draft, cs)); return; }
+    if (act === 'cstep') {
+      const it = p.draft.items[i], s = it.sets[j], ex = G().ex[it.ex], dir = Number(b.dataset.d);
+      if (b.dataset.f === 'reps') { const stp = ex.type === 'time' ? 5 : 1; s.reps = Math.max(0, (Number(s.reps) || 0) + stp * dir); }
+      else {
+        const stp = ex.type === 'band' ? 1 : ENGINE.stepFor(p.inv), cur = (s.load === null || s.load === undefined || s.load === '') ? null : Number(s.load);
+        let v;
+        if (cur === null) v = dir > 0 ? (ex.type === 'band' ? 1 : 0) : null;
+        else if (cur === 0 && dir < 0 && ex.type === 'dbopt') v = null;
+        else v = Math.max(0, Math.min(hasKg(ex) ? G().cap : 99, Math.round((cur + stp * dir) * 100) / 100));
+        s.load = v;
+      }
+      s.touched = true; save(); haptic(); return rWorkout();
+    }
+    if (act === 'crir') { const s = p.draft.items[i].sets[j], v = Number(b.dataset.v); s.rir = s.rir === v ? null : v; save(); haptic(); return rWorkout(); }
+    if (act === 'tadd') { addTime(Number(b.dataset.v)); return; }
+    if (act === 'tskip') { const k = T.kind; stopTimer(); if (k === 'myo') { talk('Ще від трьох до пʼяти повторень.'); return rWorkout(); } const cs = curStep(p.draft); if (cs) talk(setSpeech(p.draft, cs, true)); return rWorkout(); }
+    if (act === 'myoRep') return myoRep(Number(b.dataset.v));
+    if (act === 'myoEnd') return myoEnd();
+    if (act === 'minis') return minisSheet(i, j);
+    if (act === 'miniSet') { ui.minis.m[Number(b.dataset.k)] = Number(b.dataset.v); return minisSheet(ui.minis.i, ui.minis.j); }
+    if (act === 'miniSave') { const s = p.draft.items[ui.minis.i].sets[ui.minis.j]; s.mini = ui.minis.m.filter((r) => r > 0); save(); closeSheet(); return rWorkout(); }
+    if (act === 'swap') return swapSheet(i);
+    if (act === 'swapTo') return doSwap(i, b.dataset.ex);
     if (act === 'copyprev') { const s = p.draft.items[i].sets[j]; if (!s.prev || s.done) return; s.load = s.prev.load; s.reps = s.prev.reps; s.touched = true; save(); haptic(); return rWorkout(); }
     if (act === 'variant') { p.draft.items[i].variant = b.dataset.v; save(); return rWorkout(); }
-    if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false }); save(); return rWorkout(); }
-    if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); return rWorkout(); }
+    if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false }); save(); closeSheet(); return rWorkout(); }
+    if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); closeSheet(); return rWorkout(); }
     if (act === 'exmenu') return exMenu(i);
     if (act === 'noteSave') { const it = p.draft.items[i]; const v = document.getElementById('exNote').value.trim(); if (v) p.notes[it.ex] = v; else delete p.notes[it.ex]; save(); closeSheet(); toast('Нотатку збережено'); return rWorkout(); }
-    if (act === 'delset') { const it = p.draft.items[i]; if (it.sets.length > 1) it.sets.pop(); save(); closeSheet(); return rWorkout(); }
-    if (act === 'skip') { p.draft.items[i].skipped = true; save(); closeSheet(); return rWorkout(); }
+    if (act === 'delset') { const it = p.draft.items[i]; if (it.sets.length > 1 && !it.sets[it.sets.length - 1].done) it.sets.pop(); save(); closeSheet(); return rWorkout(); }
+    if (act === 'skip') { p.draft.items[i].skipped = true; save(); closeSheet(); rWorkout(); const cs = curStep(p.draft); if (cs && S().mode !== 'list' && !T.id) talk((hard() ? COACH.line('skip', G().sex, 0) + ' ' : 'Пропускаємо. ') + 'Далі — ' + setSpeech(p.draft, cs)); return; }
     if (act === 'unskip') { p.draft.items[i].skipped = false; save(); return rWorkout(); }
     /* підсумок */
     if (act === 'shareSum') return shareSummary();
@@ -829,6 +1283,8 @@
       save(); toast('Тести збережено'); return rBody();
     }
     /* більше */
+    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; save(); rMore(); if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? 'Такий темп.' : k === 'tone' ? (v === 'calm' ? 'Добре, говоритиму спокійно.' : 'Жарти лишаються. Скінчилось лише філонство.') : v === 'short' ? 'Говоритиму коротко.' : 'Говоритиму детально.'); } return; }
+    if (act === 'tourReset') { S().tour = { v3: true }; save(); toast('Навчання покажеться на головній і в першому тренуванні'); view = 'home'; return render(); }
     if (act === 'day') { const dd = Number(b.dataset.d), k = p.days.indexOf(dd); if (k >= 0) p.days.splice(k, 1); else p.days.push(dd); p.days.sort(); save(); return rMore(); }
     if (act === 'backup') return backup();
     if (act === 'csv') return csv();
@@ -845,5 +1301,5 @@
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
   render();
-  window.__app = { get DB() { return DB; }, render: () => render(), set view(v) { view = v; } };
+  window.__app = { get DB() { return DB; }, get T() { return T; }, render: () => render(), set view(v) { view = v; } };
 })();

@@ -39,7 +39,7 @@ var ENGINE = (function () {
   }
 
   /* Історія вправи: [{date, n, deload, sets:[…]}] за зростанням дати. */
-  function isWork(x) { return !x.type || x.type === 'N' || x.type === 'F'; }
+  function isWork(x) { return !x.type || x.type === 'N' || x.type === 'F' || x.type === 'M'; }
   function history(profile, exId, kind) {
     var out = [];
     (profile.sessions || []).forEach(function (s) {
@@ -71,7 +71,9 @@ var ENGINE = (function () {
     if (!last) {
       var startLoad = (ex.type === 'bw' || (ex.type === 'time' && !ex.load)) ? null : (ex.start === undefined ? null : ex.start);
       fill(startLoad, max);
-      out.note = 'Перший раз: підберіть ' + (ex.type === 'band' ? 'опір' : 'вагу') + ', щоб ' + (ex.type === 'time' ? max + ' с' : max + ' повторень') + ' давались із запасом 2–3.';
+      var aim = ex.type === 'time' ? max + ' с' : max + ' повторень';
+      out.note = startLoad === null ? 'Перший раз: ' + aim + ' із запасом 2–3' + (ex.type === 'dbopt' ? ', без гантелі' : '') + '; важко — легший варіант.'
+        : 'Перший раз: підберіть ' + (ex.type === 'band' ? 'опір' : 'вагу') + ', щоб ' + aim + ' давались із запасом 2–3.';
       return out;
     }
     var loads = last.map(function (s) { return s.load === undefined ? null : s.load; });
@@ -79,7 +81,8 @@ var ENGINE = (function () {
     var Lmax = numeric.length ? Math.max.apply(null, numeric) : null;
     var atMax = last.filter(function (s) { return (s.load === null || s.load === undefined || s.load === '') ? Lmax === null : Number(s.load) === Lmax; });
     var allTop = last.length >= 1 && last.every(function (s) {
-      var ok = s.reps >= max && (s.rir === undefined || s.rir === null || s.rir >= 1);
+      /* міо-підхід іде до відмови за задумом — його запас не гальмує прогрес */
+      var ok = s.reps >= max && (s.type === 'M' || s.rir === undefined || s.rir === null || s.rir >= 1);
       return ok && ((s.load === null || s.load === undefined || s.load === '') ? Lmax === null : Number(s.load) === Lmax);
     });
 
@@ -221,7 +224,8 @@ var ENGINE = (function () {
   /* Обсяг підходу, кг: усі гантелі × повторення (еспандер і без ваги — 0). */
   function setVolume(ex, set, handle) {
     if (!set || !(set.reps > 0) || set.type === 'W') return 0;
-    if (ex.type === 'db' || (ex.type === 'dbopt' && set.load !== null && set.load !== undefined && set.load !== '')) return round1(totalLoad(ex, set.load, handle, set.variant) * set.reps);
+    var reps = set.reps + (set.mini || []).reduce(function (a, r) { return a + (Number(r) || 0); }, 0);
+    if (ex.type === 'db' || (ex.type === 'dbopt' && set.load !== null && set.load !== undefined && set.load !== '')) return round1(totalLoad(ex, set.load, handle, set.variant) * reps);
     return 0;
   }
   function sessionVolume(prog, session, handle) {
@@ -382,12 +386,101 @@ var ENGINE = (function () {
     list.forEach(function (x, i) { if (x.ss && x.ss.k === 1) { x.ss.g = letters[li]; list[i + 1].ss.g = letters[li]; li++; } });
     return list;
   }
-  /* Перехід даних з версії 1. */
+  /* ---------- v3 ---------- */
+  /* Порядок кроків тренування: у суперсеті підходи чергуються (А1, А2, А1, А2…), розминка — перед першим підходом своєї вправи.
+     items — [{ss, skipped, sets:[…]}]; повертає [{i, j}]. */
+  function stepOrder(items) {
+    var out = [], i = 0;
+    while (i < items.length) {
+      var a = items[i];
+      if (a.ss && a.ss.k === 1 && items[i + 1] && items[i + 1].ss && items[i + 1].ss.k === 2) {
+        var b = items[i + 1];
+        var aw = [], an = [], bw = [], bn = [];
+        a.sets.forEach(function (s, j) { (s.type === 'W' ? aw : an).push(j); });
+        b.sets.forEach(function (s, j) { (s.type === 'W' ? bw : bn).push(j); });
+        if (!a.skipped) aw.forEach(function (j) { out.push({ i: i, j: j }); });
+        if (!b.skipped) bw.forEach(function (j) { out.push({ i: i + 1, j: j }); });
+        for (var k = 0; k < Math.max(an.length, bn.length); k++) {
+          if (!a.skipped && k < an.length) out.push({ i: i, j: an[k] });
+          if (!b.skipped && k < bn.length) out.push({ i: i + 1, j: bn[k] });
+        }
+        i += 2;
+      } else {
+        if (!a.skipped) a.sets.forEach(function (s, j) { out.push({ i: i, j: j }); });
+        i++;
+      }
+    }
+    return out;
+  }
+  /* Відпочинок після кроку: між вправами пари — 0; після пари — більший з двох; розминка — 45 с. */
+  function restAfter(items, i, j) {
+    var it = items[i], s = it.sets[j];
+    if (s.type === 'W') return 45;
+    if (it.ss && it.ss.k === 1) {
+      var b = items[i + 1];
+      if (b && !b.skipped) {
+        var nW = it.sets.slice(0, j + 1).filter(function (x) { return x.type !== 'W'; }).length;
+        if (b.sets.filter(function (x) { return x.type !== 'W'; }).length >= nW) return 0;
+      }
+      return it.rest;
+    }
+    if (it.ss && it.ss.k === 2) { var a = items[i - 1]; return Math.max(it.rest, a && !a.skipped ? a.rest : 0); }
+    return it.rest;
+  }
+  /* Оцінка тривалості, хв: підхід ≈ 45 с (на бік — 75 с), міо — ще 60 с, плюс відпочинок за правилами. */
+  function estimateMins(prog, items) {
+    var sec = 0;
+    stepOrder(items).forEach(function (st, k, arr) {
+      var it = items[st.i], ex = prog.ex[it.ex] || {}, s = it.sets[st.j];
+      sec += ex.side ? 75 : 45;
+      if (s.type === 'M') sec += 60;
+      if (k < arr.length - 1) sec += restAfter(items, st.i, st.j);
+    });
+    return Math.round(sec / 60);
+  }
+  /* Самопочуття: g — за планом; y — заміна (якщо задана й такої вправи ще немає) або легше; r — поперекові вправи пропускаються. */
+  function readyAction(prog, exId, level, present) {
+    var ex = prog.ex[exId];
+    if (!ex || !ex.spine || level === 'g' || !level) return null;
+    if (level === 'r') return { act: 'skip' };
+    var to = prog.ready && prog.ready.swap ? prog.ready.swap[exId] : null;
+    if (to) return present.indexOf(to) >= 0 ? { act: 'skip' } : { act: 'swap', to: to };
+    return { act: 'light' };
+  }
+  /* Рівноцінні заміни: спершу вправи тієї самої групи, що зачіпають ті самі мʼязи; якщо таких немає —
+     з інших груп, але з тим самим головним мʼязом. Не вибувші, не ті, що вже є; при болю в спині — без поперекових. */
+  function alternatives(prog, exId, noSpine, present) {
+    var ex = prog.ex[exId]; if (!ex) return [];
+    var main = ex.m.p[0];
+    function pick(sameGroup) {
+      var out = [];
+      Object.keys(prog.ex).forEach(function (id) {
+        var e = prog.ex[id];
+        if (id === exId || e.retired || (noSpine && e.spine) || (present && present.indexOf(id) >= 0)) return;
+        if (sameGroup ? e.group !== ex.group : (e.group === ex.group || e.m.p.indexOf(main) < 0)) return;
+        var score = (e.m.p.indexOf(main) >= 0 ? 3 : 0)
+          + e.m.p.filter(function (m) { return m !== main && ex.m.p.indexOf(m) >= 0; }).length * 2
+          + e.m.p.filter(function (m) { return ex.m.s.indexOf(m) >= 0; }).length
+          + e.m.s.filter(function (m) { return ex.m.p.indexOf(m) >= 0; }).length;
+        if (score > 0) out.push({ id: id, score: score });
+      });
+      out.sort(function (a, b) { return b.score - a.score; });
+      return out.map(function (x) { return x.id; });
+    }
+    var same = pick(true);
+    return same.length ? same : pick(false);
+  }
+  /* Перехід даних з версій 1–2. */
   function migrate(db) {
     if (!db || !db.profiles) return db;
-    db.v = 2;
+    db.v = 3;
     db.settings = db.settings || {};
     ['sound', 'haptics', 'awake'].forEach(function (k) { if (db.settings[k] === undefined) db.settings[k] = true; });
+    if (!db.settings.voice) db.settings.voice = { on: true, level: 'full', rate: 1, uri: null };
+    if (!db.settings.voice.tone) db.settings.voice.tone = 'hard';
+    if (!db.settings.radio) db.settings.radio = { id: null, duck: 0.5 };
+    if (!db.settings.tour) db.settings.tour = {};
+    if (!db.settings.mode) db.settings.mode = 'coach';
     Object.keys(db.profiles).forEach(function (id) {
       var p = db.profiles[id];
       if (!p.inv) p.inv = { 5: 4, 2.5: 8, 1.25: 4 };
@@ -400,7 +493,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();

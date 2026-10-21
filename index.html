@@ -20,14 +20,14 @@
   --bg:#f4f3f0; --card:#ffffff; --card2:#faf9f7; --ink:#18181b; --muted:#6b6b73; --line:#e6e3de; --soft:#efede9;
   --accent:#d2541f; --accent2:#ff7a3d; --accent-ink:#ffffff; --accent-soft:#fbe7dc;
   --ok:#1f8a55; --ok-soft:#dcf2e5; --warn:#a46b00; --warn-soft:#fbefcf; --bad:#b4342c; --bad-soft:#f9dfdc; --gold:#d79b00; --gold-soft:#fff2c9;
-  --w:#c58a00; --d:#7c4dbd; --f:#c0392b; --bm-base:#e2dfda; --bm-0:#d4d0ca;
+  --w:#c58a00; --d:#7c4dbd; --d-soft:#efe6fa; --f:#c0392b; --bm-base:#e2dfda; --bm-0:#d4d0ca;
   --shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05); --r:18px;
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#0f0f11; --card:#1a1a1d; --card2:#202024; --ink:#f0f0f2; --muted:#9d9da6; --line:#2c2c31; --soft:#26262b;
   --accent:#ff7a3d; --accent2:#ffa06b; --accent-ink:#1a1a1d; --accent-soft:#3b2216;
   --ok:#4fd18b; --ok-soft:#173326; --warn:#f0c55a; --warn-soft:#352a10; --bad:#ff8a80; --bad-soft:#3b1b19; --gold:#ffc83d; --gold-soft:#3a300f;
-  --w:#f0c55a; --d:#b893ff; --f:#ff8a80; --bm-base:#2a2a30; --bm-0:#3a3a41; --shadow:none;
+  --w:#f0c55a; --d:#b893ff; --d-soft:#2a2140; --f:#ff8a80; --bm-base:#2a2a30; --bm-0:#3a3a41; --shadow:none;
 }}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
@@ -49,7 +49,7 @@ button,.btn{font:inherit;font-size:.95rem;min-height:44px;border-radius:14px;bor
 button:active{transform:scale(.98)}
 button.pri{background:var(--accent);background:linear-gradient(135deg,var(--accent),var(--accent2));border:0;color:#fff;font-weight:700;box-shadow:0 6px 16px rgba(210,84,31,.28)}
 button.ghost{background:transparent;border-color:transparent;color:var(--accent);font-weight:600}
-button.sm{min-height:44px;padding:8px 12px;font-size:.86rem;border-radius:12px}
+button.sm{min-height:44px;min-width:44px;padding:8px 12px;font-size:.86rem;border-radius:12px}
 button.wide{width:100%} button.big{min-height:54px;font-size:1.05rem}
 input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px;min-height:44px;width:100%}
 textarea{min-height:70px;resize:vertical}
@@ -71,7 +71,7 @@ nav#tabs button{border:0;background:transparent;min-height:54px;padding:4px 0 2p
 nav#tabs svg{width:25px;height:25px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav#tabs button.on{color:var(--accent);font-weight:650}
 /* тренування */
-.wbar{position:sticky;top:0;z-index:15;margin:0 -16px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--bg);background:color-mix(in srgb,var(--bg) 90%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:6px;border-bottom:1px solid var(--line)}
+.wbar{position:sticky;top:0;z-index:15;margin:0 -16px;padding:calc(8px + env(safe-area-inset-top)) 10px 8px;background:var(--bg);background:color-mix(in srgb,var(--bg) 90%,transparent);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:6px;border-bottom:1px solid var(--line)}
 .wbar .t{text-align:center;line-height:1.15} .wbar .t b{display:block;font-size:.95rem} .wbar .t span{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .wbar button{min-height:44px;padding:6px 12px}
 .prog{height:4px;background:var(--soft);border-radius:4px;margin:0 -16px 10px;overflow:hidden} .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s}
@@ -84,7 +84,7 @@ nav#tabs button.on{color:var(--accent);font-weight:650}
 .dots{min-height:44px;min-width:44px;padding:0;font-size:1.2rem;border:0;background:var(--soft);border-radius:10px;line-height:1}
 .hint{font-size:.82rem;color:var(--muted);margin:6px 0 2px}
 .tb{margin-top:8px}
-.tr{display:grid;grid-template-columns:36px minmax(0,1.1fr) minmax(0,1fr) minmax(0,.85fr) 46px;gap:6px;align-items:center;margin:5px 0;border-radius:12px;padding:2px}
+.tr{display:grid;grid-template-columns:40px minmax(0,1.1fr) minmax(0,1fr) minmax(0,.85fr) 46px;gap:6px;align-items:center;margin:5px 0;border-radius:12px;padding:2px}
 .tr.h{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:0} .tr.h span{text-align:center}
 .tr .st{min-height:44px;padding:0;border-radius:10px;font-weight:700;font-size:.9rem;background:var(--soft);border:0}
 .tr .st.W{color:var(--w)} .tr .st.D{color:var(--d)} .tr .st.F{color:var(--f)}
@@ -110,7 +110,7 @@ body.sheet #sheetBg{display:block;opacity:1} body.sheet #sheet{transform:none}
 .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
 .keys button{min-height:52px;font-size:1.25rem;font-weight:600;border-radius:14px;background:var(--soft);border:0}
 .keys button.op{background:var(--accent-soft);color:var(--accent)} .keys button.ok{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
-.quick{display:flex;gap:6px;overflow-x:auto;padding:4px 0;-webkit-overflow-scrolling:touch} .quick button{flex:0 0 auto}
+.quick{display:flex;gap:6px;overflow-x:auto;padding:4px 0;-webkit-overflow-scrolling:touch} .quick button{flex:0 0 auto;min-width:44px}
 /* таймер */
 #timer{position:fixed;left:10px;right:10px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:30;max-width:620px;margin:0 auto;background:var(--ink);color:var(--bg);border-radius:20px;padding:10px 12px;display:none;align-items:center;gap:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 #timer.on{display:flex} #timer.al{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
@@ -120,8 +120,8 @@ body.wkv #timer{bottom:calc(14px + env(safe-area-inset-bottom))}
 #toast{position:fixed;left:16px;right:16px;top:calc(10px + env(safe-area-inset-top));z-index:50;background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:14px;display:none;max-width:608px;margin:0 auto;font-size:.92rem;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 #toast.on{display:block} #toast.gold{background:var(--gold);color:#1a1a1d;font-weight:650}
 /* графіки */
-svg.chart{width:100%;height:auto;display:block;overflow:visible} .gl{stroke:var(--line);stroke-width:1} .tl{font-size:10px;fill:var(--muted);font-family:inherit}
-svg.ring{width:84px;height:84px} svg.ring .rv{font-size:15px;font-weight:750;fill:var(--ink)} svg.ring .rs{font-size:8px;fill:var(--muted)}
+svg.chart{width:100%;height:auto;display:block;overflow:visible} .gl{stroke:var(--line);stroke-width:1} .tl{font-size:11px;fill:var(--muted);font-family:inherit}
+svg.ring{width:84px;height:84px} svg.ring .rv{font-size:15px;font-weight:750;fill:var(--ink)} svg.ring .rs{font-size:11px;fill:var(--muted)}
 svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 .legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.74rem;color:var(--muted);margin-top:6px} .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;background:var(--accent)} .legend i.z{background:var(--ok-soft);outline:1px dashed var(--ok)}
 .hb{display:grid;gap:7px;margin-top:6px} .hbr{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:center;font-size:.82rem}
@@ -148,14 +148,76 @@ svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 .chk input[type=checkbox]{width:26px;height:26px;min-height:0;flex:0 0 auto;accent-color:var(--accent)}
 .pick{display:grid;gap:12px} .pick button{text-align:left;padding:16px;border-radius:18px} .pick b{display:block;font-size:1.1rem;margin-bottom:2px}
 .hap{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden}
+/* режим «Тренер» */
+.wbr{display:flex;gap:6px;align-items:center}
+button.ic{min-width:44px;width:44px;padding:0;display:grid;place-items:center;background:var(--soft);border:0}
+button.ic svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.coach{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;margin:12px 0;box-shadow:var(--shadow)}
+.cchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+button.chip{min-height:40px;border:0;padding:4px 12px;font:inherit;font-size:.76rem;font-weight:650;box-shadow:none}
+.chip.p{background:var(--d-soft);color:var(--d)} .chip.b{background:var(--bad-soft);color:var(--bad)}
+.cname{font-size:1.55rem;margin:6px 0 2px}
+.cmus{font-size:.84rem;color:var(--muted);margin-bottom:6px}
+.ctarget{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 6px} .ctarget.one{grid-template-columns:1fr}
+.cbox{background:var(--soft);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:6px;align-items:stretch;text-align:center;min-width:0}
+.cl2{font-size:.72rem;color:var(--muted);letter-spacing:.02em}
+.cval{font-size:2.5rem;font-weight:800;line-height:1.05;letter-spacing:-.02em;background:transparent;border:0;min-height:58px;padding:0;font-variant-numeric:tabular-nums;box-shadow:none}
+.cpm{display:grid;grid-template-columns:1fr 1fr;gap:8px} .cpm button{min-height:48px;font-size:1.45rem;font-weight:600;background:var(--card);border:0;padding:0}
+.coach .plt{display:block;text-align:center;margin:4px 0}
+.cprev{width:100%;min-height:44px;font-size:.88rem;font-weight:600;margin:4px 0}
+.crir{margin:8px 0 4px} .crir .seg{margin:6px 0 0}
+.cdone{margin-top:10px;min-height:60px;font-size:1.12rem}
+.ccue{margin-top:10px;color:var(--muted)} .ccue p{margin:0}
+.cacts{margin-top:10px} .cacts button{padding:8px 6px;font-size:.86rem}
+.crest{text-align:center}
+.cring{position:relative;width:min(220px,62vw);margin:8px auto 14px} .cring svg{width:100%;height:auto;display:block}
+.ctime{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ctime b{font-size:2.9rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1} .ctime span{font-size:.8rem;color:var(--muted);margin-top:4px}
+.cnext{background:var(--soft);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:3px;margin:12px 0;text-align:left}
+.cnext b{font-size:1.05rem}
+.cnums{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0} .cnums button{min-height:64px;font-size:1.6rem;font-weight:700;background:var(--soft);border:0}
+.clist{padding-left:20px;margin:8px 0 12px} .clist li{margin:7px 0}
+.center{text-align:center}
+button.q{min-height:40px;min-width:40px;width:40px;padding:0;border-radius:50%;font-weight:750;font-size:.85rem;background:var(--soft);border:0;color:var(--accent);vertical-align:middle;box-shadow:none}
+.pick.rd button{display:flex;flex-direction:column;gap:2px}
+.rdot{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--ok)} .rdot.y{background:var(--w)} .rdot.r{background:var(--bad)}
+.hero button.ghost{color:#fff;margin-top:6px}
+.prb.mi{padding-top:2px}
+body.coachv #timer{display:none!important}
+/* техніка вправи */
+details.tech{margin-top:12px;background:var(--soft);border-radius:16px;padding:10px 12px}
+details.tech summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:3px;min-height:44px;justify-content:center}
+details.tech summary::-webkit-details-marker{display:none}
+details.tech summary b::after{content:" ▾";color:var(--muted);font-weight:400} details.tech[open] summary b::after{content:" ▴"}
+details.tech p{margin:8px 0;font-size:.9rem} details.tech ul{margin:4px 0 6px;padding-left:18px;font-size:.9rem} details.tech li{margin:6px 0}
+/* радіо */
+button.ic.rad{background:var(--accent-soft);color:var(--accent)}
+#rbar{position:fixed;left:10px;right:10px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:25;max-width:620px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:6px 8px;display:none;align-items:center;gap:6px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+#rbar.on{display:flex}
+#rbar .rbt{flex:1;min-width:0;border:0;background:transparent;display:flex;align-items:center;gap:8px;text-align:left;padding:4px 6px;box-shadow:none}
+#rbar .rbt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.9rem} #rbar .rbt span.small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rdot2{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:var(--muted)} .rdot2.p{background:var(--accent);animation:rp 1.4s ease-in-out infinite}
+@keyframes rp{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.rdot2.p{animation:none}}
+h3.rg{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rlist{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rst{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;min-height:58px;padding:8px 10px;border-radius:14px}
+.rst b{font-size:.88rem;line-height:1.2} .rst.on{border-color:var(--accent);background:var(--accent-soft)}
+.rnow{margin-top:6px}
+.wbar .t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tour{position:fixed;inset:0;z-index:60}
+#tour .th{position:fixed;border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.62);pointer-events:none;transition:all .2s}
+#tour .tbx{position:fixed;left:16px;right:16px;max-width:520px;margin:0 auto;background:var(--card);color:var(--ink);border-radius:18px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+#tour .tbx p{margin:0 0 10px;font-size:.95rem}
 /* низький екран (телефон горизонтально): компактна клавіатура, «Готово» без прокрутки */
-@media (max-height:520px){#sheet{max-height:96vh;padding-top:6px}.grab{margin-bottom:4px}.kv{font-size:1.6rem;margin:0}.keys{grid-template-columns:repeat(8,1fr);gap:6px;margin-top:6px}.keys button{min-height:44px;font-size:1.1rem}#sheet .seg{margin:4px 0}#sheet label.f{margin:4px 0 2px}}
+@media (max-height:520px){.cval{font-size:1.9rem;min-height:46px}.cring{width:150px}.ctime b{font-size:2.2rem}.cdone{min-height:52px}#sheet{max-height:96vh;padding-top:6px}.grab{margin-bottom:4px}.kv{font-size:1.6rem;margin:0}.keys{grid-template-columns:repeat(8,1fr);gap:6px;margin-top:6px}.keys button{min-height:44px;font-size:1.1rem}#sheet .seg{margin:4px 0}#sheet label.f{margin:4px 0 2px}}
 </style>
 </head>
 <body>
 <main id="app"><p class="muted">Завантаження…</p></main>
 <div id="sheetBg"></div><div id="sheet"></div>
 <div id="timer"></div>
+<div id="rbar"></div>
 <div id="toast"></div>
 <nav id="tabs">
   <button type="button" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Головна</button>
@@ -167,6 +229,9 @@ svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
 <script src="program.js"></script>
 <script src="engine.js"></script>
+<script src="voice.js"></script>
+<script src="coach.js"></script>
+<script src="radio.js"></script>
 <script src="charts.js"></script>
 <script src="store.js"></script>
 <script src="app.js"></script>
