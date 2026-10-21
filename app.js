@@ -1,7 +1,7 @@
 /* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '3.2.0';
+  const VERSION = '3.3.0';
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = fixProfiles(STORE.load());
@@ -220,16 +220,20 @@
   /* Голос: якщо для профілю є записаний пакет і в ньому є всі речення — грає запис; інакше системний голос. */
   const missedSegs = new Set();
   const packId = () => { const v = S().voice; return v.packs && DB.active ? v.packs[DB.active] || '' : ''; };
+  /* Хто зараз говорить і чому — видно в «Більше» → «Голосовий тренер» (щоб не гадати, чому звучить системний голос). */
+  const voiceInfo = { mode: '', why: '' };
+  function sysSay(text, why) { voiceInfo.mode = 'system'; voiceInfo.why = why; return VOICE.say(text); }
   function talk(t) {
     if (!S().voice.on) return false;
     const text = sp(t), id = packId();
-    if (id && VOICEPACK.packs[id]) {
-      const segs = VOICE.split(text);
-      if (VOICEPACK.has(id, segs)) { VOICE.stop(); ensureAudio(); VOICEPACK.play(id, segs, audio).then((ok) => { if (!ok) VOICE.say(text); }); return true; }
-      VOICEPACK.missing(id, segs).forEach((x) => missedSegs.add(x));
-    }
-    VOICEPACK.stop();
-    return VOICE.say(text);
+    if (!id) return sysSay(text, VPACKS.length ? 'у налаштуваннях обрано системний голос' : 'записані голоси ще не завантажились');
+    /* опис голосу ще не завантажився (перші секунди після запуску) — дочекатися, а не перемикатися на системний */
+    if (!VOICEPACK.packs[id]) { VOICEPACK.load(id).then(() => talk(t), () => sysSay(text, 'записаний голос не завантажився — перевірте інтернет')); return true; }
+    const segs = VOICE.split(text);
+    if (!VOICEPACK.has(id, segs)) { VOICEPACK.missing(id, segs).forEach((x) => missedSegs.add(x)); VOICEPACK.stop(); return sysSay(text, 'цієї фрази немає в записі'); }
+    VOICE.stop(); ensureAudio();
+    VOICEPACK.play(id, segs, audio).then((ok) => { if (ok) { voiceInfo.mode = 'pack'; voiceInfo.why = ''; } else sysSay(text, VOICEPACK.lastError || 'запис не програвся'); });
+    return true;
   }
   const speaking = () => VOICE.busy() || VOICEPACK.busy;
   /* Записані голоси: список у voices/packs.json; для кожного профілю — свій (чоловічий / жіночий). */
@@ -401,7 +405,8 @@
     const list = S().mode === 'list';
     return `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
       <div class="t"><b>${esc(prog.workouts[d.workout].title)}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}</span></div>
-      <div class="wbr"><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" id="radBtn" data-act="radio" aria-label="радіо">${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? 'режим тренера' : 'список усіх вправ'}">${list ? ICON.coach : ICON.list}</button><button type="button" class="pri" data-act="finish">Готово</button></div></div>
+      <div class="wbr"><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" id="radBtn" data-act="radio" aria-label="радіо">${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? 'режим тренера' : 'список усіх вправ'}">${list ? ICON.coach : ICON.list}</button><button type="button" class="pri" data-act="finish">Готово</button></div>
+      <div class="wradio" id="wRadio">${radioRow()}</div></div>
       <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>`;
   }
   function startElapsed(d) {
@@ -794,8 +799,16 @@
       <p class="tiny muted">Притишення плавне, звук повертається, щойно тренер замовк. Що радять науковці: улюблена енергійна музика зі швидким темпом (120+ ударів на хвилину) покращує настрій і трохи — результат, а втома відчувається менше. Найкраще працює та, яку обираєте самі, — тому можна вмикати й свою з іншого застосунку. Радіо потребує інтернету.</p>`);
   }
   const rbar = document.getElementById('rbar');
+  /* Радіо в шапці тренування: назва, пауза / грати, стоп — завжди на виду. */
+  function radioRow() {
+    const st = RADIO.state, cur = RADIO.cur, on = st === 'playing' || st === 'loading';
+    if (!cur || st === 'off') return '';
+    return `<button type="button" class="rbt" data-act="radio"><span class="rdot2${on ? ' p' : ''}"></span><b>${esc(cur.name)}</b><span class="small muted">${st === 'error' ? 'не відповідає' : st === 'loading' ? 'підключаюся…' : st === 'paused' ? 'пауза' : esc(cur.genre)}</span></button>
+      ${on ? '<button type="button" class="ic" data-act="rpause" aria-label="пауза">⏸</button>' : '<button type="button" class="ic" data-act="rresume" aria-label="грати">▶</button>'}<button type="button" class="ic" data-act="rstop" aria-label="вимкнути радіо">■</button>`;
+  }
   function updateRadio() {
     const st = RADIO.state, cur = RADIO.cur, on = st === 'playing' || st === 'loading';
+    const wr = document.getElementById('wRadio'); if (wr) wr.innerHTML = radioRow();
     document.querySelectorAll('[data-act="radio"]').forEach((b) => b.classList.toggle('rad', on));
     const show = cur && st !== 'off' && view !== 'workout' && view !== 'onboard' && view !== 'summary';
     rbar.className = show ? 'on' : '';
@@ -809,8 +822,15 @@
     if (b.dataset.r === 'open') return radioSheet();
     if (b.dataset.r === 'pause') RADIO.pause(); else if (b.dataset.r === 'resume') { ensureAudio(); RADIO.resume(); } else RADIO.stop();
   });
-  let sysTalk = false, packTalk = false;
-  VOICE.onSpeaking((on) => { sysTalk = on; RADIO.duck(sysTalk || packTalk); });
+  /* Записаний голос і радіо йдуть через один звуковий рушій — радіо плавно притишується.
+     Системний голос iPhone поверх музики глушиться самою системою, тому на час його фрази радіо стає на паузу. */
+  let sysTalk = false, packTalk = false, radioHeld = false;
+  VOICE.onSpeaking((on) => {
+    sysTalk = on;
+    if (on && RADIO.state === 'playing') { radioHeld = true; RADIO.pause(); }
+    else if (!on && radioHeld) { radioHeld = false; ensureAudio(); RADIO.resume(); }
+    RADIO.duck(sysTalk || packTalk);
+  });
   VOICEPACK.onSpeaking((on) => { packTalk = on; RADIO.duck(sysTalk || packTalk); });
 
   /* ---------- головна ---------- */
@@ -1063,6 +1083,7 @@
     const byP = (a, b) => (b.priority || 0) - (a.priority || 0), list = VPACKS.filter((x) => x.gender === sex).sort(byP).concat(VPACKS.filter((x) => x.gender !== sex).sort(byP));
     return `<label class="f">Голос тренера</label><div class="pick vp">${list.map((x) => `<button type="button" class="rst${x.id === cur ? ' on' : ''}" data-act="vpack" data-id="${x.id}"><b>${esc(x.name)}</b><span class="small muted">${esc(x.note || '')}</span></button>`).join('')}
       <button type="button" class="rst${cur ? '' : ' on'}" data-act="vpack" data-id=""><b>Системний голос телефону</b><span class="small muted">роботизований, але без завантаження</span></button></div>
+      ${voiceInfo.mode ? `<div class="note small ${voiceInfo.mode === 'pack' ? 'ok' : 'w'}">${voiceInfo.mode === 'pack' ? 'Зараз говорить записаний голос.' : 'Остання фраза прозвучала системним голосом: ' + esc(voiceInfo.why) + '.'}</div>` : ''}
       ${cur ? `<p class="small muted" id="vpState">Перевіряю, чи збережено в телефоні…</p><button type="button" class="wide" data-act="vdl">Зберегти голос у телефоні (для роботи без інтернету)</button>` : ''}`;
   }
   async function packState() {
@@ -1225,7 +1246,7 @@
     if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
     if (act === 'rpause') { RADIO.pause(); return; }
     if (act === 'rresume') { ensureAudio(); RADIO.resume(); return; }
-    if (act === 'rstop') { RADIO.stop(); return radioSheet(); }
+    if (act === 'rstop') { RADIO.stop(); if (document.body.classList.contains('sheet')) radioSheet(); return; }
     if (act === 'rduck') { S().radio.duck = Number(b.dataset.v); RADIO.setDuck(S().radio.duck); save(); return radioSheet(); }
     if (act === 'food') { view = 'body'; ui.bodyTab = 'n'; render(); window.scrollTo(0, 0); return; }
     /* знайомство */
@@ -1362,7 +1383,22 @@
   });
 
   /* ---------- запуск ---------- */
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {}); });
+    /* нова версія взяла керування — один раз перезавантажитись, щоб не лишатися на старих файлах */
+    navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (sessionStorage.getItem('swReloaded') !== VERSION) { sessionStorage.setItem('swReloaded', VERSION); location.reload(); } } catch (e) { /* немає */ } });
+  }
+  /* сторінка й код різних версій (недокачане оновлення) — чистимо кеш файлів і перезавантажуємось один раз */
+  (function () {
+    const m = document.querySelector('meta[name="app-version"]'), want = m ? m.content : VERSION;
+    let tried = ''; try { tried = sessionStorage.getItem('verFix') || ''; } catch (e) { /* немає */ }
+    if (want !== VERSION && tried !== want && window.caches) {
+      try { sessionStorage.setItem('verFix', want); } catch (e) { /* немає */ }
+      caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== 'trening-voices').map((k) => caches.delete(k)))).then(() => location.reload());
+    }
+  })();
+  /* iOS «присипляє» звук після згортання — будь-який дотик його будить */
+  document.addEventListener('pointerdown', () => { if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
   render();

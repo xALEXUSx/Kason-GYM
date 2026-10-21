@@ -3,7 +3,7 @@
    усі записи (MP3) одним файлом. Відтворення — через Web Audio, речення йдуть одне за одним;
    поки звучить голос, радіо притишується. Файл голосу зберігається в кеші телефону — працює без інтернету. */
 var VOICEPACK = (function () {
-  var packs = {}, bins = {}, loading = {}, ctx = null, gen = 0, playing = false, sources = [], onSpeak = null, buffers = {};
+  var lastError = '', packs = {}, bins = {}, loading = {}, ctx = null, gen = 0, playing = false, sources = [], onSpeak = null, buffers = {};
   var CACHE = 'trening-voices';
   function split(text) { return VOICE.split(text); }
   function setPlaying(v) { if (v === playing) return; playing = v; if (onSpeak) try { onSpeak(v); } catch (e) { /* немає */ } }
@@ -47,7 +47,9 @@ var VOICEPACK = (function () {
   async function play(id, segs, actx) {
     ctx = actx; stop(); var my = gen;
     if (!ctx) return false;
-    if (ctx.state === 'suspended') try { await ctx.resume(); } catch (e) { /* немає */ }
+    if (ctx.state !== 'running' && ctx.resume && !ctx.startRendering) try { await ctx.resume(); } catch (e) { /* немає */ }
+    /* iOS «приспав» звук (наприклад, після згортання) — запис не прозвучить; хай говорить системний голос */
+    if (ctx.state !== 'running' && !ctx.startRendering) { lastError = 'звук телефону приспаний — торкніться екрана'; return false; }
     setPlaying(true);
     try {
       var bufs = [];
@@ -60,7 +62,7 @@ var VOICEPACK = (function () {
         if (k === bufs.length - 1) src.onended = function () { if (my === gen) { sources = []; setPlaying(false); } };
       });
       return true;
-    } catch (e) { if (my === gen) setPlaying(false); return false; }
+    } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
   }
   async function download(id, progress) { await load(id); var b = await bin(id, progress); return b.byteLength; }
   async function cached(id) {
@@ -68,6 +70,6 @@ var VOICEPACK = (function () {
     try { var c = await caches.open(CACHE); return !!(await c.match(binUrl(id))); } catch (e) { return false; }
   }
   return { split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached,
-    get busy() { return playing; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
+    get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
 })();
 if (typeof module !== 'undefined') module.exports = VOICEPACK;

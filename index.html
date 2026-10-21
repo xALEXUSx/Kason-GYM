@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
+<meta name="app-version" content="3.3.0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -206,6 +207,9 @@ h3.rg{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:upper
 .rnow{margin-top:6px}
 .pick.vp{gap:8px}
 .wbar .t b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wradio{grid-column:1/-1;display:flex;align-items:center;gap:6px} .wradio:empty{display:none}
+.wradio .rbt{flex:1;min-width:0;min-height:44px;border:0;background:var(--soft);display:flex;align-items:center;gap:8px;text-align:left;padding:4px 10px;box-shadow:none;border-radius:12px}
+.wradio .rbt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem} .wradio .rbt span.small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tour{position:fixed;inset:0;z-index:60}
 #tour .th{position:fixed;border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,.62);pointer-events:none;transition:all .2s}
 #tour .tbx{position:fixed;left:16px;right:16px;max-width:520px;margin:0 auto;background:var(--card);color:var(--ink);border-radius:18px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
