@@ -1,7 +1,7 @@
 /* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '3.5.1';
+  const VERSION = '3.5.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = '<svg class="mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" style="fill:var(--mark-tile)"/><g fill="#fff"><rect x="88" y="240" width="336" height="32"/><rect x="110" y="196" width="28" height="120"/><rect x="146" y="160" width="40" height="192"/><rect x="326" y="160" width="40" height="192"/><rect x="374" y="196" width="28" height="120"/></g><rect x="186" y="240" width="140" height="32" fill="#c8a96a"/></svg>';
   const app = document.getElementById('app');
@@ -71,10 +71,10 @@
   const T = { end: 0, total: 0, id: null, alarmed: false, next: '', kind: 'rest', said10: false };
   function startTimer(sec, next, kind) {
     if (!(sec > 0)) { stopTimer(); return; }
-    T.end = Date.now() + sec * 1000; T.total = sec; T.alarmed = false; T.said10 = false; T.next = next || ''; T.kind = kind || 'rest';
+    T.end = Date.now() + sec * 1000; T.total = sec; T.alarmed = false; T.said10 = false; T.next = next || ''; T.kind = kind || 'rest'; T.view = '';
     timerEl.className = 'on'; clearInterval(T.id); T.id = setInterval(tickTimer, 250); tickTimer();
   }
-  function stopTimer() { clearInterval(T.id); T.id = null; timerEl.className = ''; }
+  function stopTimer() { clearInterval(T.id); T.id = null; T.view = ''; timerEl.className = ''; }
   const coachOn = () => view === 'workout' && S().mode !== 'list' && P() && P().draft;
   function tickTimer() {
     if (!T.id) return;
@@ -87,17 +87,25 @@
       if (arc) { const c = 2 * Math.PI * 52, f = Math.max(0, Math.min(1, left / T.total)); arc.setAttribute('stroke-dasharray', (c * f).toFixed(1) + ' ' + c.toFixed(1)); }
       return;
     }
-    const f = Math.max(0, Math.min(1, left / T.total)), r = 22, c = 2 * Math.PI * r;
-    const ring = `<svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:rgba(127,127,127,.35)" stroke-width="5"/><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 27 27)"/></svg>`;
-    if (left <= 0) {
+    const f = Math.max(0, Math.min(1, left / T.total)), r = 22, c = 2 * Math.PI * r, state = left <= 0 ? 'al' : 'run';
+    /* розмітку будуємо лише при зміні стану: кнопки не перемальовуються під пальцем (раніше — 4 рази на секунду, натискання губились) */
+    if (T.view !== state + '|' + T.next) {
+      T.view = state + '|' + T.next;
+      const ring = `<svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:rgba(127,127,127,.35)" stroke-width="5"/><circle id="tArc" cx="27" cy="27" r="${r}" fill="none" style="stroke:currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 ${c.toFixed(1)}" transform="rotate(-90 27 27)"/></svg>`;
+      timerEl.innerHTML = state === 'al'
+        ? ring + `<div><div class="tt">Час!</div><div class="tn">${esc(T.next || 'Наступний підхід')}</div></div><div class="tb2"><button type="button" data-t="x">Готово</button></div>`
+        : ring + `<div><div class="tt" id="tLeft"></div><div class="tn">${esc(T.next ? 'Далі: ' + T.next : 'Відпочинок')}</div></div>
+      <div class="tb2"><button type="button" data-t="-15">−15</button><button type="button" data-t="+15">+15</button><button type="button" data-t="x">✕</button></div>`;
+    }
+    const arc = document.getElementById('tArc'); if (arc) arc.setAttribute('stroke-dasharray', (c * f).toFixed(1) + ' ' + c.toFixed(1));
+    if (state === 'al') {
       if (!T.alarmed) { T.alarmed = true; beep(); haptic(); if (T.kind === 'myo') talk('Ще від трьох до пʼяти повторень.'); else talk(T.next ? 'Час! ' + T.next.split(' · ')[0] + '.' : 'Час!'); }
       timerEl.className = 'on al';
-      timerEl.innerHTML = ring + `<div><div class="tt">Час!</div><div class="tn">${esc(T.next || 'Наступний підхід')}</div></div><div class="tb2"><button type="button" data-t="x">Готово</button></div>`;
       if (left < -30) stopTimer();
       return;
     }
-    timerEl.innerHTML = ring + `<div><div class="tt">${Math.floor(left / 60)}:${pad(left % 60)}</div><div class="tn">${esc(T.next ? 'Далі: ' + T.next : 'Відпочинок')}</div></div>
-      <div class="tb2"><button type="button" data-t="-15">−15</button><button type="button" data-t="+15">+15</button><button type="button" data-t="x">✕</button></div>`;
+    if (timerEl.className !== 'on') timerEl.className = 'on';
+    const lt = document.getElementById('tLeft'); if (lt) lt.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
   }
   function addTime(sec) { T.end = Math.max(Date.now() + 1000, T.end + sec * 1000); T.total = Math.max(T.total, Math.ceil((T.end - Date.now()) / 1000)); T.alarmed = false; T.said10 = false; tickTimer(); }
   timerEl.addEventListener('click', (e) => {
@@ -261,7 +269,7 @@
     if (view === 'more') rMore();
   }
   function startWorkout(wid, ready) {
-    ensureAudio(); VOICE.unlock();
+    ensureAudio(); VOICE.unlock(); stopTimer();  // таймер від попереднього тренування не переносимо в нове
     P().draft = buildDraft(wid, ready); save(); view = 'workout'; render(); window.scrollTo(0, 0);
     const d = P().draft, prog = G(), mins = ENGINE.estimateMins(prog, d.items), nEx = d.items.filter((x) => !x.skipped).length;
     talk(prog.workouts[d.workout].title + '. ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + '. Приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
@@ -604,6 +612,7 @@
       <button type="button" class="pri wide" data-act="miniSave">Зберегти</button>`);
   }
   function finishWorkout() {
+    stopTimer();
     const p = P(), d = p.draft, prog = G();
     const sets = [], prList = [];
     d.items.forEach((it) => {
@@ -779,7 +788,8 @@
       <div class="tbx" style="${below ? 'top:' + Math.round(r.bottom + 14) + 'px' : 'bottom:' + Math.round(H - r.top + 14) + 'px'}"><p>${esc(steps[k][1])}</p>
       <div class="sp"><span class="tiny">${k + 1} з ${steps.length}</span><span class="row"><button type="button" class="sm ghost" data-tour="skip">Пропустити</button><button type="button" class="sm pri" data-tour="next">${k + 1 === steps.length ? 'Зрозуміло' : 'Далі'}</button></span></div></div>`;
     document.body.appendChild(ov);
-    ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) return; if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
+    /* дотик повз підказку теж закриває навчання — щоб екран ніколи не «завис» під затемненням */
+    ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) { if (!e.target.closest('.tbx')) { ov.remove(); S().tour[id] = true; save(); } return; } if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
   }
   function whatsNew() {
     openSheet(`<div class="sp"><b>Що нового у версії 3</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
@@ -790,7 +800,7 @@
         <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети з першого тижня, міо-підходи в ізоляції з тижня 5 — менше часу, та сама робота.</div></li>
         <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
         <li style="display:block"><b>🎨 Новий вигляд</b><div class="small muted">Кольори й шрифт нашого бренду, як на сайті. Знак застосунку — штанга. Світла й темна тема — за налаштуванням телефона.</div></li>
-        <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на пів секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
+        <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
     S().tour.v3 = true; save();
   }
@@ -815,6 +825,7 @@
       ${cur ? `<div class="card rnow"><div class="sp"><div><b>${esc(cur.name)}</b><div class="small muted">${esc(cur.genre)} · ${stTxt}</div></div>
         <div class="row" style="flex-wrap:nowrap">${st === 'playing' || st === 'loading' ? '<button type="button" class="ic" data-act="rpause" aria-label="пауза">⏸</button>' : '<button type="button" class="ic" data-act="rresume" aria-label="грати">▶</button>'}<button type="button" class="ic" data-act="rstop" aria-label="вимкнути">✕</button></div></div></div>` : ''}
       ${groups.map((g) => `<h3 class="rg">${esc(g.g)}</h3><div class="rlist">${g.list.map((x) => `<button type="button" class="rst${cur && cur.id === x.id ? ' on' : ''}" data-act="rplay" data-id="${x.id}"><b>${esc(x.name)}</b><span class="small muted">${esc(x.genre)}</span></button>`).join('')}</div>`).join('')}
+      ${RADIO.routed === false ? '<div class="note small">На цьому телефоні браузер не дає змінювати гучність радіо (вада Safari) — поки говорить тренер, музика на мить вимикається і одразу повертається.</div>' : ''}
       <label class="f">Коли говорить тренер, радіо тихіше на</label>
       <div class="seg">${[[0.7, '30 %'], [0.5, '50 %'], [0.3, '70 %']].map(([v, l]) => `<button type="button" class="${R.duck === v ? 'on' : ''}" data-act="rduck" data-v="${v}">${l}</button>`).join('')}</div>
       <p class="tiny muted">Притишення плавне, звук повертається, щойно тренер замовк. Що радять науковці: улюблена енергійна музика зі швидким темпом (120+ ударів на хвилину) покращує настрій і трохи — результат, а втома відчувається менше. Найкраще працює та, яку обираєте самі, — тому можна вмикати й свою з іншого застосунку. Радіо потребує інтернету.</p>`);
@@ -829,11 +840,11 @@
   }
   function updateRadio() {
     const st = RADIO.state, cur = RADIO.cur, on = st === 'playing' || st === 'loading';
-    const wr = document.getElementById('wRadio'); if (wr) wr.innerHTML = radioRow();
+    const wr = document.getElementById('wRadio'), row = radioRow(); if (wr && wr.dataset.h !== row) { wr.innerHTML = row; wr.dataset.h = row; }
     document.querySelectorAll('[data-act="radio"]').forEach((b) => b.classList.toggle('rad', on));
     const show = cur && st !== 'off' && view !== 'workout' && view !== 'onboard' && view !== 'summary';
     rbar.className = show ? 'on' : '';
-    if (show) rbar.innerHTML = `<button type="button" class="rbt" data-r="open"><span class="rdot2${on ? ' p' : ''}"></span><b>${esc(cur.name)}</b><span class="small muted">${st === 'error' ? 'не відповідає' : st === 'loading' ? 'підключаюся…' : st === 'paused' ? 'пауза' : esc(cur.genre)}</span></button>
+    if (show) rbar.dataset.h = rbar.innerHTML = `<button type="button" class="rbt" data-r="open"><span class="rdot2${on ? ' p' : ''}"></span><b>${esc(cur.name)}</b><span class="small muted">${st === 'error' ? 'не відповідає' : st === 'loading' ? 'підключаюся…' : st === 'paused' ? 'пауза' : esc(cur.genre)}</span></button>
       ${on ? '<button type="button" class="ic" data-r="pause" aria-label="пауза">⏸</button>' : '<button type="button" class="ic" data-r="resume" aria-label="грати">▶</button>'}<button type="button" class="ic" data-r="stop" aria-label="вимкнути">✕</button>`;
     if (document.body.classList.contains('sheet') && document.querySelector('#sheet .rlist')) radioSheet();
   }
@@ -843,15 +854,10 @@
     if (b.dataset.r === 'open') return radioSheet();
     if (b.dataset.r === 'pause') RADIO.pause(); else if (b.dataset.r === 'resume') { ensureAudio(); RADIO.resume(); } else RADIO.stop();
   });
-  /* Записаний голос і радіо йдуть через один звуковий рушій — радіо плавно притишується.
-     Системний голос iPhone поверх музики глушиться самою системою, тому на час його фрази радіо стає на паузу. */
-  let sysTalk = false, packTalk = false, radioHeld = false;
-  VOICE.onSpeaking((on) => {
-    sysTalk = on;
-    if (on && RADIO.state === 'playing') { radioHeld = true; RADIO.pause(); }
-    else if (!on && radioHeld) { radioHeld = false; ensureAudio(); RADIO.resume(); }
-    RADIO.duck(sysTalk || packTalk);
-  });
+  /* Поки говорить тренер: де браузер пускає радіо через Web Audio — плавно притишуємо (RADIO.duck),
+     де ні (Safari на iPhone) — радіо вимикається на час фрази й одразу повертається. Системний голос — завжди без музики. */
+  let sysTalk = false, packTalk = false;
+  VOICE.onSpeaking((on) => { sysTalk = on; RADIO.hush(on); RADIO.duck(sysTalk || packTalk); });
   VOICEPACK.onSpeaking((on) => { packTalk = on; RADIO.duck(sysTalk || packTalk); });
 
   /* ---------- головна ---------- */
@@ -902,7 +908,7 @@
         <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
         <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
         ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
-      ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на пів секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
+      ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
       ${S().tour.v3 ? '' : '<div class="card"><div class="sp"><div><b>Нове: тренер голосом</b><div class="small muted">Питання про спину, суперсети, міо-підходи, підказки.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, 3, thisWeek + '/3', 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
@@ -1242,7 +1248,7 @@
     if (w === 'exTip') { const ex = G().ex[b.dataset.ex], sc = script(b.dataset.ex); if (ex) say1(ex.name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : ex.tip)); return; }
     if (w === 'test') { say1('Привіт! Я твій тренер. Так звучатиме голос під час тренування.'); return; }
     if (!d) return;
-    if (w === 'warm') { const wl = warmList(); say1(wl.title + '. ' + wl.items.join(' ')); return; }
+    if (w === 'warm') { const wl = warmList(); say1(wl.title + '.\n' + wl.items.join('\n')); return; }
     const cs = curStep(d); if (!cs) { say1(coolText() ? 'Заминка: ' + coolText() : 'Усі підходи зроблено.'); return; }
     if (w === 'tip') { const id = d.items[cs.i].ex, sc = script(id); say1(G().ex[id].name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : G().ex[id].tip)); return; }
     say1((T.id && T.kind === 'rest' ? 'Далі. ' : '') + setSpeech(d, cs, true));
@@ -1422,7 +1428,7 @@
     }
   })();
   /* iOS «присипляє» звук після згортання — будь-який дотик його будить */
-  document.addEventListener('pointerdown', () => { if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
+  document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
   render();

@@ -1,4 +1,4 @@
-/* Підказки-хмарки: затисніть будь-яку кнопку чи напис на пів секунди — зʼявиться коротке пояснення простою мовою.
+/* Підказки-хмарки: затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення простою мовою.
    Текст шукається так: data-tip на самому елементі → дія (data-act) з уточненням (data-f, data-v…) → клавіша (data-k) →
    CSS-селектор із SEL. Значення — рядок або функція від елемента (коли пояснення залежить від стану). */
 var TIPS = (function () {
@@ -1068,7 +1068,7 @@ var TIPS = (function () {
   }
 
   /* ---------- жест ---------- */
-  var HOLD = 500, timer = 0, start = null, box = null, eat = false, hideT = 0;
+  var HOLD = 1500, timer = 0, start = null, box = null, eat = false, hideT = 0;
   function bubble() {
     if (box) return box;
     box = document.createElement('div'); box.id = 'tipb'; box.setAttribute('role', 'tooltip');

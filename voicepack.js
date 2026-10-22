@@ -46,19 +46,55 @@ var VOICEPACK = (function () {
     } catch (e) { /* немає кешу */ }
   }
   function decode(data) { return new Promise(function (ok, bad) { var p = ctx.decodeAudioData(data, ok, bad); if (p && p.then) p.then(ok, bad); }); }
+  /* розкодовані фрази — лише останні BUF_MAX (≈ 0,5 МБ кожна): без межі за тренування набігали сотні МБ, і iPhone зависав */
+  var BUF_MAX = 40, order = [];
   async function buffer(id, seg) {
-    var key = id + '|' + seg; if (buffers[key]) return buffers[key];
+    var key = id + '|' + seg;
+    if (buffers[key]) { order.splice(order.indexOf(key), 1); order.push(key); return buffers[key]; }
     var at = packs[id].clips[seg], all = await bin(id, at[2] || 0);
-    var b = await decode(all.slice(at[0], at[0] + at[1])); buffers[key] = b; return b;
+    var b = await decode(all.slice(at[0], at[0] + at[1]));
+    buffers[key] = b; order.push(key);
+    while (order.length > BUF_MAX) delete buffers[order.shift()];
+    return b;
   }
-  function stop() { gen++; sources.forEach(function (s) { try { s.stop(); } catch (e) { /* уже */ } }); sources = []; setPlaying(false); }
+  function stop() {
+    gen++; sources.forEach(function (s) { try { s.stop(); } catch (e) { /* уже */ } }); sources = [];
+    if (el) { try { el.pause(); } catch (e) { /* немає */ } if (el.onended) el.onended(); }
+    setPlaying(false);
+  }
+  /* Запасний шлях без Web Audio: один <audio>, «розблокований» першим дотиком. iOS дозволяє йому грати й без дотику —
+     тож фраза після відпочинку звучить записаним голосом, навіть коли Web Audio телефон приспав (раніше тут вмикався системний голос). */
+  var el = null, SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+  function media() { if (!el && typeof Audio !== 'undefined') { el = new Audio(); el.preload = 'auto'; el.setAttribute('playsinline', ''); } return el; }
+  function unlock() {
+    var m = media(); if (!m || m.dataset.ok) return;
+    try { m.src = SILENT; m.dataset.ok = '1'; var p = m.play(); if (p && p.catch) p.catch(function () { delete m.dataset.ok; }); } catch (e) { /* немає */ }
+  }
+  async function playMedia(id, segs, my) {
+    var m = media(); if (!m) return false;
+    setPlaying(true);
+    try {
+      for (var i = 0; i < segs.length; i++) {
+        if (my !== gen) return true;
+        var at = packs[id].clips[segs[i]], all = await bin(id, at[2] || 0);
+        var url = URL.createObjectURL(new Blob([all.slice(at[0], at[0] + at[1])], { type: 'audio/mp4' }));
+        var done = new Promise(function (ok) { m.onended = ok; m.onerror = ok; });
+        m.src = url; await m.play(); await done; m.onended = m.onerror = null;
+        URL.revokeObjectURL(url);
+        if (i < segs.length - 1) await new Promise(function (ok) { setTimeout(ok, 120); });
+      }
+      if (my === gen) setPlaying(false);
+      return true;
+    } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+  }
   /* Програти речення підряд. actx — спільний AudioContext застосунку (розблокований дотиком). */
   async function play(id, segs, actx) {
     ctx = actx; stop(); var my = gen;
-    if (!ctx) return false;
-    if (ctx.state !== 'running' && ctx.resume && !ctx.startRendering) try { await ctx.resume(); } catch (e) { /* немає */ }
-    /* iOS «приспав» звук (наприклад, після згортання) — запис не прозвучить; хай говорить системний голос */
-    if (ctx.state !== 'running' && !ctx.startRendering) { lastError = 'звук телефону приспаний — торкніться екрана'; return false; }
+    if (!ctx) return playMedia(id, segs, my);
+    /* без дотику iOS може ніколи не відповісти на resume() — чекаємо не довше 0,3 с, далі запасний шлях */
+    if (ctx.state !== 'running' && ctx.resume && !ctx.startRendering) try { await Promise.race([ctx.resume(), new Promise(function (ok) { setTimeout(ok, 300); })]); } catch (e) { /* немає */ }
+    /* iOS «приспав» Web Audio (згортання, дзвінок, без дотику) — граємо той самий запис через <audio> */
+    if (ctx.state !== 'running' && !ctx.startRendering) { lastError = 'Web Audio приспано — граю через <audio>'; return playMedia(id, segs, my); }
     setPlaying(true);
     try {
       var bufs = [];
@@ -91,7 +127,7 @@ var VOICEPACK = (function () {
       return true;
     } catch (e) { return false; }
   }
-  return { split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached,
+  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached,
     get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
 })();
 if (typeof module !== 'undefined') module.exports = VOICEPACK;

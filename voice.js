@@ -61,12 +61,17 @@ var VOICE = (function () {
   /* Текст для голосу: символи й скорочення — словами (5 хв → 5 хвилин, 20–30 с → від 20 до 30 секунд). */
   var UNITS = [[/(\d+)\s*хв\.?(?=[\s.,;:!?)]|$)/g, ['хвилина', 'хвилини', 'хвилин']], [/(\d+)\s*с(?=[\s.,;:!?)]|$)/g, ['секунда', 'секунди', 'секунд']], [/(\d+)\s*кг(?=[\s.,;:!?)]|$)/g, ['кілограм', 'кілограми', 'кілограмів']]];
   function norm(t) {
-    var a = String(t).replace(/\s{2,}/g, ' ').replace(/\s·\s/g, ', ').replace(/×/g, ' на ').replace(/≈\s*/g, 'приблизно ').replace(/(\d)°/g, '$1 градусів').replace(/\s–\s/g, ', ').replace(/по (\d+)–(\d+)/g, 'по $1-$2').replace(/(\d+)–(\d+)/g, 'від $1 до $2');
+    var a = String(t).replace(/[ \t]{2,}/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\s·\s/g, ', ').replace(/×/g, ' на ').replace(/≈\s*/g, 'приблизно ').replace(/(\d)°/g, '$1 градусів').replace(/\s–\s/g, ', ').replace(/по (\d+)–(\d+)/g, 'по $1-$2').replace(/(\d+)–(\d+)/g, 'від $1 до $2');
     UNITS.forEach(function (u) { a = a.replace(u[0], function (m, n) { return n + ' ' + plural(Number(n), u[1][0], u[1][1], u[1][2]); }); });
     return a.trim();
   }
   /* Речення для голосового пакета: кожне — окремий запис. */
-  function split(text) { return (norm(text).match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).map(function (x) { return x.trim(); }).filter(function (x) { return x; }); }
+  /* новий рядок — теж межа запису (пункти списку без крапок, як-от розминка) */
+  function split(text) {
+    var out = [];
+    norm(text).split(/\n+/).forEach(function (part) { (part.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || []).forEach(function (x) { x = x.trim(); if (x) out.push(x); }); });
+    return out;
+  }
 
   /* ---------- браузер ---------- */
   function ukVoices() { return voices.filter(function (v) { return /^uk/i.test(v.lang || ''); }); }
