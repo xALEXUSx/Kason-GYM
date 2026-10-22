@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.8.0">
+<meta name="app-version" content="3.8.2">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -20,24 +20,29 @@
 <style>
 /* Вигляд Kason 2: кольори бренду (бірюза, охра — акцент), м'які форми.
    Заокруглення — шкала --r-*; ряди дрібних кнопок і позначки — «капсули», стовпчики кнопок — заокруглені прямокутники (Apple HIG).
-   Глибина — три рівні тіні (--e1 картки, --e2 плаваючі панелі, --e3 шторка): одне джерело світла згори, тінь у відтінку фону, кілька шарів.
+   Глибина — три рівні тіні (--e1 картки, --e2 плаваючі панелі, --e3 шторка): одне джерело світла згори, тінь у відтінку фону, кілька шарів
+   (у темній темі — чорна: темнішого за тло кольору в палітрі немає). Кольори — лише палітра брендбука; відтінки й градієнти — її змішування (color-mix).
    Опуклість — кнопки (світліший верх + блік); втиснення — поля вводу, доріжки, натиснута кнопка. Сяйво — лише головна дія, рекорд, сигнал таймера.
-   Межі елементів не тримаються лише на тіні: колір, рамка й кільце фокуса лишаються (WCAG 1.4.11). Українською — Manrope. */
+   Межі елементів не тримаються лише на тіні: колір, рамка й кільце фокуса лишаються (WCAG 1.4.11). Українською — Manrope.
+   Одне джерело — брендбук Kason, розділ «Форми й глибина»: радіуси --r-* і тіні --e* мають ті самі назви й значення, що й на сайті та в кабінеті;
+   змінювати лише разом із брендбуком (слово Alexа). Контраст пар — машинна перевірка в test_engine.js. */
 @font-face{font-family:Manrope;font-style:normal;font-weight:200 800;font-display:swap;src:url(fonts/manrope-cyrillic.woff2) format("woff2");unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
 @font-face{font-family:Manrope;font-style:normal;font-weight:200 800;font-display:swap;src:url(fonts/manrope-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 :root{
-  --bg:#f4f6f5; --card:#ffffff; --card2:#eef3f2; --ink:#1e1e1e; --muted:#5c6160; --line:#d8dcdb; --soft:#e8f0ef;
+  --bg:#f4f6f5; --card:#ffffff; --card2:color-mix(in srgb,#e8f0ef 50%,#ffffff); --ink:#1e1e1e; --muted:#5c6160; --line:#d8dcdb; --soft:#e8f0ef;
   --accent:#14514f; --accent2:#0d3937; --accent-ink:#ffffff; --accent-soft:#e8f0ef; --accent-text:#14514f;
   --ochre:#c8a96a; --ochre-text:#8a6f30; --focus:#14514f;
-  --ok:#14514f; --ok-soft:#e8f0ef; --warn:#8a6f30; --warn-soft:#f4f6f5; --bad:#8c2f27; --bad-soft:#f4f6f5; --gold:#c8a96a; --gold-soft:#e8f0ef;
-  --w:#5c6160; --d:#14514f; --d-soft:#e8f0ef; --f:#1e1e1e; --bm-base:#d8dcdb; --bm-0:#e8f0ef;
-  --hero:#e8f0ef; --hero2:#dce9e7; --hero-ink:#1e1e1e; --hero-muted:#5c6160; --hero-btn:#14514f; --hero-btn-ink:#ffffff; --hero-chip:#ffffff;
+  --ok:#14514f; --ok-soft:#e8f0ef; --bad:#8c2f27; --gold:#c8a96a;
+  --w:#5c6160; --d:#14514f; --f:#1e1e1e; --bm-base:#d8dcdb; --bm-0:#e8f0ef;
+  --hero:#e8f0ef; --hero2:color-mix(in srgb,#e8f0ef 90%,#14514f); --hero-ink:#1e1e1e; --hero-muted:#5c6160; --hero-btn:#14514f; --hero-btn-ink:#ffffff; --hero-chip:#ffffff;
   --inv:#1e1e1e; --inv-ink:#ffffff; --mark-tile:#14514f;
   /* форми */
   --r-xs:8px; --r-sm:12px; --r-md:16px; --r-lg:22px; --r-pill:999px;
   --card-line:rgba(20,81,79,.08);
+  /* межа поля вводу — 3:1 до тла (WCAG 1.4.11), як input у брендбуку; --line лишається декором */
+  --input-line:#5c6160;
   /* кнопки: опуклі (світліший верх) */
-  --btn-top:#ffffff; --btn-bot:#f3f6f5; --btn-line:#d8dcdb; --pri-top:#1f6865;
+  --btn-top:#ffffff; --btn-bot:#f4f6f5; --btn-line:#d8dcdb; --pri-top:color-mix(in srgb,#14514f 88%,#ffffff);
   /* глибина: тінь у відтінку фону (бірюза), одне світло згори */
   --e1:0 1px 1px rgba(13,57,55,.05),0 2px 6px rgba(13,57,55,.07);
   --e2:0 1px 2px rgba(13,57,55,.06),0 6px 14px rgba(13,57,55,.10),0 16px 32px rgba(13,57,55,.08);
@@ -54,12 +59,13 @@
   --bg:#08201f; --card:#0d3937; --card2:#0d3937; --ink:#eaefed; --muted:#9bb0ae; --line:#1c4b49; --soft:#08201f;
   --accent:#eaefed; --accent2:#ffffff; --accent-ink:#08201f; --accent-soft:rgba(20,81,79,.62); --accent-text:#eaefed;
   --ochre:#c8a96a; --ochre-text:#c8a96a; --focus:#c8a96a;
-  --ok:#eaefed; --ok-soft:rgba(20,81,79,.62); --warn:#c8a96a; --warn-soft:#08201f; --bad:#e08573; --bad-soft:#08201f; --gold:#c8a96a; --gold-soft:#08201f;
-  --w:#9bb0ae; --d:#eaefed; --d-soft:#08201f; --f:#eaefed; --bm-base:#1c4b49; --bm-0:#0d3937;
-  --hero:#0d3937; --hero2:#0f403d; --hero-ink:#eaefed; --hero-muted:#9bb0ae; --hero-btn:#eaefed; --hero-btn-ink:#08201f; --hero-chip:#08201f;
+  --ok:#eaefed; --ok-soft:rgba(20,81,79,.62); --bad:#e08573; --gold:#c8a96a;
+  --w:#9bb0ae; --d:#eaefed; --f:#eaefed; --bm-base:#1c4b49; --bm-0:#0d3937;
+  --hero:#0d3937; --hero2:color-mix(in srgb,#0d3937 75%,#1c4b49); --hero-ink:#eaefed; --hero-muted:#9bb0ae; --hero-btn:#eaefed; --hero-btn-ink:#08201f; --hero-chip:#08201f;
   --inv:#eaefed; --inv-ink:#08201f; --mark-tile:#0d3937;
   --card-line:rgba(234,239,237,.07);
-  --btn-top:#12433f; --btn-bot:#0d3937; --btn-line:#1c4b49; --pri-top:#ffffff;
+  --input-line:#9bb0ae;
+  --btn-top:color-mix(in srgb,#0d3937 60%,#1c4b49); --btn-bot:#0d3937; --btn-line:#1c4b49; --pri-top:#ffffff;
   /* у темній тіні темніші й ширші, а опуклість — тонкий блік згори */
   --e1:0 1px 2px rgba(0,0,0,.30),0 2px 8px rgba(0,0,0,.22);
   --e2:0 2px 4px rgba(0,0,0,.32),0 10px 24px rgba(0,0,0,.36);
@@ -113,7 +119,7 @@ button.danger:active{box-shadow:none}
 button.sm{min-height:44px;min-width:44px;padding:8px 14px;font-size:.86rem;border-radius:var(--r-pill)}
 button.wide{width:100%} button.big{min-height:54px;font-size:1.05rem;border-radius:var(--r-md)}
 /* поля вводу — втиснуті */
-input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;min-height:44px;width:100%;box-shadow:var(--in)}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--soft);border:1px solid var(--input-line);border-radius:var(--r-sm);padding:10px 12px;min-height:44px;width:100%;box-shadow:var(--in)}
 textarea{min-height:70px;resize:vertical}
 label.f{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
 /* перемикач-сегменти: втиснута доріжка, обраний сегмент — опуклий (радіус = 12 − 3 відступ) */
@@ -183,7 +189,7 @@ body.sheet #sheetBg{display:block;opacity:1} body.sheet #sheet{transform:none}
 /* сигнал «Час!» — охра зі сяйвом */
 #timer.al{background:var(--ochre);color:#1e1e1e;border-color:transparent;box-shadow:var(--e2),var(--gold-glow)}
 #timer svg{width:54px;height:54px;flex:0 0 auto} #timer .tt{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums;line-height:1} #timer .tn{font-size:.78rem;opacity:.8;margin-top:3px}
-#timer .tb2{display:flex;gap:6px;margin-left:auto} #timer button{min-height:44px;padding:6px 12px;background:rgba(127,127,127,.18);border:0;color:inherit;border-radius:var(--r-pill);box-shadow:none}
+#timer .tb2{display:flex;gap:6px;margin-left:auto} #timer button{min-height:44px;padding:6px 12px;background:color-mix(in srgb,var(--muted) 22%,transparent);border:0;color:inherit;border-radius:var(--r-pill);box-shadow:none}
 body.wkv #timer{bottom:calc(14px + env(safe-area-inset-bottom))}
 #toast{position:fixed;left:16px;right:16px;top:calc(10px + env(safe-area-inset-top));z-index:50;background:var(--card);color:var(--ink);padding:12px 16px;border:1px solid var(--card-line);border-radius:var(--r-md);box-shadow:var(--e2);display:none;max-width:608px;margin:0 auto;font-size:.92rem}
 /* підказка-хмарка при затисканні */
@@ -215,7 +221,7 @@ svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 .slot{min-height:46px;padding:4px;border-radius:var(--r-sm);font-size:.78rem;font-weight:700;background:var(--soft);border:0;line-height:1.1;box-shadow:none}
 .slot small{display:block;font-weight:500;color:var(--muted);font-size:.7rem}
 .slot.done{background:var(--ok-soft);color:var(--accent-text)} .slot.next{background:var(--accent);color:var(--accent-ink);box-shadow:var(--e1)} .slot.next small{color:var(--accent-ink);opacity:.8}
-.wk.dl .wl b::after{content:" · легкий";font-size:.66rem;color:var(--ochre-text);font-weight:500}
+.wk.dl .wl b::after{content:" · легкий";font-size:.7rem;color:var(--ochre-text);font-weight:500}
 /* фото */
 .ph{display:grid;grid-template-columns:repeat(3,1fr);gap:6px} .ph img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:var(--r-sm);display:block}
 .cmp{position:relative;border-radius:var(--r-md);overflow:hidden;aspect-ratio:3/4;background:var(--soft);box-shadow:var(--e1)} .cmp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -315,6 +321,9 @@ body:not(.started) nav#tabs,body:not(.started) #rbar,body:not(.started) #timer{d
 #tour .th{position:fixed;border-radius:var(--r-md);box-shadow:0 0 0 9999px rgba(8,32,31,.66);outline:2px solid var(--ochre);outline-offset:2px;pointer-events:none;transition:all .2s}
 #tour .tbx{position:fixed;left:16px;right:16px;max-width:520px;margin:0 auto;background:var(--bg);color:var(--ink);border:1px solid var(--card-line);border-radius:var(--r-lg);box-shadow:var(--e2);padding:16px}
 #tour .tbx p{margin:0 0 10px;font-size:.95rem}
+/* браузер без розмиття (старий) — суцільний фон «скляних» панелей, щоб текст не зливався з тим, що під ними.
+   Safari до 18 знає лише -webkit-backdrop-filter, тому перевіряємо обидва записи */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){nav#tabs,#timer,#rbar{background:var(--card)} .wbar{background:var(--bg)}}
 /* перехід між вкладками: коротке згасання (меню не блимає — воно поза переходом) */
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.18s;animation-timing-function:ease}
 nav#tabs{view-transition-name:tabs}
@@ -338,17 +347,17 @@ nav#tabs{view-transition-name:tabs}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="program.js?v=3.8.0"></script>
-<script src="engine.js?v=3.8.0"></script>
-<script src="voice.js?v=3.8.0"></script>
-<script src="coach.js?v=3.8.0"></script>
-<script src="radio.js?v=3.8.0"></script>
-<script src="voicepack.js?v=3.8.0"></script>
-<script src="tips.js?v=3.8.0"></script>
-<script src="charts.js?v=3.8.0"></script>
-<script src="store.js?v=3.8.0"></script>
-<script src="generator.js?v=3.8.0"></script>
-<script src="app.js?v=3.8.0"></script>
-<script src="accounts.js?v=3.8.0"></script>
+<script src="program.js?v=3.8.2"></script>
+<script src="engine.js?v=3.8.2"></script>
+<script src="voice.js?v=3.8.2"></script>
+<script src="coach.js?v=3.8.2"></script>
+<script src="radio.js?v=3.8.2"></script>
+<script src="voicepack.js?v=3.8.2"></script>
+<script src="tips.js?v=3.8.2"></script>
+<script src="charts.js?v=3.8.2"></script>
+<script src="store.js?v=3.8.2"></script>
+<script src="generator.js?v=3.8.2"></script>
+<script src="app.js?v=3.8.2"></script>
+<script src="accounts.js?v=3.8.2"></script>
 </body>
 </html>

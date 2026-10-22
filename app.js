@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.8.0';
+  const VERSION = '3.8.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -105,7 +105,7 @@ window.APP_START = () => {
     /* розмітку будуємо лише при зміні стану: кнопки не перемальовуються під пальцем (раніше — 4 рази на секунду, натискання губились) */
     if (T.view !== state + '|' + T.next) {
       T.view = state + '|' + T.next;
-      const ring = `<svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:rgba(127,127,127,.35)" stroke-width="5"/><circle id="tArc" cx="27" cy="27" r="${r}" fill="none" style="stroke:currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 ${c.toFixed(1)}" transform="rotate(-90 27 27)"/></svg>`;
+      const ring = `<svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="${r}" fill="none" style="stroke:color-mix(in srgb,currentColor 25%,transparent)" stroke-width="5"/><circle id="tArc" cx="27" cy="27" r="${r}" fill="none" style="stroke:currentColor" stroke-width="5" stroke-linecap="round" stroke-dasharray="0 ${c.toFixed(1)}" transform="rotate(-90 27 27)"/></svg>`;
       timerEl.innerHTML = state === 'al'
         ? ring + `<div><div class="tt">Час!</div><div class="tn">${esc(T.next || 'Наступний підхід')}</div></div><div class="tb2"><button type="button" data-t="x">Готово</button></div>`
         : ring + `<div><div class="tt" id="tLeft"></div><div class="tn">${esc(T.next ? 'Далі: ' + T.next : 'Відпочинок')}</div></div>
