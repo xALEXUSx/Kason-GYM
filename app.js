@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.11.0';
+  const VERSION = '3.11.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -1046,7 +1046,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🏠 Тренажери вдома</b><div class="small muted">У «Що є вдома» — ті самі тренажери, що в залі (або «Усе, як у залі»): удома програма бере їх першими; історія й рекорди спільні з залом, вага — окремо для дому й залу. Додати чи прибрати — будь-коли: «Більше» → «Обладнання вдома»; історія й рекорди лишаються.</div></li>
         <li style="display:block"><b>⚙️ Одне джерело</b><div class="small muted">Дні тренувань, гриф і диски («Більше»), зріст і вік («Харчування») одразу йдуть у програму й в анкету; поточний тиждень зберігається.</div></li>
         <li style="display:block"><b>🍽 Норма одразу</b><div class="small muted">Норма калорій і білка — одразу за вагою з анкети; після зважувань у «Замірах» — за ними.</div></li>
-        <li style="display:block"><b>🔒 Код при вході — за бажанням</b><div class="small muted">«Більше» → «Профіль» → «Код при вході»: якщо телефоном користуються інші. iPhone і так відкривається Face ID.</div></li>
+        <li style="display:block"><b>🔓 Без коду й Face ID</b><div class="small muted">Застосунок відкривається одразу: дані лише в цьому телефоні, а телефон захищений своїм Face ID чи кодом.</div></li>
         <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: навіщо вправа, як робити, чого не робити, вага й диски, відпочинок, «Час!», рекорди. Характер — жорсткий з гумором. Природний записаний голос: чоловічий і жіночий («Більше» → «Голосовий тренер»).</div></li>
         <li style="display:block"><b>📻 Радіо для тренувань</b><div class="small muted">Кнопка «♪»: 11 станцій. Коли говорить тренер, музика плавно притихає.</div></li>
         <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Якщо в анкеті позначено спину: перед тренуванням застосунок питає, як вона, і сам полегшує або прибирає вправи на поперек.</div></li>
@@ -1166,8 +1166,6 @@ window.APP_START = () => {
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}`;
-    /* був Face ID (до 3.11) — один раз вибір: лишити код чи вимкнути */
-    if ((STORE.account(STORE.current) || {}).cred) { if (!document.body.classList.contains('sheet')) credSheet(); return; }
     tourMaybe('home');
   }
   function otherSheet() {
@@ -1378,44 +1376,10 @@ window.APP_START = () => {
     catch (e) { el.textContent = 'Не вдалося завантажити голос — перевірте інтернет.'; }
   }
   /* ---------- користувач і захист ---------- */
-  const PIN_IN = (id) => `<input id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="new-password">`;
-  /* код при вході — необовʼязковий: iPhone і так відкривається Face ID; код — коли телефоном користуються інші */
-  function protectSheet() {
-    openSheet(`<div class="sp"><b>Код при вході</b><button type="button" class="sm ghost" data-act="closeSheet">Не зараз</button></div>
-      <p class="small">Необовʼязково: ваш iPhone і так відкривається Face ID. Код потрібен, лише якщо телефоном користуються інші. Забули код — дані можна лише стерти, тому зберігайте резервну копію.</p>
-      <label class="f" for="pin1">Новий код (4 цифри)</label>${PIN_IN('pin1')}<label class="f" for="pin2">Ще раз</label>${PIN_IN('pin2')}
-      <p class="qerr" id="pinErr" hidden></p>
-      <button type="button" class="pri wide" data-act="pinSave">Зберегти код</button>`);
-  }
-  function pinErr(t) { const e = document.getElementById('pinErr'); if (e) { e.textContent = t; e.hidden = false; } }
-  function protectSave(b) {
-    const v1 = (document.getElementById('pin1') || {}).value || '', v2 = (document.getElementById('pin2') || {}).value || '', id = STORE.current;
-    if (!/^\d{4}$/.test(v1)) return pinErr('Код — рівно 4 цифри');
-    if (v1 !== v2) return pinErr('Коди не збігаються');
-    if (/^(\d)\1{3}$/.test(v1) || v1 === '1234' || v1 === '0000') return pinErr('Занадто простий код — оберіть інший');
-    b.disabled = true;
-    ACC.setPin(id, v1).then(() => { closeSheet(); rMore(); toast('Код при вході ввімкнено'); }).catch(() => { b.disabled = false; pinErr('Не вдалося зберегти — спробуйте ще'); });
-  }
-  /* підтвердити, що це власник (кодом; Face ID — лише старий, до вибору в credSheet), тоді виконати дію */
-  /* до 3.11 був Face ID через «ключ входу»: один раз — пояснення й вибір (без «Закрити»: вибір обовʼязковий) */
-  function credSheet() {
-    openSheet(`<b>Face ID у застосунку прибрано</b>
-      <p class="small">Справжній Face ID iPhone дає лише звичайним застосункам. Вебзастосунку він показує вікно «ключа входу», схоже на збереження пароля, — тому його прибрано. Ваш iPhone і так відкривається Face ID.</p>
-      <button type="button" class="pri wide" data-act="credOff">Вимкнути код — відкривати одразу</button><p></p>
-      <button type="button" class="wide" data-act="credKeep">Залишити вхід за кодом</button>`);
-  }
-  function confirmOwner(title, cb) {
-    const a = STORE.account(STORE.current) || {};
-    if (!ACC.locked(STORE.current)) return cb();
-    openSheet(`<div class="sp"><b>${esc(title)}</b><button type="button" class="sm ghost" data-act="closeSheet">Скасувати</button></div>
-      ${a.cred ? '<button type="button" class="pri wide" data-act="ownFace">Підтвердити Face ID</button><p></p>' : ''}
-      ${a.pin ? `<label class="f" for="ownPin">Код</label>${PIN_IN('ownPin')}<button type="button" class="wide" data-act="ownPin">Підтвердити код</button>` : ''}<p class="qerr" id="pinErr" hidden></p>`);
-    ui.ownCb = cb;
-  }
   function accountCard() {
-    const id = STORE.current, a = STORE.account(id) || {}, on = ACC.locked(id), many = STORE.accounts().length > 1;
-    return `<h2>Профіль</h2><div class="card"><div class="sp"><div><b>${esc(a.name || '')}</b><div class="small muted">${on ? 'вхід: код' : 'вхід без коду (iPhone і так відкривається Face ID)'}</div></div>${many ? '<button type="button" class="sm" data-act="accSwitch">Змінити</button>' : ''}</div>
-      <div class="row" style="margin-top:10px">${on ? '<button type="button" class="sm" data-act="accLockNow">Заблокувати</button><button type="button" class="sm ghost" data-act="accUnprotect">Вимкнути код</button>' : '<button type="button" class="sm" data-act="accProtect">Код при вході</button>'}<button type="button" class="sm ghost" data-act="accRename">Змінити імʼя</button></div>
+    const a = STORE.account(STORE.current) || {}, many = STORE.accounts().length > 1;
+    return `<h2>Профіль</h2><div class="card"><div class="sp"><div><b>${esc(a.name || '')}</b><div class="small muted">дані лише в цьому телефоні</div></div>${many ? '<button type="button" class="sm" data-act="accSwitch">Змінити</button>' : ''}</div>
+      <div class="row" style="margin-top:10px"><button type="button" class="sm ghost" data-act="accRename">Змінити імʼя</button></div>
       <button type="button" class="danger wide" style="margin-top:10px" data-act="accDelete">Видалити мої дані й почати заново</button></div>`;
   }
   /* вибір програми — лише якщо з попередньої версії лишилось кілька журналів */
@@ -1607,27 +1571,17 @@ window.APP_START = () => {
     if (act === 'food') { view = 'body'; ui.bodyTab = 'n'; render(); window.scrollTo(0, 0); return; }
     /* знайомство */
     /* користувач і захист */
-    if (act === 'accSwitch') return ACC.leave('pick');
-    if (act === 'accLockNow') return ACC.leave('lock');
-    if (act === 'accProtect') { protectSheet(); return; }
-    if (act === 'pinSave') return protectSave(b);
-    if (act === 'accUnprotect') return confirmOwner('Вимкнути код', () => { ACC.disable(STORE.current); closeSheet(); rMore(); toast('Код вимкнено'); });
-    /* перехід із Face ID (до 3.11): один вибір — лишити код чи вимкнути; старий ключ входу більше не використовується */
-    if (act === 'credOff') { ACC.disable(STORE.current); closeSheet(); render(); toast('Код вимкнено — застосунок відкривається одразу'); return; }
-    if (act === 'credKeep') { STORE.update(STORE.current, { cred: undefined }); closeSheet(); render(); toast('Вхід — за кодом'); return; }
+    if (act === 'accSwitch') return ACC.leave();
     if (act === 'accRename') {
       const cur = (STORE.account(STORE.current) || {}).name || '', nm = (prompt('Нове імʼя', cur) || '').trim();
       if (!nm || nm === cur) return; if (nm.length > 24) { toast('Імʼя — до 24 знаків'); return; }
       STORE.update(STORE.current, { name: nm }); if (DB.custom) { DB.custom.answers.name = nm; save(); } rMore(); return;
     }
-    if (act === 'accDelete') return confirmOwner('Видалити мої дані', () => {
-      closeSheet();
+    if (act === 'accDelete') {
       if (!confirm('Видалити всі ваші тренування, заміри й фото на цьому телефоні й почати з анкети?')) return;
       if (!confirm('Точно? Повернути можна лише з резервної копії.')) return;
-      ACC.wipe(STORE.current);
-    });
-    if (act === 'ownFace') { ACC.faceOk(STORE.current).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Телефон не підтвердив особу'); }, () => pinErr('Face ID скасовано — спробуйте ще або введіть PIN')); return; }
-    if (act === 'ownPin') { const v = (document.getElementById('ownPin') || {}).value || ''; ACC.pinOk(STORE.current, v).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Невірний кIN'); }); return; }
+      ACC.wipe(STORE.current); return;
+    }
     /* під час тренування анкета не змінюється: нова програма скасувала б незавершене тренування */
     if (act === 'qEdit') { if (P() && P().draft) return; ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
     /* анкета */
