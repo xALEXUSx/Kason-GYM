@@ -123,6 +123,31 @@ var VOICEPACK = (function () {
       return true;
     } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
   }
+  /* Готовий запис цілком (відповідь тренера-співрозмовника, WAV із сервера): той самий шлях, що й фрази, —
+     Web Audio або <audio>; «говорить» (onSpeaking) так само притишує радіо, stop() так само зупиняє. */
+  async function playData(bytes, type, actx) {
+    ctx = actx; stop(); var my = gen;
+    if (ctx && ctx.state !== 'running' && ctx.resume) try { await Promise.race([ctx.resume(), new Promise(function (ok) { setTimeout(ok, 300); })]); } catch (e) { /* немає */ }
+    if (!ctx || ctx.state !== 'running') {
+      var m = media(); if (!m) return false;
+      setPlaying(true);
+      try {
+        var url = URL.createObjectURL(new Blob([bytes], { type: type || 'audio/wav' }));
+        var done = new Promise(function (ok) { m.onended = ok; m.onerror = ok; });
+        m.src = url; await m.play(); await done; m.onended = m.onerror = null; URL.revokeObjectURL(url);
+        if (my === gen) setPlaying(false);
+        return true;
+      } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+    }
+    setPlaying(true);
+    try {
+      var b = await ctx.decodeAudioData(bytes.slice(0));
+      if (my !== gen) return true;
+      var src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(ctx.currentTime + 0.05); sources.push(src);
+      src.onended = function () { if (my === gen) { sources = []; setPlaying(false); } };
+      return true;
+    } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+  }
   /* Увесь голос у телефон: файли по черзі, прогрес — сумарний. */
   async function download(id, progress) {
     var p = await load(id), done = 0;
@@ -141,7 +166,7 @@ var VOICEPACK = (function () {
       return true;
     } catch (e) { return false; }
   }
-  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached, forget: forget,
+  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, playData: playData, stop: stop, download: download, cached: cached, forget: forget,
     get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
 })();
 if (typeof module !== 'undefined') module.exports = VOICEPACK;

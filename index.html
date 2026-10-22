@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.11.1">
+<meta name="app-version" content="3.12.0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -328,6 +328,22 @@ nav#tabs{view-transition-name:tabs}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}button:active,.btn:active,nav#tabs button:active{transform:none}.rdot2.p{animation:none}}
 /* низький екран (телефон горизонтально): компактна клавіатура, «Готово» без прокрутки */
 @media (max-height:520px){.cval{font-size:1.9rem;min-height:46px}.cring{width:150px}.ctime b{font-size:2.2rem}.cdone{min-height:52px}#sheet{max-height:96vh;padding-top:6px}.grab{margin-bottom:4px}.kv{font-size:1.6rem;margin:0}.keys{grid-template-columns:repeat(8,1fr);gap:6px;margin-top:6px}.keys button{min-height:44px;font-size:1.1rem}#sheet .seg{margin:4px 0}#sheet label.f{margin:4px 0 2px}}
+/* голосовий тренер: розмова, мікрофон (запис — пульс), приклади питань */
+.chat{display:flex;flex-direction:column;gap:8px;max-height:44vh;overflow-y:auto;margin:10px 0 4px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.bub{max-width:88%;padding:10px 13px;border-radius:var(--r-md);font-size:.95rem;line-height:1.42}
+.bub.q{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-bottom-right-radius:var(--r-xs)}
+.bub.a{align-self:flex-start;background:var(--card);border:1px solid var(--card-line);box-shadow:var(--e1);border-bottom-left-radius:var(--r-xs)}
+.bub.a button.sm{min-height:44px;padding:6px 12px;margin:6px 0 -4px -8px}
+.askex{display:flex;flex-wrap:wrap;gap:8px}
+.askbar{display:flex;align-items:center;gap:14px;margin:12px 0 10px}
+button.mic{width:64px;height:64px;min-width:64px;flex:0 0 auto;border-radius:50%;padding:0;display:grid;place-items:center;background:var(--accent);background:linear-gradient(180deg,var(--pri-top),var(--accent));border:1px solid var(--accent);color:var(--accent-ink);box-shadow:var(--glow),var(--pri-hl)}
+button.mic svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+button.mic.rec{background:var(--bad);border-color:var(--bad);color:#fff;animation:micp 1.2s ease-in-out infinite}
+button.mic.busy{opacity:.55}
+@keyframes micp{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--bad) 45%,transparent)}50%{box-shadow:0 0 0 12px color-mix(in srgb,var(--bad) 0%,transparent)}}
+@media (prefers-reduced-motion:reduce){button.mic.rec{animation:none}}
+.askrow{gap:8px;flex-wrap:nowrap;align-items:center} .askrow input{flex:1;min-width:0}
+.bad{color:var(--bad)}
 </style>
 </head>
 <body>
@@ -344,17 +360,18 @@ nav#tabs{view-transition-name:tabs}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="program.js?v=3.11.1"></script>
-<script src="engine.js?v=3.11.1"></script>
-<script src="voice.js?v=3.11.1"></script>
-<script src="coach.js?v=3.11.1"></script>
-<script src="radio.js?v=3.11.1"></script>
-<script src="voicepack.js?v=3.11.1"></script>
-<script src="tips.js?v=3.11.1"></script>
-<script src="charts.js?v=3.11.1"></script>
-<script src="store.js?v=3.11.1"></script>
-<script src="generator.js?v=3.11.1"></script>
-<script src="app.js?v=3.11.1"></script>
-<script src="accounts.js?v=3.11.1"></script>
+<script src="program.js?v=3.12.0"></script>
+<script src="engine.js?v=3.12.0"></script>
+<script src="voice.js?v=3.12.0"></script>
+<script src="coach.js?v=3.12.0"></script>
+<script src="radio.js?v=3.12.0"></script>
+<script src="voicepack.js?v=3.12.0"></script>
+<script src="tips.js?v=3.12.0"></script>
+<script src="charts.js?v=3.12.0"></script>
+<script src="store.js?v=3.12.0"></script>
+<script src="generator.js?v=3.12.0"></script>
+<script src="coachctx.js?v=3.12.0"></script>
+<script src="app.js?v=3.12.0"></script>
+<script src="accounts.js?v=3.12.0"></script>
 </body>
 </html>

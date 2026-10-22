@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.11.1';
+  const VERSION = '3.12.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -121,7 +121,7 @@ window.APP_START = () => {
 
   /* ---------- шторка ---------- */
   function openSheet(html) { sheetEl.innerHTML = '<div class="grab"></div>' + html; document.body.classList.add('sheet'); }
-  function closeSheet() { document.body.classList.remove('sheet'); kp = null; }
+  function closeSheet() { document.body.classList.remove('sheet'); kp = null; if (ASK.rec) askCancel(); }
   sheetBg.addEventListener('click', closeSheet);
 
   /* ---------- таймер відпочинку ---------- */
@@ -299,7 +299,7 @@ window.APP_START = () => {
     if (!fresh) keepWeek(p, oldPw, PROGRAMS.me);
     if (p.draft) p.draft = null;
     /* новому користувачеві картка «Нове» ні до чого — для нього все нове */
-    if (fresh && Object.keys(DB.profiles).length === 1) S().tour.v3 = true;
+    if (fresh && Object.keys(DB.profiles).length === 1) { S().tour.v3 = true; S().tour.v4 = true; }
     DB.active = 'me'; ENGINE.migrate(DB); save();
     STORE.update(STORE.current, { name: a.name, sub: PROGRAMS.me.sub });
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
@@ -628,13 +628,14 @@ window.APP_START = () => {
   const ICON = {
     list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
     coach: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
-    radio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>'
+    radio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
+    mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>'
   };
   function wbar(d, prog, st) {
     const list = S().mode === 'list';
     return `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
       <div class="t"><b>${esc(woTitle(d.workout))}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}</span></div>
-      <div class="wbr"><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" id="radBtn" data-act="radio" aria-label="радіо">${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? 'режим тренера' : 'список усіх вправ'}">${list ? ICON.coach : ICON.list}</button><button type="button" class="pri" data-act="finish">Готово</button></div>
+      <div class="wbr"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" id="radBtn" data-act="radio" aria-label="радіо">${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? 'режим тренера' : 'список усіх вправ'}">${list ? ICON.coach : ICON.list}</button><button type="button" class="pri" data-act="finish">Готово</button></div>
       <div class="wradio" id="wRadio">${radioRow()}</div></div>
       <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>`;
   }
@@ -1040,6 +1041,7 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
         <li style="display:block"><b>⬇ Дроп-сет і розминка за станом</b><div class="small muted">У фазі 3 (тижні 9–11) — «⋯ Ще» → «Дроп-сет»: одразу після останнього підходу, без відпочинку, легше (на тренажері — фіксатор на 1–2 кроки нижче). Розминка: без обмежень, до 55 років і до 100 кг — 3 хв (тіло розігріває перший легкий підхід), інакше — повні 10 хв.</div></li>
@@ -1055,7 +1057,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🎨 Новий вигляд</b><div class="small muted">М'які заокруглені форми, легкі тіні, «скляні» панелі й плавні переходи. Світла й темна тема — за налаштуванням телефона.</div></li>
         <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
-    S().tour.v3 = true; save();
+    S().tour.v3 = true; S().tour.v4 = true; save();
   }
   function readySheet(wid, place) {
     const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl && G().ex.rdl;
@@ -1070,6 +1072,151 @@ window.APP_START = () => {
   }
 
   /* ---------- радіо ---------- */
+  /* ---------- Голосовий тренер: питання голосом чи текстом → сервер (server/, Cloudflare) → відповідь текстом і голосом тренера ----------
+     На сервер іде текст питання (голос розпізнає Whisper на Cloudflare — у Google він не потрапляє) і зріз програми (coachctx.js):
+     без імені, віку, ваги тіла, здоровʼя, замірів і фото. Відповідає Gemini за нашою програмою й документами (server/src/kb.js).
+     Розмова живе до закриття застосунку. ⏭ Захист доступу до сервера — окрема сесія (CLAUDE.md §11). */
+  const COACH_URL = 'https://kason-gym-coach.kason-tech.workers.dev';
+  const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1 };
+  const ASK_EX = ['Яку вагу брати сьогодні?', 'Як правильно робити першу вправу?', 'Що таке міо-підхід?', 'Навіщо легкий тиждень?'];
+  /* що тренер знає про програму: триває тренування — його стан; ні — наступне тренування з підказками ваги */
+  function coachProgram() {
+    const p = P(), prog = G(), d = p.draft;
+    if (d) {
+      const st = draftStats(d), cs = curStep(d);
+      return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, d.n), items: d.items, workout: d.workout, place: d.place, inProgress: true, cur: cs ? { i: cs.i, j: cs.j } : null, done: st.done, total: st.total });
+    }
+    const last = p.sessions[p.sessions.length - 1];
+    const place = prog.gymWorkouts ? (last && last.place) || 'home' : (prog.place === 'gym' ? 'gym' : 'home');
+    const pv = buildDraft(null, 'g', place);
+    return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, nextN()), items: pv.items, workout: pv.workout, place: pv.place, inProgress: false });
+  }
+  function askStateText() {
+    if (ASK.st === 'rec') { const s = Math.floor((Date.now() - ASK.t0) / 1000); return `<b>Слухаю… 0:${pad(s)}</b> · торкніться, щоб надіслати`; }
+    if (ASK.st === 'think') return '<b>Думаю…</b>';
+    if (ASK.st === 'talk') return '<b>Говорю…</b> · торкніться, щоб зупинити';
+    if (ASK.st === 'err') return `<span class="bad">${esc(ASK.msg)}</span>`;
+    return ASK.chat.length ? 'Торкніться, щоб уточнити.' : 'Торкніться й запитайте: програма, вага, техніка, застосунок.';
+  }
+  function askChatHtml() {
+    if (!ASK.chat.length) return `<div class="askex">${ASK_EX.map((q) => `<button type="button" class="chip" data-act="askEx" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
+    return ASK.chat.map((t, k) => `<div class="bub q">${esc(t.q)}</div><div class="bub a">${esc(t.a)}<div><button type="button" class="sm ghost" data-act="askSay" data-i="${k}" aria-label="прослухати відповідь">▶ Прослухати</button></div></div>`).join('');
+  }
+  function askDraw() {
+    const ch = document.getElementById('askChat'), stEl = document.getElementById('askState'), mic = document.getElementById('askMic');
+    if (!ch) return;
+    ch.innerHTML = askChatHtml(); ch.scrollTop = ch.scrollHeight;
+    stEl.innerHTML = askStateText();
+    mic.className = 'mic' + (ASK.st === 'rec' ? ' rec' : ASK.st === 'think' ? ' busy' : '');
+    mic.setAttribute('aria-label', ASK.st === 'rec' ? 'надіслати питання' : ASK.st === 'talk' ? 'зупинити відповідь' : 'говорити');
+    const nw = document.getElementById('askNew'); if (nw) nw.hidden = !ASK.chat.length;
+  }
+  function askSheet() {
+    openSheet(`<div class="sp"><b>Запитати тренера</b><div class="row" style="gap:6px;flex-wrap:nowrap"><button type="button" class="sm ghost" id="askNew" data-act="askNew" hidden>Нова розмова</button><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div></div>
+      <div class="chat" id="askChat"></div>
+      <div class="askbar"><button type="button" class="mic" id="askMic" data-act="askMic" aria-label="говорити">${ICON.mic}</button><div class="small" id="askState" aria-live="polite"></div></div>
+      <div class="row askrow"><input id="askText" type="text" maxlength="600" placeholder="Або напишіть питання" enterkeyhint="send" autocomplete="off"><button type="button" class="sm" data-act="askSend">Надіслати</button></div>
+      <p class="tiny muted">Голос розпізнає сервер тренера й у Google не передає. Відповідає Gemini (Google) — йому йдуть лише текст питання й ваша програма, без імені, здоровʼя, замірів і фото.</p>`);
+    const inp = document.getElementById('askText');
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); askSend({ text: inp.value }); } });
+    askDraw();
+  }
+  async function askMic() {
+    if (ASK.st === 'rec') return askStop();
+    if (ASK.st === 'think') return;
+    if (ASK.st === 'talk') { VOICEPACK.stop(); VOICE.stop(); ASK.st = 'idle'; return askDraw(); }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') { ASK.st = 'err'; ASK.msg = 'Тут не вдається записати голос — напишіть питання.'; return askDraw(); }
+    ensureAudio(); VOICEPACK.unlock(); VOICEPACK.stop(); VOICE.stop();
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch (e) { ASK.st = 'err'; ASK.msg = 'Немає доступу до мікрофона: дозвольте його для застосунку або напишіть питання.'; return askDraw(); }
+    const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+    let mr;
+    try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); } catch (e) { stream.getTracks().forEach((t) => t.stop()); ASK.st = 'err'; ASK.msg = 'Тут не вдається записати голос — напишіть питання.'; return askDraw(); }
+    const chunks = [];
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    ASK.rec = { mr, stream, chunks, type: mr.mimeType || type };
+    RADIO.hush(true);
+    mr.start(); ASK.st = 'rec'; ASK.msg = ''; ASK.t0 = Date.now();
+    ASK.tick = setInterval(() => { if (Date.now() - ASK.t0 >= 30000) askStop(); else askDraw(); }, 500);
+    askDraw();
+  }
+  /* зупинити запис; send — надіслати (інакше — просто викинути) */
+  async function askEnd(send) {
+    const r = ASK.rec; if (!r) return null; ASK.rec = null; clearInterval(ASK.tick);
+    const done = new Promise((ok) => { r.mr.onstop = ok; setTimeout(ok, 1500); });
+    try { if (r.mr.state !== 'inactive') r.mr.stop(); } catch (e) { /* уже */ }
+    await done; r.stream.getTracks().forEach((t) => t.stop()); RADIO.hush(false);
+    return send ? new Blob(r.chunks, { type: r.type || 'audio/mp4' }) : null;
+  }
+  function askCancel() { askEnd(false); ASK.st = 'idle'; }
+  async function askStop() {
+    ASK.st = 'think'; askDraw();
+    const blob = await askEnd(true);
+    try {
+      const wav = blob && blob.size ? await toWav16k(await blob.arrayBuffer()) : null;
+      if (!wav) { ASK.st = 'err'; ASK.msg = 'Не почув — скажіть ще раз, ближче до телефона.'; return askDraw(); }
+      askSend({ audio: wav });
+    } catch (e) { ASK.st = 'err'; ASK.msg = 'Не вдалося обробити запис — скажіть ще раз або напишіть.'; askDraw(); }
+  }
+  /* запис → WAV 16 кГц моно (так його найкраще чує розпізнавання), base64; тиша чи коротше 0,4 с — null */
+  async function toWav16k(buf) {
+    ensureAudio();
+    const src = await new Promise((ok, bad) => { const pr = audio.decodeAudioData(buf.slice(0), ok, bad); if (pr && pr.then) pr.then(ok, bad); });
+    if (src.duration < 0.4) return null;
+    const n = Math.ceil(src.duration * 16000), Off = window.OfflineAudioContext || window.webkitOfflineAudioContext, off = new Off(1, n, 16000), s = off.createBufferSource();
+    s.buffer = src; s.connect(off.destination); s.start(0);
+    const x = (await off.startRendering()).getChannelData(0);
+    let peak = 0; for (let k = 0; k < x.length; k++) { const v = Math.abs(x[k]); if (v > peak) peak = v; }
+    if (peak < 0.02) return null;
+    const g = Math.min(4, 0.9 / peak), dv = new DataView(new ArrayBuffer(44 + x.length * 2)), w = (o, t) => { for (let k = 0; k < t.length; k++) dv.setUint8(o + k, t.charCodeAt(k)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + x.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, x.length * 2, true);
+    for (let k = 0; k < x.length; k++) dv.setInt16(44 + k * 2, Math.max(-32768, Math.min(32767, Math.round(x[k] * g * 32767))), true);
+    const u = new Uint8Array(dv.buffer); let bin = '';
+    for (let k = 0; k < u.length; k += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(k, k + 0x8000));
+    return btoa(bin);
+  }
+  async function askSend(o) {
+    const q = String(o.text || '').trim();
+    if (!o.audio && !q) return;
+    if (ASK.st === 'think' && !o.audio) return;
+    VOICEPACK.stop(); VOICE.stop();
+    ASK.st = 'think'; ASK.msg = ''; askDraw();
+    const prog = G(), body = { sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), program: coachProgram(), history: ASK.chat.slice(-6).map((t) => ({ q: t.q, a: t.a })) };
+    if (o.audio) body.audio = o.audio; else body.text = q;
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = ctl ? setTimeout(() => ctl.abort(), 60000) : 0;
+    let r = null, j = {};
+    try { r = await fetch(COACH_URL + '/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined }); j = await r.json(); }
+    catch (e) { /* мережа або не JSON */ }
+    clearTimeout(to);
+    if (!r || !r.ok || !j.a) {
+      ASK.st = 'err';
+      ASK.msg = !r ? (navigator.onLine === false ? 'Немає інтернету — тренер відповідає лише онлайн.' : 'Тренер не відповів — спробуйте ще раз.')
+        : ({ empty: 'Не почув питання — скажіть ще раз.', busy: 'Тренер зараз зайнятий — спробуйте за хвилину.', big: 'Запис задовгий — до 30 секунд.' })[j.error] || 'Тренер не відповів — спробуйте ще раз.';
+      return askDraw();
+    }
+    ASK.chat.push({ q: j.q, a: j.a }); ASK.st = 'idle';
+    const inp = document.getElementById('askText'); if (inp && !o.audio) inp.value = '';
+    askDraw();
+    askSpeak(ASK.chat.length - 1, false);
+  }
+  /* відповідь голосом тренера (той самий голос, що веде тренування); не вийшло — системним голосом; голос вимкнено — лише текст (▶ — завжди) */
+  async function askSpeak(k, force) {
+    const t = ASK.chat[k]; if (!t || (!force && !S().voice.on)) return;
+    const text = sp(t.a), id = packId();
+    VOICEPACK.stop(); VOICE.stop(); ensureAudio();
+    ASK.st = 'talk'; ASK.i = k; askDraw();
+    const mine = () => ASK.st === 'talk' && ASK.i === k;
+    const end = () => { const w = setInterval(() => { if (!mine()) return clearInterval(w); if (!speaking()) { clearInterval(w); ASK.st = 'idle'; askDraw(); } }, 300); };
+    if (id && t.wav === undefined) {
+      try { const r = await fetch(COACH_URL + '/say', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, pack: id }) }); t.wav = r.ok ? await r.arrayBuffer() : null; }
+      catch (e) { t.wav = null; }
+    }
+    if (!mine()) return;
+    if (t.wav && (await VOICEPACK.playData(t.wav, 'audio/wav', audio))) return end();
+    sysSay(text, 'відповідь тренера — системним голосом'); end();
+  }
   function radioSheet() {
     const cur = RADIO.cur, st = RADIO.state, R = S().radio;
     const groups = []; RADIO.STATIONS.forEach((x) => { let g = groups.find((y) => y.g === x.g); if (!g) { g = { g: x.g, list: [] }; groups.push(g); } g.list.push(x); });
@@ -1154,7 +1301,7 @@ window.APP_START = () => {
     const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
     const warmMin = (warmList().title.match(/(\d+)\s*хв/) || [])[1];
     const nd = nextDayText(p.days);
-    app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div>
+    app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div></div>
       ${alerts()}
       ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(woTitle(d.workout))} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
       <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з ${prog.perWeek || 3}</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
@@ -1162,7 +1309,7 @@ window.APP_START = () => {
         <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
         ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
       ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
-      ${S().tour.v3 ? '' : '<div class="card"><div class="sp"><div><b>Нове: тренер голосом</b><div class="small muted">Питання про спину, суперсети, міо-підходи, підказки.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
+      ${S().tour.v4 ? '' : '<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}`;
@@ -1563,6 +1710,12 @@ window.APP_START = () => {
     if (act === 'whatsnew') return whatsNew();
     if (act === 'tipsOk') { S().tour.tips = true; save(); return render(); }
     if (act === 'radio') return radioSheet();
+    if (act === 'ask') return askSheet();
+    if (act === 'askMic') return askMic();
+    if (act === 'askSend') { const inp = document.getElementById('askText'); return askSend({ text: inp ? inp.value : '' }); }
+    if (act === 'askEx') return askSend({ text: b.dataset.v || '' });
+    if (act === 'askSay') return askSpeak(Number(b.dataset.i), true);
+    if (act === 'askNew') { VOICEPACK.stop(); VOICE.stop(); ASK.chat = []; ASK.st = 'idle'; ASK.msg = ''; return askDraw(); }
     if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
     if (act === 'rpause') { RADIO.pause(); return; }
     if (act === 'rresume') { ensureAudio(); RADIO.resume(); return; }
@@ -1778,5 +1931,5 @@ window.APP_START = () => {
   if (DB.active) ENGINE.migrate(DB);
   render();
   initPacks();
-  window.__app = { get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
+  window.__app = { askFake: (q, a) => { ASK.chat.push({ q, a, wav: null }); ASK.st = 'idle'; askDraw(); }, get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 };
