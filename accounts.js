@@ -3,7 +3,7 @@
    Список «Хто тренується?» показується лише тим, у кого з попередньої версії лишилося кілька користувачів.
    Після входу запускає застосунок (APP_START). Уся розмітка — у #app, стилі — з index.html. */
 /* знак застосунку (штанга) — спільний для екрана входу й застосунку */
-window.MARK_SVG = '<svg class="mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" style="fill:var(--mark-tile)"/><g fill="#fff"><rect x="88" y="240" width="336" height="32"/><rect x="110" y="196" width="28" height="120"/><rect x="146" y="160" width="40" height="192"/><rect x="326" y="160" width="40" height="192"/><rect x="374" y="196" width="28" height="120"/></g><rect x="186" y="240" width="140" height="32" fill="#c8a96a"/></svg>';
+window.MARK_SVG = '<svg class="mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" style="fill:var(--mark-tile)"/><g fill="#fff"><rect x="88" y="240" width="336" height="32"/><rect x="110" y="196" width="28" height="120"/><rect x="146" y="160" width="40" height="192"/><rect x="326" y="160" width="40" height="192"/><rect x="374" y="196" width="28" height="120"/></g><rect x="186" y="240" width="140" height="32" fill="#c8a96a"/></svg>';
 var ACC = (function () {
   var OK = 'trening_acc_ok', LOCK_MIN = 5, app = null, busy = false;
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };

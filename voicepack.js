@@ -45,6 +45,20 @@ var VOICEPACK = (function () {
       (await c.keys()).forEach(function (r) { if (r.url.indexOf('/voices/' + id + '/') >= 0 && /\.bin$/.test(r.url) && keep.indexOf(r.url) < 0) c.delete(r); });
     } catch (e) { /* немає кешу */ }
   }
+  /* Прибрати з телефону файли голосів, яких більше немає у списку (keep — id голосів, що лишаються),
+     і старі версії файлів тих, що лишаються (після перезапису голосу файл має нову назву). */
+  async function forget(keep) {
+    var stale = {};
+    try {
+      var c = await caches.open(CACHE);
+      (await c.keys()).forEach(function (r) {
+        var m = r.url.match(/\/voices\/([^/]+)\//); if (!m) return;
+        if (keep.indexOf(m[1]) < 0) c.delete(r); else if (/\.bin$/.test(r.url)) stale[m[1]] = 1;
+      });
+    } catch (e) { /* немає кешу */ }
+    Object.keys(packs).forEach(function (id) { if (keep.indexOf(id) < 0) delete packs[id]; });
+    for (var id in stale) { try { await load(id); await prune(id); } catch (e) { /* без мережі — наступного разу */ } }
+  }
   function decode(data) { return new Promise(function (ok, bad) { var p = ctx.decodeAudioData(data, ok, bad); if (p && p.then) p.then(ok, bad); }); }
   /* розкодовані фрази — лише останні BUF_MAX (≈ 0,5 МБ кожна): без межі за тренування набігали сотні МБ, і iPhone зависав */
   var BUF_MAX = 40, order = [];
@@ -127,7 +141,7 @@ var VOICEPACK = (function () {
       return true;
     } catch (e) { return false; }
   }
-  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached,
+  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached, forget: forget,
     get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
 })();
 if (typeof module !== 'undefined') module.exports = VOICEPACK;
