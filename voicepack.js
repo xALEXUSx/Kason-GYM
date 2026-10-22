@@ -1,6 +1,6 @@
 /* Записані голоси тренера: кожне речення озвучене нейроголосом один раз.
-   Пакет: voices/<id>/bundle.json { name, gender, clips: { "речення": [зсув, довжина] } } + voices/<id>/clips.bin —
-   усі записи (MP3) одним файлом. Відтворення — через Web Audio, речення йдуть одне за одним;
+   Пакет: voices/<id>/bundle.json { name, gender, files: [файли], clips: { "речення": [зсув, довжина, № файлу] } } +
+   самі файли записів (AAC) до 20 МБ кожен; старі пакети без files — один clips.bin. Відтворення — через Web Audio, речення йдуть одне за одним;
    поки звучить голос, радіо притишується. Файл голосу зберігається в кеші телефону — працює без інтернету. */
 var VOICEPACK = (function () {
   var lastError = '', packs = {}, bins = {}, loading = {}, ctx = null, gen = 0, playing = false, sources = [], onSpeak = null, buffers = {};
@@ -15,31 +15,40 @@ var VOICEPACK = (function () {
   }
   function has(id, segs) { var p = packs[id]; if (!p) return false; for (var i = 0; i < segs.length; i++) if (!p.clips[segs[i]]) return false; return true; }
   function missing(id, segs) { var p = packs[id]; return p ? segs.filter(function (s) { return !p.clips[s]; }) : segs; }
-  function binUrl(id) { return 'voices/' + id + '/clips.bin'; }
-  /* Увесь файл голосу: з кешу телефону, інакше з мережі (і в кеш). progress(отримано, усього) — під час завантаження. */
-  /* одне завантаження на голос, навіть якщо його водночас просять кілька місць */
-  function bin(id, progress) {
-    if (bins[id]) return Promise.resolve(bins[id]);
-    if (!loading[id]) loading[id] = binLoad(id, progress).finally(function () { delete loading[id]; });
-    return loading[id];
+  function files(id) { return (packs[id] && packs[id].files) || ['clips.bin']; }
+  function binUrl(id, k) { return 'voices/' + id + '/' + files(id)[k || 0]; }
+  /* Файл голосу: з кешу телефону, інакше з мережі (і в кеш). progress(отримано, усього) — під час завантаження. */
+  /* одне завантаження на файл, навіть якщо його водночас просять кілька місць */
+  function bin(id, k, progress) {
+    var key = id + '#' + (k || 0);
+    if (bins[key]) return Promise.resolve(bins[key]);
+    if (!loading[key]) loading[key] = binLoad(id, k || 0, progress).then(function (d) { bins[key] = d; return d; }).finally(function () { delete loading[key]; });
+    return loading[key];
   }
-  async function binLoad(id, progress) {
-    var url = binUrl(id), c = null;
-    try { c = window.caches ? await caches.open(CACHE) : null; if (c) { var hit = await c.match(url); if (hit) return (bins[id] = await hit.arrayBuffer()); } } catch (e) { c = null; }
+  async function binLoad(id, k, progress) {
+    var url = binUrl(id, k), c = null;
+    try { c = window.caches ? await caches.open(CACHE) : null; if (c) { var hit = await c.match(url); if (hit) return await hit.arrayBuffer(); } } catch (e) { c = null; }
     var res = await fetch(url); if (!res.ok) throw new Error('немає файлу голосу');
-    var total = Number(res.headers.get('content-length')) || (packs[id] && packs[id].bytes) || 0, data;
+    var total = Number(res.headers.get('content-length')) || 0, data;
     if (progress && res.body && res.body.getReader) {
       var rd = res.body.getReader(), parts = [], got = 0;
       for (;;) { var x = await rd.read(); if (x.done) break; parts.push(x.value); got += x.value.length; progress(got, total); }
       var all = new Uint8Array(got), o = 0; parts.forEach(function (u) { all.set(u, o); o += u.length; }); data = all.buffer;
     } else data = await res.arrayBuffer();
     try { if (c) await c.put(url, new Response(data.slice(0), { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* без кешу */ }
-    return (bins[id] = data);
+    return data;
+  }
+  /* Прибрати з кешу старі файли цього голосу (після переходу на нову якість запису). */
+  async function prune(id) {
+    try {
+      var c = await caches.open(CACHE), keep = files(id).map(function (f, k) { return new URL(binUrl(id, k), location.href).href; });
+      (await c.keys()).forEach(function (r) { if (r.url.indexOf('/voices/' + id + '/') >= 0 && /\.bin$/.test(r.url) && keep.indexOf(r.url) < 0) c.delete(r); });
+    } catch (e) { /* немає кешу */ }
   }
   function decode(data) { return new Promise(function (ok, bad) { var p = ctx.decodeAudioData(data, ok, bad); if (p && p.then) p.then(ok, bad); }); }
   async function buffer(id, seg) {
     var key = id + '|' + seg; if (buffers[key]) return buffers[key];
-    var at = packs[id].clips[seg], all = await bin(id);
+    var at = packs[id].clips[seg], all = await bin(id, at[2] || 0);
     var b = await decode(all.slice(at[0], at[0] + at[1])); buffers[key] = b; return b;
   }
   function stop() { gen++; sources.forEach(function (s) { try { s.stop(); } catch (e) { /* уже */ } }); sources = []; setPlaying(false); }
@@ -64,10 +73,23 @@ var VOICEPACK = (function () {
       return true;
     } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
   }
-  async function download(id, progress) { await load(id); var b = await bin(id, progress); return b.byteLength; }
+  /* Увесь голос у телефон: файли по черзі, прогрес — сумарний. */
+  async function download(id, progress) {
+    var p = await load(id), done = 0;
+    for (var k = 0; k < files(id).length; k++) {
+      var b = await bin(id, k, progress && function (got) { progress(done + got, p.bytes || 0); });
+      done += b.byteLength;
+    }
+    if (window.caches) prune(id);
+    return done;
+  }
   async function cached(id) {
     if (!window.caches) return false;
-    try { var c = await caches.open(CACHE); return !!(await c.match(binUrl(id))); } catch (e) { return false; }
+    try {
+      var c = await caches.open(CACHE);
+      for (var k = 0; k < files(id).length; k++) if (!(await c.match(binUrl(id, k)))) return false;
+      return true;
+    } catch (e) { return false; }
   }
   return { split: split, load: load, has: has, missing: missing, play: play, stop: stop, download: download, cached: cached,
     get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };

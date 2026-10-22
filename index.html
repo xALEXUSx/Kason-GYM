@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.3.0">
+<meta name="app-version" content="3.4.0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
@@ -119,6 +119,16 @@ body.sheet #sheetBg{display:block;opacity:1} body.sheet #sheet{transform:none}
 #timer .tb2{display:flex;gap:6px;margin-left:auto} #timer button{min-height:44px;padding:6px 10px;background:rgba(127,127,127,.2);border:0;color:inherit;border-radius:12px}
 body.wkv #timer{bottom:calc(14px + env(safe-area-inset-bottom))}
 #toast{position:fixed;left:16px;right:16px;top:calc(10px + env(safe-area-inset-top));z-index:50;background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:14px;display:none;max-width:608px;margin:0 auto;font-size:.92rem;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+/* підказка-хмарка при затисканні */
+#app,#sheet,nav#tabs,#rbar,#tour{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+#app input,#app textarea,#sheet input,#sheet textarea{-webkit-user-select:text;user-select:text}
+#tipb{position:fixed;z-index:70;max-width:min(300px,calc(100vw - 20px));background:var(--ink);color:var(--bg);border-radius:14px;padding:11px 13px;font-size:.92rem;line-height:1.35;box-shadow:0 10px 30px rgba(0,0,0,.28);pointer-events:none;opacity:0;transform:scale(.96);transition:opacity .12s,transform .12s;visibility:hidden}
+#tipb.on{opacity:1;transform:none;visibility:visible}
+#tipb i{position:absolute;width:12px;height:12px;background:var(--ink);transform:translateX(-50%) rotate(45deg)}
+#tipb.up i{bottom:-6px} #tipb.down i{top:-6px}
+.tiphold{outline:2px solid var(--accent);outline-offset:2px}
+.tsel{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;margin:7px 0;padding:12px 14px}
+.tsel.on{border-color:var(--accent);background:var(--accent-soft)}
 #toast.on{display:block} #toast.gold{background:var(--gold);color:#1a1a1d;font-weight:650}
 /* графіки */
 svg.chart{width:100%;height:auto;display:block;overflow:visible} .gl{stroke:var(--line);stroke-width:1} .tl{font-size:11px;fill:var(--muted);font-family:inherit}
@@ -238,6 +248,7 @@ h3.rg{margin:14px 0 6px;font-size:.82rem;color:var(--muted);text-transform:upper
 <script src="coach.js"></script>
 <script src="radio.js"></script>
 <script src="voicepack.js"></script>
+<script src="tips.js"></script>
 <script src="charts.js"></script>
 <script src="store.js"></script>
 <script src="app.js"></script>

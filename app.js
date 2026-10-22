@@ -1,7 +1,7 @@
 /* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '3.3.0';
+  const VERSION = '3.4.0';
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = fixProfiles(STORE.load());
@@ -572,15 +572,30 @@
   function rList() {
     const d = P().draft, prog = G(), st = draftStats(d);
     app.innerHTML = `${wbar(d, prog, st)}${phaseBox(d)}
-      <p class="tiny muted">Номер підходу — тип: Р розминка, Д дроп, В до відмови, М міо ${q('myo')}. «Минулого» — торкніться, щоб повторити.</p>
+      <p class="small muted">Літери підходів: <b>Р</b> розминка · <b>Д</b> дроп · <b>В</b> до відмови · <b>М</b> міо; цифра — робочий підхід.<br>💡 Не зрозуміло, що це? Затисніть будь-яку кнопку чи напис — зʼявиться підказка.</p>
       ${d.items.map((_, i) => exCard(d, i)).join('')}
       ${coolText() ? `<div class="note ok small"><b>Заминка:</b> ${esc(coolText())}</div>` : ''}
       <button type="button" class="pri wide big" data-act="finish">Завершити тренування</button><p></p>
       <button type="button" class="ghost wide" data-act="discard">Скасувати тренування</button>`;
     startElapsed(d); keepAwake(true);
   }
-  function minisSheet(i, j) {
-    const s = P().draft.items[i].sets[j], m = (s.mini || []).slice();
+  /* Тип підходу: вибір зі зрозумілим поясненням замість перемикання букв наосліп */
+  const SET_TYPES = [
+    ['N', 'Робочий (цифра)', 'Звичайний підхід — саме він рахується в прогрес.'],
+    ['W', 'Р — розминка', 'Легка вага, щоб розігріти мʼязи й суглоби. У прогрес не йде.'],
+    ['D', 'Д — дроп', 'Одразу після підходу — ще один у легшому варіанті тією самою вагою (напр., з колін), без відпочинку.'],
+    ['F', 'В — до відмови', 'Робите, доки виходить із правильною технікою, без запасу.'],
+    ['M', 'М — міо', 'Підхід до відмови, далі 2–3 міні-підходи по 3–5 повторень з паузою 15 с.']];
+  function typeSheet(i, j) {
+    const it = P().draft.items[i], s = it.sets[j], spine = G().ex[it.ex].spine;
+    const list = SET_TYPES.filter((t) => !spine || t[0] === 'N' || t[0] === 'W');
+    openSheet(`<div class="sp"><b>Тип підходу</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+      ${spine ? '<p class="small muted">Вправа навантажує поперек — лише звичайні й розминкові підходи, щоб берегти спину.</p>' : ''}
+      ${list.map((t) => `<button type="button" class="wide tsel${(s.type || 'N') === t[0] ? ' on' : ''}" data-act="stypeSet" data-i="${i}" data-j="${j}" data-t="${t[0]}"><b>${t[1]}</b><span class="small muted">${t[2]}</span></button>`).join('')}`);
+  }
+  function minisSheet(i, j, keep) {
+    /* keep — перемальовуємо після вибору: беремо вже вибране, а не збережене */
+    const s = P().draft.items[i].sets[j], m = keep && ui.minis ? ui.minis.m : (s.mini || []).slice();
     ui.minis = { i, j, m };
     const row = (k) => `<div class="sp" style="margin:8px 0"><span>Міні-підхід ${k + 1}</span><div class="row">${[0, 1, 2, 3, 4, 5, 6].map((r) => `<button type="button" class="sm${m[k] === r ? ' pri' : ''}" data-act="miniSet" data-k="${k}" data-v="${r}">${r}</button>`).join('')}</div></div>`;
     openSheet(`<div class="sp"><b>Міо: міні-підходи</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div><p class="small muted">Після основного підходу — пауза 15 с і 3–5 повторень; до трьох разів. 0 — не робили.</p>${[0, 1, 2].map(row).join('')}
@@ -655,7 +670,8 @@
     if (close) { closeSheet(); rWorkout(); }
   }
   sheetEl.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-k]'); if (!b) return sheetAct(e);
+    /* кнопки з дією (міні-підходи, «?») мають власний обробник; data-k без дії — клавіші цифрової клавіатури */
+    const b = e.target.closest('[data-k]'); if (!b || b.dataset.act) return sheetAct(e);
     if (!kp) return;
     const k = b.dataset.k;
     if (k === 'close') { closeSheet(); return; }
@@ -769,7 +785,7 @@
         <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Перед тренуванням. Від відповіді застосунок сам полегшує або прибирає вправи на поперек.</div></li>
         <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети з першого тижня, міо-підходи в ізоляції з тижня 5 — менше часу, та сама робота.</div></li>
         <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
-        <li style="display:block"><b>❓ Підказки</b><div class="small muted">Кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
+        <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на пів секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
     S().tour.v3 = true; save();
   }
@@ -881,6 +897,7 @@
         <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
         <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
         ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
+      ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на пів секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
       ${S().tour.v3 ? '' : '<div class="card"><div class="sp"><div><b>Нове: тренер голосом</b><div class="small muted">Питання про спину, суперсети, міо-підходи, підказки.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, 3, thisWeek + '/3', 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
@@ -1242,6 +1259,7 @@
     if (act === 'glAll') return glAll();
     if (act === 'say') return sayWhat(b);
     if (act === 'whatsnew') return whatsNew();
+    if (act === 'tipsOk') { S().tour.tips = true; save(); return render(); }
     if (act === 'radio') return radioSheet();
     if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
     if (act === 'rpause') { RADIO.pause(); return; }
@@ -1278,7 +1296,8 @@
     if (act === 'discard') { if (confirm('Скасувати тренування? Відмічені підходи не збережуться.')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); } return; }
     if (act === 'done') return toggleDone(i, j);
     if (act === 'kp') return openKp(i, j, b.dataset.f);
-    if (act === 'stype') { const s = p.draft.items[i].sets[j]; if (s.done) return; s.type = { N: 'W', W: 'D', D: 'F', F: 'M', M: 'N' }[s.type || 'N']; save(); haptic(); return rWorkout(); }
+    if (act === 'stype') { if (p.draft.items[i].sets[j].done) return toast('Підхід уже позначено ✓ — спершу зніміть позначку'); return typeSheet(i, j); }
+    if (act === 'stypeSet') { const s = p.draft.items[i].sets[j]; s.type = b.dataset.t; save(); haptic(); closeSheet(); return rWorkout(); }
     if (act === 'mode') { S().mode = S().mode === 'list' ? 'coach' : 'list'; if (S().mode === 'coach' && p.draft && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }
     if (act === 'cdone') return coachDone();
     if (act === 'cwarm') { p.draft.coach.warm = true; save(); rWorkout(); window.scrollTo(0, 0); const cs = curStep(p.draft); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || 'Добре. ') + 'Перша вправа. ' + setSpeech(p.draft, cs)); return; }
@@ -1301,7 +1320,7 @@
     if (act === 'myoRep') return myoRep(Number(b.dataset.v));
     if (act === 'myoEnd') return myoEnd();
     if (act === 'minis') return minisSheet(i, j);
-    if (act === 'miniSet') { ui.minis.m[Number(b.dataset.k)] = Number(b.dataset.v); return minisSheet(ui.minis.i, ui.minis.j); }
+    if (act === 'miniSet') { ui.minis.m[Number(b.dataset.k)] = Number(b.dataset.v); return minisSheet(ui.minis.i, ui.minis.j, true); }
     if (act === 'miniSave') { const s = p.draft.items[ui.minis.i].sets[ui.minis.j]; s.mini = ui.minis.m.filter((r) => r > 0); save(); closeSheet(); return rWorkout(); }
     if (act === 'swap') return swapSheet(i);
     if (act === 'swapTo') return doSwap(i, b.dataset.ex);
