@@ -43,6 +43,7 @@ var VOICE = (function () {
       else if (Number(s.load) === 0) out.push('Лише гриф.');
       else { out.push(cap(kg(s.load)) + ' дисків.'); if (side && side.length) out.push('На кожен бік — ' + side.map(numWords).join(' плюс ') + '.'); }
     }
+    else if (ex.type === 'mach') { if (hasLoad) out.push(cap(kg(s.load)) + '.'); }  // тренажер чи блок: вага в кг, без дисків
     if (ex.type === 'amrap') out.push('Скільки зможете, із запасом два.');
     else if (s.type === 'M') out.push('До відмови.');
     else if (ex.type === 'time') out.push(it.min === it.max || !it.max ? cap(secs(s.reps || it.max)) + '.' : 'Від ' + it.min + ' до ' + secs(it.max) + '.');

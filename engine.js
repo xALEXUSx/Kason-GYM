@@ -19,6 +19,7 @@ var ENGINE = (function () {
   /* Навантаження на гантель у кг: гриф + диски. plates === null — без гантелі. */
   function totalLoad(ex, plates, handle, variant) {
     if (plates === null || plates === undefined || plates === '') return 0;
+    if (ex.type === 'mach') return Number(plates);  // тренажер чи блок: вага одразу в кг, без грифа
     var db = ex.db || 1;
     if (ex.variants && variant) for (var i = 0; i < ex.variants.length; i++) if (ex.variants[i].id === variant && ex.variants[i].db) db = ex.variants[i].db;
     return db * ((handle || 0) + Number(plates));
@@ -28,12 +29,12 @@ var ENGINE = (function () {
      db — розрахунковий максимум (Епплі), band — рівень × повторення, решта — повторення або секунди. */
   function metric(ex, set, handle) {
     if (!set || !(set.reps > 0)) return 0;
-    if (ex.type === 'db') { var L = totalLoad(ex, set.load, handle, set.variant); return round1(L * (1 + set.reps / 30)); }
+    if (ex.type === 'db' || ex.type === 'mach') { var L = totalLoad(ex, set.load, handle, set.variant); return round1(L * (1 + set.reps / 30)); }
     if (ex.type === 'band') return (Number(set.load) || 0) * set.reps;
     return set.reps;
   }
   function metricLabel(ex) {
-    if (ex.type === 'db') return 'розрахунковий максимум, кг';
+    if (ex.type === 'db' || ex.type === 'mach') return 'розрахунковий максимум, кг';
     if (ex.type === 'band') return 'рівень × повторення';
     if (ex.type === 'time') return 'секунди, кращий підхід';
     return 'повторення, кращий підхід';
@@ -53,10 +54,31 @@ var ENGINE = (function () {
     var b = 0; sets.forEach(function (s) { var m = metric(ex, s, handle); if (m > b) b = m; }); return b;
   }
 
+  /* Крок тренажера в залі людини — з її власних ваг на ньому (робочі підходи історії):
+     найменша різниця між різними вагами, якщо всі різниці їй кратні (±0,15 кг — перераховані з фунтів таблички).
+     Крок, не кратний типовому (2,5 замість 5, 4,5 замість 5), — з 2 різних ваг; грубіший кратний (5 замість 2,5) —
+     лише з 3 і більше (дві ваги можуть бути просто стрибком на два кроки) і не на великих вправах: там застосунок сам
+     дає подвійний крок, тож 40 → 50 → 60 — ще не доказ кроку 10. Від 1,25 до 20 кг; інакше — типовий крок. */
+  function machStep(ex, hist) {
+    var def = ex.step || 5, seen = {};
+    (hist || []).forEach(function (h) { (h.sets || []).forEach(function (s) { var v = Number(s.load); if (s.type !== 'W' && v > 0) seen[Math.round(v * 10)] = 1; }); });
+    var xs = Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+    if (xs.length < 2) return def;
+    var d = [], i;
+    for (i = 1; i < xs.length; i++) d.push((xs[i] - xs[i - 1]) / 10);
+    var g = Math.min.apply(null, d);
+    if (g < 1.25 || g > 20 || d.some(function (x) { return Math.abs(x / g - Math.round(x / g)) * g > 0.15; })) return def;
+    g = Math.round(g * 10) / 10;
+    if (Math.abs(g - def) < 0.05) return def;
+    var mult = Math.abs(g / def - Math.round(g / def)) * def < 0.05;
+    if (mult && (xs.length < 3 || ex.big)) return def;
+    return g;
+  }
   /* Підказка на сьогодні за правилами прогресії програми. */
   function suggest(prog, exId, item, nSets, hist, handle, deload, stepIn) {
-    var STEP = stepIn || 2.5;
-    var ex = prog.ex[exId], cap = prog.cap || 20;
+    var ex = prog.ex[exId];
+    /* тренажер чи блок: крок — з ваг людини на ньому (machStep), межа — власна; гантелі — крок дисків і межа набору */
+    var STEP = ex.type === 'mach' ? machStep(ex, hist) : (stepIn || 2.5), cap = ex.type === 'mach' ? (ex.cap || 300) : (prog.cap || 20);
     var min = item.min, max = item.max;
     var out = { sets: [], note: '' };
     var last = hist.length ? hist[hist.length - 1].sets : null;
@@ -72,7 +94,7 @@ var ENGINE = (function () {
     if (!last) {
       var startLoad = (ex.type === 'bw' || (ex.type === 'time' && !ex.load)) ? null : (ex.start === undefined ? null : ex.start);
       /* стартова вага — не більша за межу набору й кратна кроку дисків (інакше її не зібрати) */
-      if (startLoad !== null && (ex.type === 'db' || ex.type === 'time')) startLoad = Math.max(0, Math.floor(Math.min(startLoad, cap) / STEP + 1e-9) * STEP);
+      if (startLoad !== null && (ex.type === 'db' || ex.type === 'mach' || ex.type === 'time')) startLoad = Math.max(0, Math.floor(Math.min(startLoad, cap) / STEP + 1e-9) * STEP);
       fill(startLoad, max);
       var aim = ex.type === 'time' ? max + ' с' : max + ' повторень';
       out.note = startLoad === null ? 'Перший раз: ' + aim + ' із запасом 2–3' + (ex.type === 'dbopt' ? ', без гантелі' : '') + '; важко — легший варіант.'
@@ -120,9 +142,9 @@ var ENGINE = (function () {
     }
     if (allTop) {
       var step = (ex.big && last.every(function (s) { return s.reps >= max + 2; })) ? 2 * STEP : STEP;
-      var newL = Math.min(cap, Lmax + step);
+      var newL = Math.round(Math.min(cap, Lmax + step) * 100) / 100;  // крок 4,5 чи 6,8 — без хвостів 18,099999
       if (newL === Lmax) { fill(Lmax, max); out.note = 'Вага максимальна: темп 4 с, пауза внизу, +1 підхід або одна рука / нога.'; }
-      else { fill(newL, min); out.note = 'Верхня межа взята: +' + String(newL - Lmax).replace('.', ',') + ' кг на гантель.'; }
+      else { fill(newL, min); out.note = 'Верхня межа взята: +' + String(Math.round((newL - Lmax) * 100) / 100).replace('.', ',') + (ex.type === 'mach' ? ' кг.' : ' кг на гантель.'); }
       return out;
     }
     /* Змішані підходи: на новій вазі менше нижньої межі — перший підхід нова вага, решта стара;
@@ -131,7 +153,7 @@ var ENGINE = (function () {
     var strong = atMax.length - weak;
     var lower = numeric.filter(function (x) { return x < Lmax; });
     if (weak > 0 || lower.length) {
-      var prevL = lower.length ? Math.max.apply(null, lower) : Math.max(0, Lmax - STEP);
+      var prevL = lower.length ? Math.max.apply(null, lower) : Math.max(0, Math.round((Lmax - STEP) * 100) / 100);
       var keep = weak > 0 ? Math.max(1, strong) : strong + 1;
       if (keep >= nSets) {
         for (i = 0; i < nSets; i++) out.sets.push({ load: Lmax, reps: min });
@@ -240,7 +262,7 @@ var ENGINE = (function () {
   function setVolume(ex, set, handle) {
     if (!set || !(set.reps > 0) || set.type === 'W') return 0;
     var reps = set.reps + (set.mini || []).reduce(function (a, r) { return a + (Number(r) || 0); }, 0);
-    if (ex.type === 'db' || (ex.type === 'dbopt' && set.load !== null && set.load !== undefined && set.load !== '')) return round1(totalLoad(ex, set.load, handle, set.variant) * reps);
+    if (ex.type === 'db' || ex.type === 'mach' || (ex.type === 'dbopt' && set.load !== null && set.load !== undefined && set.load !== '')) return round1(totalLoad(ex, set.load, handle, set.variant) * reps);
     return 0;
   }
   function sessionVolume(prog, session, handle) {
@@ -262,12 +284,13 @@ var ENGINE = (function () {
     if (per > 0) return { ok: false, side: side, text: 'не зібрати з вашого набору' };
     return { ok: true, side: side, text: side.map(function (x) { return String(x).replace('.', ','); }).join(' + ') };
   }
-  /* Розминка для головних вправ з гантелями — за схемою програми (наприклад, 1 × 12 з половинною вагою). */
-  function warmups(ex, workLoad, step, scheme) {
-    if (ex.type !== 'db' || !(ex.main || ex.big) || workLoad === null || workLoad === undefined) return [];
-    var w = Number(workLoad), st = step || 2.5, sc = scheme || { pct: [0.5], reps: [12] };
+  /* Розминка для головних вправ з гантелями — за схемою програми (наприклад, 1 × 12 з половинною вагою).
+     mstep — крок тренажера в залі людини (machStep); без нього — типовий крок тренажера. */
+  function warmups(ex, workLoad, step, scheme, mstep) {
+    if ((ex.type !== 'db' && ex.type !== 'mach') || !(ex.main || ex.big) || workLoad === null || workLoad === undefined) return [];
+    var w = Number(workLoad), st = ex.type === 'mach' ? (mstep || ex.step || 5) : (step || 2.5), sc = scheme || { pct: [0.5], reps: [12] };
     if (w <= 0) return [];
-    var down = function (x) { return Math.max(0, Math.floor(x / st + 1e-9) * st); };
+    var down = function (x) { return Math.max(0, Math.round(Math.floor(x / st + 1e-9) * st * 100) / 100); };
     var out = [];
     sc.pct.forEach(function (pc, i) { var L = down(w * pc); if (!out.length || L > out[out.length - 1].load) out.push({ load: L, reps: sc.reps[i] }); });
     return out;
@@ -314,7 +337,7 @@ var ENGINE = (function () {
       h.sets.forEach(function (x) {
         var m = metric(ex, x, handle);
         if (!r.e1rm || m > r.e1rm.v) r.e1rm = { v: m, date: h.date, set: x };
-        if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) {
+        if (ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'mach' || (ex.type === 'time' && ex.load)) {
           var L = x.load === null || x.load === undefined || x.load === '' ? null : Number(x.load);
           if (L !== null) {
             var tot = totalLoad(ex, L, handle, x.variant);
@@ -335,7 +358,7 @@ var ENGINE = (function () {
     var rec = records(ex, histAll, handle), out = [];
     var m = metric(ex, set, handle);
     if (rec.e1rm && m > rec.e1rm.v) out.push('e1rm');
-    if ((ex.type === 'db' || ex.type === 'dbopt') && set.load !== null && set.load !== undefined && set.load !== '') {
+    if ((ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'mach') && set.load !== null && set.load !== undefined && set.load !== '') {
       var tot = totalLoad(ex, set.load, handle, set.variant);
       if (rec.heavy && tot > rec.heavy.total) out.push('weight');
       var prev = rec.reps[String(Number(set.load))];
@@ -464,7 +487,9 @@ var ENGINE = (function () {
   }
   /* Рівноцінні заміни: спершу вправи тієї самої групи, що зачіпають ті самі мʼязи; якщо таких немає —
      з інших груп, але з тим самим головним мʼязом. Не вибувші, не ті, що вже є; при болю в спині — без поперекових. */
-  function alternatives(prog, exId, noSpine, present) {
+  /* Де можна зробити вправу: у залі (тренажер чи блок), удома (гантелі чи петля) або будь-де (власна вага) */
+  function kit(e) { return e.gym ? 'gym' : (e.type === 'db' || e.type === 'band' || (e.type === 'time' && e.db)) ? 'home' : 'any'; }
+  function alternatives(prog, exId, noSpine, present, place) {
     var ex = prog.ex[exId]; if (!ex) return [];
     var main = ex.m.p[0];
     function pick(sameGroup) {
@@ -472,6 +497,7 @@ var ENGINE = (function () {
       Object.keys(prog.ex).forEach(function (id) {
         var e = prog.ex[id];
         if (id === exId || e.retired || (noSpine && e.spine) || (present && present.indexOf(id) >= 0)) return;
+        if (place && kit(e) !== 'any' && kit(e) !== place) return;  // заміна — з того самого місця: у залі тренажер, удома — гантелі чи петля
         if (sameGroup ? e.group !== ex.group : (e.group === ex.group || e.m.p.indexOf(main) < 0)) return;
         var score = (e.m.p.indexOf(main) >= 0 ? 3 : 0)
           + e.m.p.filter(function (m) { return m !== main && ex.m.p.indexOf(m) >= 0; }).length * 2
@@ -510,6 +536,6 @@ var ENGINE = (function () {
 
   return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
-           suggest: suggest, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
+           suggest: suggest, machStep: machStep, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
 if (typeof module !== 'undefined') module.exports = ENGINE;

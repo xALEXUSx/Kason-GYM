@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.8.2';
+  const VERSION = '3.9.4';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -15,10 +15,49 @@ window.APP_START = () => {
   function buildMe(answers) {
     const g = GEN.build(answers), base = g.cap;
     Object.defineProperty(g, 'cap', { configurable: true, enumerable: true, get: () => { const p = DB && DB.profiles && DB.profiles.me; return base && p && p.inv ? ENGINE.capOf(p.inv) || base : base; } });
+    /* вправи з історії, яких уже немає в програмі (змінили місце, обладнання чи обмеження), — «вибулі»: назва в історії,
+       графіки й рекорди в «Прогресі», обсяг у звітах лишаються; у тренування й заміни вони не потрапляють */
+    const pr = DB && DB.profiles && DB.profiles.me, first = answers.sex === 'f' ? 'her' : 'him', other = first === 'her' ? 'him' : 'her';
+    ((pr && pr.sessions) || []).forEach((s) => (s.sets || []).forEach((x) => {
+      if (g.ex[x.ex]) return;
+      const def = PROGRAMS[first].ex[x.ex] || PROGRAMS[other].ex[x.ex] || GEN.GYM.ex[x.ex];
+      if (def) { g.ex[x.ex] = Object.assign({}, def, { retired: true }); g.coachFrom[x.ex] = def.gym ? 'gym' : PROGRAMS[first].ex[x.ex] ? first : other; }
+    }));
     return g;
   }
   if (DB.custom && DB.custom.answers) PROGRAMS.me = buildMe(DB.custom.answers);
   DB = fixProfiles(DB);
+  /* інша кількість тренувань на тиждень — той самий тиждень і місце в ньому (номер тренування n рахується від неї) */
+  /* …і по черзі: наступне — не те саме тренування, що останнє (А після А), якщо в цьому тижні є інше */
+  function keepWeek(p, oldPw, prog) {
+    const newPw = prog && prog.perWeek;
+    if (!p || !(oldPw > 0) || !(newPw > 0) || oldPw === newPw) return;
+    const n = p.sessions.length + (p.offset || 0), w = Math.floor(n / oldPw), last = (p.sessions[p.sessions.length - 1] || {}).workout;
+    let s = Math.min(n % oldPw, newPw - 1);
+    for (let k = s; k < newPw; k++) if (ENGINE.planFor(prog, w * newPw + k).workout !== last) { s = k; break; }
+    p.offset = (p.offset || 0) + w * newPw + s - n;
+  }
+  /* анкета — єдине джерело програми: правки поза нею (дні, гриф і диски в «Більше», зріст і вік у «Харчуванні») пишемо й туди,
+     інакше програма їх не бачить, а «Змінити анкету» повертає старі значення */
+  function syncAnswers(patch) {
+    const a = DB.custom && DB.custom.answers; if (!a) return;
+    const oldPw = PROGRAMS.me && PROGRAMS.me.perWeek;
+    Object.assign(a, JSON.parse(JSON.stringify(patch)));
+    PROGRAMS.me = buildMe(a); keepWeek(DB.profiles.me, oldPw, PROGRAMS.me);
+    if (STORE.current) STORE.update(STORE.current, { sub: PROGRAMS.me.sub });
+  }
+  /* до 3.9.3 ці правки в анкету не потрапляли — зводимо при запуску й після відновлення старої копії (далі вони однакові) */
+  function syncLegacy() {
+    const a = DB.custom && DB.custom.answers, p = DB.profiles && DB.profiles.me; if (!a || !p) return;
+    const patch = {}, me = p.me || {}, srt = (x) => (x || []).slice().sort().join();
+    if (Array.isArray(p.days) && p.days.length >= 2 && p.days.length <= 4 && srt(p.days) !== srt(a.days)) patch.days = p.days.slice().sort();
+    if (p.handle !== undefined && p.handle !== a.handle) patch.handle = p.handle;
+    if (p.inv && ['5', '2.5', '1.25'].some((k) => Number(p.inv[k]) !== Number((a.inv || {})[k]))) patch.inv = { 5: p.inv[5], 2.5: p.inv[2.5], 1.25: p.inv[1.25] };
+    if (me.age >= 16 && me.age <= 85 && me.age !== Number(a.age)) patch.age = me.age;
+    if (me.height >= 130 && me.height <= 220 && me.height !== Number(a.height)) patch.height = me.height;
+    if (Object.keys(patch).length) { syncAnswers(patch); STORE.save(DB); }
+  }
+  syncLegacy();
   /* підпис у списку «Хто тренується?» — назва програми (для старих журналів — одразу) */
   { const acc = STORE.account(STORE.current); if (acc && !acc.sub && DB.active && PROGRAMS[DB.active]) STORE.update(STORE.current, { sub: PROGRAMS[DB.active].title }); }
   function fixProfiles(db) { Object.keys(db.profiles || {}).forEach((id) => { const p = db.profiles[id]; if (p && !Array.isArray(p.days) && PROGRAMS[id]) p.days = PROGRAMS[id].days.slice(); }); return db; }
@@ -45,6 +84,11 @@ window.APP_START = () => {
   const G = () => PROGRAMS[DB.active];
   const S = () => DB.settings;
   const nextN = () => P().sessions.length + (P().offset || 0);
+  /* назва тренування — і для старих записів, яких у програмі вже немає (Д1–Д3 після зміни днів чи анкети) */
+  const woTitle = (w) => ((G().workouts || {})[w] || PROGRAMS.him.workouts[w] || {}).title || w;
+  /* де було тренування — в історії, коли це не очевидно: «і вдома, і в залі» або місце інше, ніж у програмі зараз
+     (змінили анкету: був зал — тепер дім); до 3.9.3 місце не зберігалось */
+  const placeTag = (s) => (s.place && (G().gymWorkouts || s.place !== G().place) ? (s.place === 'gym' ? ' · зал' : ' · дім') : '');
   const mName = (id) => (MUSCLES.find((m) => m[0] === id) || [id, id])[1];
   function save() { if (!STORE.save(DB)) toast('Не вдалося зберегти в телефоні. Зробіть резервну копію в «Більше».'); }
   function newProfile(id) { return { handle: 1, offset: 0, inv: { 5: 4, 2.5: 8, 1.25: 4 }, days: PROGRAMS[id].days.slice(), sessions: [], draft: null, notes: {}, body: { weight: [], waist: [], chest: [], hips: [], arm: [], tests: [] }, daily: {} }; }
@@ -155,8 +199,10 @@ window.APP_START = () => {
   }
 
   /* ---------- знайомство: анкета (усі поля обовʼязкові) ---------- */
-  const QSTEPS = ['who', 'body', 'goal', 'level', 'equip', 'limits', 'days', 'agree'];
-  const QFIELDS = { who: ['name', 'sex'], body: ['age', 'height', 'weight'], goal: ['goal'], level: ['level'], equip: ['equip'], limits: ['limits'], days: ['days'], agree: ['agree'] };
+  const QALL = ['who', 'body', 'goal', 'level', 'place', 'equip', 'limits', 'days', 'agree'];
+  /* лише зал — без кроку «Що є вдома» */
+  const qSteps = (a) => QALL.filter((x) => x !== 'equip' || a.place !== 'gym');
+  const QFIELDS = { who: ['name', 'sex'], body: ['age', 'height', 'weight'], goal: ['goal'], level: ['level'], place: ['place'], equip: ['equip'], limits: ['limits'], days: ['days'], agree: ['agree'] };
   function qState() {
     if (!ui.q) {
       const acc = STORE.account(STORE.current) || {}, old = DB.custom && DB.custom.answers;
@@ -185,7 +231,7 @@ window.APP_START = () => {
     return out;
   }
   function rOnboard() {
-    const q = qState(), step = QSTEPS[q.step], a = q.a, errs = q.err ? qErrors(step) : {};
+    const q = qState(), a = q.a, QS = qSteps(a), step = QS[q.step], errs = q.err ? qErrors(step) : {};
     /* кілька відповідей (обладнання, здоровʼя) — з галочкою */
     const opt = (act, v, label, sub, on) => { const m = act === 'qLimit' || act === 'qEquip';
       return `<button type="button" class="qopt${m ? ' multi' : ''}${on ? ' on' : ''}" data-act="${act}" data-v="${v}" ${m ? `role="checkbox" aria-checked="${on}"` : `aria-pressed="${on}"`}><b>${label}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</button>`; };
@@ -205,7 +251,9 @@ window.APP_START = () => {
       <div class="pick">${opt('qEquip', 'db', 'Гантелі з дисками', 'розбірні: гриф + диски', db)}${opt('qEquip', 'band', 'Петля-еспандер', 'резинка з кріпленням до дверей', a.equip.indexOf('band') >= 0)}</div>${err('equip')}
       ${db ? `<div class="card"><b>Ваші гантелі</b>${numIn('qHandle', 'Вага одного грифа без дисків, кг', a.handle, 'decimal')}${err('handle')}
         <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>${numIn('qI5', '5 кг', a.inv['5'])}</div><div>${numIn('qI25', '2,5 кг', a.inv['2.5'])}</div><div>${numIn('qI125', '1,25 кг', a.inv['1.25'])}</div></div>${err('inv')}</div>` : ''}`;
-    } else if (step === 'limits') body = `<h1>Здоровʼя</h1><p class="muted small">Позначте все, що у вас є. Програма прибере або полегшить вправи, які можуть зашкодити.</p>
+    } else if (step === 'place') body = `<h1>Де тренуєтесь?</h1><p class="muted small">Програма підбере вправи під місце. «І вдома, і в залі» — перед кожним тренуванням застосунок спитає, де ви сьогодні.</p>
+      <div class="pick">${[['home', 'Вдома', 'гантелі з дисками або петля-еспандер'], ['gym', 'У тренажерному залі', 'тренажери й блоки'], ['both', 'І вдома, і в залі', 'програма для обох місць']].map(([v, l, d]) => opt('qPlace', v, l, d, a.place === v)).join('')}</div>${err('place')}`;
+    else if (step === 'limits') body = `<h1>Здоровʼя</h1><p class="muted small">Позначте все, що у вас є. Програма прибере або полегшить вправи, які можуть зашкодити.</p>
       <div class="pick">${[['back', 'Грижа або біль у спині', 'грижа, протрузія, часто болить поперек'], ['knees', 'Коліна', 'біль або травма коліна'], ['shoulders', 'Плечі', 'біль або травма плеча'], ['heart', 'Тиск або серце', 'гіпертонія, хвороби серця'], ['pregnant', 'Вагітність', ''], ['none', 'Нічого з цього', '']].filter(([v]) => v !== 'pregnant' || a.sex !== 'm').map(([v, l, d]) => opt('qLimit', v, l, d, a.limits.indexOf(v) >= 0)).join('')}</div>${err('limits')}`;
     else if (step === 'days') body = `<h1>Дні тренувань</h1><p class="muted small">Оберіть від 2 до 4 днів. Краще з днем відпочинку між ними.</p>
       <div class="qdays">${GEN.DAYS.map(([d, l]) => opt('qDay', d, l, '', a.days.indexOf(d) >= 0)).join('')}</div>${err('days')}`;
@@ -213,16 +261,16 @@ window.APP_START = () => {
       const blk = GEN.check(a).block, lim = a.limits.filter((x) => x !== 'none');
       body = `<h1>Майже готово</h1><div class="card"><ul class="list">
         <li><span>Імʼя</span><b>${esc(a.name)}</b></li><li><span>Вік · зріст · вага</span><b>${fmt(a.age)} · ${fmt(a.height)} см · ${fmt(a.weight)} кг</b></li>
-        <li><span>Мета</span><b>${esc(GEN.GOALS[a.goal] || '')}</b></li><li><span>Обладнання</span><b>${a.equip.map((x) => ({ db: 'гантелі', band: 'петля' }[x])).join(', ')}</b></li>
+        <li><span>Мета</span><b>${esc(GEN.GOALS[a.goal] || '')}</b></li><li><span>Де</span><b>${esc((GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `<li><span>Обладнання вдома</span><b>${a.equip.map((x) => ({ db: 'гантелі', band: 'петля' }[x])).join(', ')}</b></li>`}
         <li><span>Здоровʼя</span><b>${lim.length ? lim.map((x) => ({ back: 'спина', knees: 'коліна', shoulders: 'плечі', heart: 'тиск/серце', pregnant: 'вагітність' }[x])).join(', ') : 'без обмежень'}</b></li>
         <li><span>Дні</span><b>${GEN.DAYS.filter(([d]) => a.days.indexOf(d) >= 0).map(([, l]) => l).join(', ')}</b></li></ul></div>
         ${blk ? `<div class="note b small">${esc(blk)}</div>` : ''}
         ${lim.some((x) => x === 'back' || x === 'heart') && !blk ? '<div class="note w small">Перед стартом покажіть програму лікарю: при болю в спині чи проблемах із тиском це розумна страховка.</div>' : ''}
         <label class="chk"><input type="checkbox" id="qAgree"${a.agree ? ' checked' : ''}><span>Розумію: застосунок не замінює лікаря. При болю під час вправи — зупиняюсь.</span></label>${err('agree')}`;
     }
-    const last = q.step === QSTEPS.length - 1;
+    const last = q.step === QS.length - 1;
     app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div>
-      <div class="qprog" aria-hidden="true"><i style="width:${Math.round((q.step + 1) / QSTEPS.length * 100)}%"></i></div><p class="tiny muted">Крок ${q.step + 1} з ${QSTEPS.length}${q.edit ? ' · зміна анкети' : ''}</p>
+      <div class="qprog" aria-hidden="true"><i style="width:${Math.round((q.step + 1) / QS.length * 100)}%"></i></div><p class="tiny muted">Крок ${q.step + 1} з ${QS.length}${q.edit ? ' · зміна анкети' : ''}</p>
       ${body}
       <div class="qnav">${q.step ? '<button type="button" class="ghost" data-act="qBack">Назад</button>' : (q.edit ? '<button type="button" class="ghost" data-act="qCancel">Скасувати</button>' : '<span></span>')}
       <button type="button" class="pri big" data-act="qNext">${last ? (q.edit ? 'Оновити програму' : 'Скласти програму') : 'Далі'}</button></div>
@@ -235,6 +283,7 @@ window.APP_START = () => {
     const q = qState(), a = q.a, c = GEN.check(a);
     if (!c.ok) { q.err = true; return rOnboard(); }
     a.name = a.name.trim();
+    const oldPw = DB.custom && PROGRAMS.me ? PROGRAMS.me.perWeek : null;
     DB.custom = { answers: JSON.parse(JSON.stringify(a)), ver: GEN.VER, date: today() };
     PROGRAMS.me = buildMe(DB.custom.answers);
     const fresh = !DB.profiles.me;
@@ -242,6 +291,7 @@ window.APP_START = () => {
     const p = DB.profiles.me;
     p.days = a.days.slice().sort(); p.handle = a.handle; p.inv = { 5: a.inv['5'], 2.5: a.inv['2.5'], 1.25: a.inv['1.25'] };
     p.me = Object.assign({}, p.me || {}, { height: a.height, age: a.age });
+    if (!fresh) keepWeek(p, oldPw, PROGRAMS.me);
     if (p.draft) p.draft = null;
     /* новому користувачеві картка «Нове» ні до чого — для нього все нове */
     if (fresh && Object.keys(DB.profiles).length === 1) S().tour.v3 = true;
@@ -254,7 +304,14 @@ window.APP_START = () => {
   }
 
   /* ---------- допоміжне до вправ ---------- */
-  const isLoad = (ex) => ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'band' || (ex.type === 'time' && ex.load);
+  const isLoad = (ex) => ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'band' || ex.type === 'mach' || (ex.type === 'time' && ex.load);
+  /* тренажер чи блок: вага в кг на тренажері, свій крок, без грифа й дисків */
+  const isMach = (ex) => ex.type === 'mach';
+  /* підказка-хмарка до числа ваги: на тренажері й еспандері — своя (загальна в tips.js — про диски на гантель) */
+  const loadTip = (ex, what) => (isMach(ex) ? ` data-tip="Вага на тренажері чи блоці, кг${what}"` : ex.type === 'band' ? ` data-tip="Рівень еспандера: номер джгута або сума, якщо кілька разом${what}"` : '');
+  /* крок ваги: тренажер — з ваг людини на ньому (ENGINE.machStep: її зал може мати 2,5 чи 4,5 замість 5), еспандер — рівень, гантелі — диски */
+  const loadStep = (ex, id) => (isMach(ex) ? ENGINE.machStep(ex, ENGINE.history(P(), id)) : ex.type === 'band' ? 1 : ENGINE.stepFor(P().inv));
+  const loadCap = (ex) => (isMach(ex) ? ex.cap || 300 : hasKg(ex) ? G().cap : 99);
   const hasKg = (ex) => ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load);
   function loadText(ex, v) {
     if (ex.type === 'band') return v === null || v === undefined ? '—' : 'рів. ' + fmt(v);
@@ -296,18 +353,21 @@ window.APP_START = () => {
     let note = sug.note, skipped = !!it.optional;
     if (o.ra && o.ra.act === 'skip') { skipped = true; note = 'Сьогодні без цієї вправи — бережемо поперек.'; }
     if (o.ra && o.ra.act === 'light') {
-      let less = false; sets.forEach((s) => { if (typeof s.load === 'number' && s.load > 0) { s.load = Math.max(0, Math.round((s.load - step) * 100) / 100); less = true; } });
+      const st = isMach(ex) ? loadStep(ex, it.ex) : step;
+      let less = false; sets.forEach((s) => { if (typeof s.load === 'number' && s.load > 0) { s.load = Math.max(0, Math.round((s.load - st) * 100) / 100); less = true; } });
       note = (less ? 'Спина ниє: вага на крок нижча, запас 3. ' : 'Спина ниє: запас 3, рух повільний і плавний. ') + note;
     }
     if (o.from) note = 'Замість «' + prog.ex[o.from].name + '». ' + note;
     if (o.myo && ex.iso && ex.type !== 'amrap' && sets.length) sets[sets.length - 1].type = 'M';
     return { ex: it.ex, variant: defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets };
   }
-  function buildDraft(wid, ready) {
+  function buildDraft(wid, ready, place) {
     const prog = G(), p = P(), n = nextN(), plan = ENGINE.planFor(prog, n);
     wid = wid || plan.workout;
-    const items = prog.workouts[wid].items.slice();
-    const pairs = prog.supersets(plan.week, wid);
+    /* місце: обране перед тренуванням («і вдома, і в залі») або єдине місце програми */
+    const where = place || prog.place || 'home', W = where === 'gym' && prog.gymWorkouts ? prog.gymWorkouts : prog.workouts;
+    const items = W[wid].items.slice();
+    const pairs = prog.supersets(plan.week, wid, where === 'gym' ? 'gym' : undefined);
     const step = ENGINE.stepFor(p.inv);
     const ordered = ENGINE.orderItems(items, pairs);
     const present = ordered.map((o) => o.it.ex);
@@ -321,15 +381,17 @@ window.APP_START = () => {
     /* розминковий підхід — перед першою базовою вправою з вагою */
     for (const st of ENGINE.stepOrder(list)) {
       const it = list[st.i], ex = prog.ex[it.ex], fw = it.sets.find((s) => s.type !== 'W');
-      const ws = ENGINE.warmups(ex, fw ? fw.load : null, step, prog.warm);
+      const ws = ENGINE.warmups(ex, fw ? fw.load : null, step, prog.warm, isMach(ex) ? loadStep(ex, it.ex) : 0);
       if (ws.length) { it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); break; }
     }
-    return { n, week: plan.week, cycle: plan.cycle, workout: wid, deload: plan.deload, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
+    return { n, week: plan.week, cycle: plan.cycle, workout: wid, place: where, deload: plan.deload, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
   }
   /* Текст для голосу: символи й скорочення — словами (5 хв → 5 хвилин, 20–30 с → від 20 до 30 секунд). */
   const sp = (t) => VOICE.norm(t);
   /* Голос: якщо для профілю є записаний пакет і в ньому є всі речення — грає запис; інакше системний голос. */
   const missedSegs = new Set();
+  /* речення-вага з voice.target: «40 кілограмів.», «13 з половиною кілограма.», «6,8 кілограма.», «… дисків.» */
+  const KG_SAY = /^\d+(,\d+)?( з половиною)? кілограм(а|и|ів)?( дисків)?\.$/, ON_SCREEN = 'Вага — на екрані.';
   const packId = () => { const v = S().voice; return v.packs && DB.active ? v.packs[DB.active] || '' : ''; };
   /* Хто зараз говорить і чому — видно в «Більше» → «Голосовий тренер» (щоб не гадати, чому звучить системний голос). */
   const voiceInfo = { mode: '', why: '' };
@@ -340,7 +402,15 @@ window.APP_START = () => {
     if (!id) return sysSay(text, VPACKS.length ? 'у налаштуваннях обрано системний голос' : 'записані голоси ще не завантажились');
     /* опис голосу ще не завантажився (перші секунди після запуску) — дочекатися, а не перемикатися на системний */
     if (!VOICEPACK.packs[id]) { VOICEPACK.load(id).then(() => talk(t), () => sysSay(text, 'записаний голос не завантажився — перевірте інтернет')); return true; }
-    const segs = VOICE.split(text);
+    let segs = VOICE.split(text);
+    /* вага, якої немає в записі (крок тренажера вашого залу 4,5 чи 6,8 кг, своя вага цифрами), не переводить усю фразу
+       на системний голос: число видно на екрані — тренер каже «Вага — на екрані.» (поки її немає в записі — пропускає) */
+    const miss = VOICEPACK.missing(id, segs);
+    if (miss.length && miss.every((x) => KG_SAY.test(x))) {
+      const alt = VOICEPACK.has(id, [ON_SCREEN]) ? ON_SCREEN : null;
+      segs = segs.map((x) => (miss.indexOf(x) >= 0 ? alt : x)).filter((x, k, arr) => x && !(x === ON_SCREEN && arr[k - 1] === ON_SCREEN));
+      if (!segs.length) return false;
+    }
     if (!VOICEPACK.has(id, segs)) { VOICEPACK.missing(id, segs).forEach((x) => missedSegs.add(x)); VOICEPACK.stop(); return sysSay(text, 'цієї фрази немає в записі'); }
     VOICE.stop(); ensureAudio();
     VOICEPACK.play(id, segs, audio).then((ok) => { if (ok) { voiceInfo.mode = 'pack'; voiceInfo.why = ''; } else sysSay(text, VOICEPACK.lastError || 'запис не програвся'); });
@@ -372,11 +442,24 @@ window.APP_START = () => {
     }
     if (view === 'more') rMore();
   }
-  function startWorkout(wid, ready) {
+  /* початок тренування: «і вдома, і в залі» — спершу «Де сьогодні?», зі спиною — питання про самопочуття */
+  function beginWorkout(wid, place) {
+    const prog = G();
+    if (prog.gymWorkouts && !place) return placeSheet(wid);
+    if (prog.custom && !prog.askReady) return startWorkout(wid, 'g', place);
+    return readySheet(wid, place);
+  }
+  function placeSheet(wid) {
+    /* удома — саме те обладнання, що вказане в анкеті */
+    const eq = (DB.custom && DB.custom.answers && DB.custom.answers.equip) || [], kit = [eq.indexOf('db') >= 0 ? 'гантелі з дисками' : '', eq.indexOf('band') >= 0 ? 'петля' : ''].filter(Boolean).join(', ');
+    openSheet(`<b>Де тренуєтесь сьогодні?</b><p class="small muted">Від цього залежать вправи тренування.</p>
+      <div class="pick">${[['home', 'Вдома', kit], ['gym', 'У залі', 'тренажери й блоки']].map(([v, l, d]) => `<button type="button" data-act="place" data-v="${v}" data-w="${wid || ''}"><b>${l}</b><span class="small muted">${d}</span></button>`).join('')}</div>`);
+  }
+  function startWorkout(wid, ready, place) {
     ensureAudio(); VOICE.unlock(); stopTimer();  // таймер від попереднього тренування не переносимо в нове
-    P().draft = buildDraft(wid, ready); save(); view = 'workout'; render(); window.scrollTo(0, 0);
+    P().draft = buildDraft(wid, ready, place); save(); view = 'workout'; render(); window.scrollTo(0, 0);
     const d = P().draft, prog = G(), mins = ENGINE.estimateMins(prog, d.items), nEx = d.items.filter((x) => !x.skipped).length;
-    talk(prog.workouts[d.workout].title + '. ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + '. Приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
+    talk(woTitle(d.workout) + '. ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + '. Приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
       + (ready === 'r' ? ' Сьогодні без вправ на поперек. ' + L('r', 0) : ready === 'y' ? ' Вправи на поперек сьогодні легше. ' + L('y', 0) : ' ') + (hard() ? L('start', d.n) : 'Починаємо.') + (S().mode === 'list' ? '' : ' Спершу розминка.'));
   }
   function draftStats(d) {
@@ -429,17 +512,19 @@ window.APP_START = () => {
     else if (sc && sc.breath && full) t += ' ' + sc.breath;
     return sp(t);
   }
+  /* розминка й заминка: для «і вдома, і в залі» в день залу — залу (без квартири й крісла), інакше — з довідки програми */
+  function warmSrc() { const d = P() && P().draft, prog = G(); return d && d.place === 'gym' && prog.gymWorkouts ? { id: 'warm', items: GEN.GYM_WARM } : (prog.guide || []).find((g) => g.id === 'warm'); }
   function coolText() {
-    const w = (G().guide || []).find((g) => g.id === 'warm'); if (!w) return '';
+    const w = warmSrc(); if (!w) return '';
     const k = w.items.findIndex((x) => /^#Заминка/.test(x)); if (k < 0) return '';
     return w.items.slice(k + 1).join(' ');
   }
   function warmList() {
-    const w = (G().guide || []).find((g) => g.id === 'warm'); if (!w) return { title: 'Розминка', items: [] };
+    const w = warmSrc(); if (!w) return { title: 'Розминка', items: [] };
     let title = 'Розминка'; const items = [];
     for (const x of w.items) {
       if (x.charAt(0) === '#') { if (/^#Заминка/.test(x)) break; title = x.slice(1); continue; }
-      if (/^Перед першою/.test(x)) continue;
+      if (/^(У залі п|П)еред першою/.test(x)) continue;  // про розминковий підхід — лише на екрані, не голосом
       items.push(x);
     }
     return { title, items };
@@ -525,7 +610,7 @@ window.APP_START = () => {
   function wbar(d, prog, st) {
     const list = S().mode === 'list';
     return `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
-      <div class="t"><b>${esc(prog.workouts[d.workout].title)}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}</span></div>
+      <div class="t"><b>${esc(woTitle(d.workout))}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}</span></div>
       <div class="wbr"><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" id="radBtn" data-act="radio" aria-label="радіо">${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? 'режим тренера' : 'список усіх вправ'}">${list ? ICON.coach : ICON.list}</button><button type="button" class="pri" data-act="finish">Готово</button></div>
       <div class="wradio" id="wRadio">${radioRow()}</div></div>
       <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>`;
@@ -569,11 +654,12 @@ window.APP_START = () => {
     const prog = G(), it = d.items[cs.i], ex = prog.ex[it.ex], s = it.sets[cs.j], ij = `data-i="${cs.i}" data-j="${cs.j}"`;
     const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${cs.i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
     const tgt = ex.type === 'amrap' ? 'скільки зможете' : s.type === 'M' ? 'до відмови' : s.type === 'W' ? 'легко' : (it.min === it.max ? it.max : it.min + '–' + it.max) + (ex.type === 'time' ? ' с' : '');
-    const pm = (f) => `<div class="cpm"><button type="button" data-act="cstep" data-f="${f}" data-d="-1" ${ij} aria-label="менше">−</button><button type="button" data-act="cstep" data-f="${f}" data-d="1" ${ij} aria-label="більше">+</button></div>`;
+    const mt = (w) => (isMach(ex) ? ` data-tip="${w} на крок тренажера: ${fmt(loadStep(ex, it.ex))} кг."` : '');
+    const pm = (f) => `<div class="cpm"><button type="button" data-act="cstep" data-f="${f}" data-d="-1" ${ij} aria-label="менше"${f === 'load' ? mt('Менше') : ''}>−</button><button type="button" data-act="cstep" data-f="${f}" data-d="1" ${ij} aria-label="більше"${f === 'load' ? mt('Більше') : ''}>+</button></div>`;
     const kgOn = hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '';
-    const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? 'рівень еспандера' : 'диски на гантель, кг'}</span>
-      <button type="button" class="cval" data-act="kp" data-f="load" ${ij}>${esc(loadText(ex, s.load))}</button>${pm('load')}
-      <span class="tiny muted">${kgOn ? 'у руках ' + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + ' кг' : ex.type === 'band' ? 'сума номерів джгутів' : '&nbsp;'}</span></div>` : '';
+    const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? 'рівень еспандера' : isMach(ex) ? 'вага, кг' : 'диски на гантель, кг'}</span>
+      <button type="button" class="cval" data-act="kp" data-f="load" ${ij}${loadTip(ex, '. Торкніться, щоб ввести інше число.')}>${esc(loadText(ex, s.load))}</button>${pm('load')}
+      <span class="tiny muted"${isMach(ex) ? ' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. У вашому залі інший — введіть свою вагу цифрами: застосунок підхопить крок."' : ex.type === 'band' ? ' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."' : ''}>${kgOn ? 'у руках ' + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + ' кг' : ex.type === 'band' ? 'сума номерів джгутів' : isMach(ex) ? 'на тренажері · крок ' + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
     const boxR = `<div class="cbox"><span class="cl2">${ex.type === 'time' ? 'секунди' : 'повторення'}${ex.side ? ' · на бік' : ''}</span>
       <button type="button" class="cval" data-act="kp" data-f="reps" ${ij}>${s.reps === null || s.reps === undefined ? '—' : s.reps}</button>${pm('reps')}
       <span class="tiny muted">ціль: ${esc(tgt)}</span></div>`;
@@ -669,10 +755,10 @@ window.APP_START = () => {
     let note = it.note || '';
     if (it.ex === 'goblet' && it.variant === 'g1' && /максимальна/.test(note)) note += ' Час переходити на «2 гантелі на плечах».';
     const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
-    const hdr = `<div class="tr h"><span>підхід</span><span>минулого</span><span>${ex.type === 'band' ? 'рівень' : hasKg(ex) ? 'диски, кг' : ''}</span><span>${ex.type === 'time' ? 'секунди' : 'повтор.'}</span><span></span></div>`;
+    const hdr = `<div class="tr h"><span>підхід</span><span>минулого</span><span${loadTip(ex, '.')}>${ex.type === 'band' ? 'рівень' : hasKg(ex) ? 'диски, кг' : isMach(ex) ? 'вага, кг' : ''}</span><span>${ex.type === 'time' ? 'секунди' : 'повтор.'}</span><span></span></div>`;
     const rows = it.sets.map((s, j) => {
       const lab = s.type === 'N' ? String(it.sets.slice(0, j + 1).filter((x) => x.type !== 'W').length) : ({ W: 'Р', D: 'Д', F: 'В', M: 'М' }[s.type]);
-      const loadCell = isLoad(ex) ? `<button type="button" class="cl" data-act="kp" data-f="load" data-i="${i}" data-j="${j}">${esc(loadText(ex, s.load))}${hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '' ? '<small>+ гриф</small>' : ''}</button>` : '<span class="cl na">—</span>';
+      const loadCell = isLoad(ex) ? `<button type="button" class="cl" data-act="kp" data-f="load" data-i="${i}" data-j="${j}"${loadTip(ex, '. Торкніться, щоб ввести інше число.')}>${esc(loadText(ex, s.load))}${hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '' ? '<small>+ гриф</small>' : ''}</button>` : '<span class="cl na">—</span>';
       const repCell = `<button type="button" class="cl" data-act="kp" data-f="reps" data-i="${i}" data-j="${j}">${s.reps === null || s.reps === undefined ? '—' : s.reps + (ex.type === 'time' ? ' с' : '')}${s.rir !== null && s.rir !== undefined ? `<small>запас ${s.rir >= 4 ? '4+' : s.rir}</small>` : ''}</button>`;
       const pr = s.pr && s.pr.length ? `<div class="prb">🏆 ${s.pr.map((t) => ({ e1rm: 'рекорд максимуму', weight: 'рекорд ваги', reps: 'рекорд повторень' }[t])).join(' · ')}</div>` : '';
       const mini = s.type === 'M' ? `<div class="prb mi"><button type="button" class="sm" data-act="minis" data-i="${i}" data-j="${j}">міні-підходи: ${(s.mini || []).length ? s.mini.join(' + ') : 'записати'}</button></div>` : '';
@@ -735,7 +821,7 @@ window.APP_START = () => {
     if (!sets.length) { if (confirm('Жодного підходу не відмічено. Закрити тренування без збереження?')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); } return; }
     const st = draftStats(d);
     if (st.done < st.total && !confirm('Відмічено ' + st.done + ' з ' + st.total + ' підходів. Завершити тренування?')) return;
-    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, deload: d.deload, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
+    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, place: d.place === 'gym' || d.place === 'home' ? d.place : undefined, deload: d.deload, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
     p.sessions.push(sess); p.sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
     p.draft = null; save(); stopTimer(); keepAwake(false);
     ui.summary = sess.id; view = 'summary'; render(); window.scrollTo(0, 0);
@@ -752,8 +838,8 @@ window.APP_START = () => {
   }
   function drawKp() {
     const d = P().draft, it = d.items[kp.i], s = it.sets[kp.j], ex = G().ex[it.ex], isRep = kp.f === 'reps';
-    const step = isRep ? (ex.type === 'time' ? 5 : 1) : (ex.type === 'band' ? 1 : ENGINE.stepFor(P().inv));
-    const unit = isRep ? (ex.type === 'time' ? 'с' : 'повт.') : (ex.type === 'band' ? 'рівень' : 'кг дисків на гантель');
+    const step = isRep ? (ex.type === 'time' ? 5 : 1) : loadStep(ex, it.ex);
+    const unit = isRep ? (ex.type === 'time' ? 'с' : 'повт.') : (ex.type === 'band' ? 'рівень' : isMach(ex) ? 'кг' : 'кг дисків на гантель');
     const title = esc(G().ex[it.ex].name) + ' · ' + setName(it, kp.j);
     const v = num(kp.str);
     let extra = '';
@@ -769,7 +855,7 @@ window.APP_START = () => {
     if (isRep && it.max > 0) { for (let r = Math.max(1, it.min - 2); r <= it.max + 2 && quick.length < 9; r++) quick.push([String(r), r]); }
     const rir = isRep ? `<label class="f">Запас повторень (скільки ще могли б)</label><div class="seg">${[[null, '—'], [0, '0'], [1, '1'], [2, '2'], [3, '3'], [4, '4+']].map(([x, l]) => `<button type="button" class="${kp.rir === x ? 'on' : ''}" data-k="rir" data-v="${x === null ? '' : x}">${l}</button>`).join('')}</div>` : '';
     openSheet(`<div class="sp"><b class="small">${title}</b><button type="button" class="sm ghost" data-k="close">Закрити</button></div>
-      <div class="kv">${kp.str === '' ? (isRep ? '—' : ex.type === 'dbopt' ? 'без' : '—') : esc(kp.str)} <small>${unit}</small></div>${extra}
+      <div class="kv"${!isRep && isMach(ex) ? ' data-tip="Число, яке ви вводите: вага на тренажері чи блоці, кг."' : ''}>${kp.str === '' ? (isRep ? '—' : ex.type === 'dbopt' ? 'без' : '—') : esc(kp.str)} <small>${unit}</small></div>${extra}
       <div class="quick">${quick.map(([l, x]) => `<button type="button" class="sm" data-k="set" data-v="${x === null || x === undefined ? '' : x}">${esc(l)}</button>`).join('')}</div>${rir}
       <div class="keys">${['1', '2', '3', '−', '4', '5', '6', '+', '7', '8', '9', '⌫', isRep ? '' : ',', '0', '', 'ok'].map((k) => {
         if (k === '') return '<span></span>';
@@ -785,7 +871,7 @@ window.APP_START = () => {
     const v = num(kp.str);
     if (kp.f === 'reps') { s.reps = v === null ? null : Math.max(0, Math.round(v)); s.rir = kp.rir; }
     else {
-      let L = v; if (L !== null && hasKg(ex)) L = Math.min(G().cap, Math.max(0, L)); if (L !== null && ex.type === 'band') L = Math.max(0, Math.round(L));
+      let L = v; if (L !== null && (hasKg(ex) || isMach(ex))) L = Math.min(loadCap(ex), Math.max(0, L)); if (L !== null && ex.type === 'band') L = Math.max(0, Math.round(L));
       s.load = (L === null && ex.type !== 'dbopt' && ex.type !== 'band') ? s.load : L;
     }
     s.touched = true; save();
@@ -816,12 +902,12 @@ window.APP_START = () => {
     const dv = prevSame && pvol ? Math.round((vol / pvol - 1) * 100) : null;
     const ms = ENGINE.muscleSets(prog, [s], 0, 9e15);
     const np = ENGINE.planFor(prog, nextN());
-    app.innerHTML = `<div class="card hero" style="margin-top:calc(14px + env(safe-area-inset-top))"><div class="chip">Тиждень ${s.week}</div><h1>Тренування завершено 🎉</h1><p class="muted">${esc(prog.workouts[s.workout].title)} · ${dm(s.date)}</p></div>
+    app.innerHTML = `<div class="card hero" style="margin-top:calc(14px + env(safe-area-inset-top))"><div class="chip">Тиждень ${s.week}</div><h1>Тренування завершено 🎉</h1><p class="muted">${esc(woTitle(s.workout))} · ${dm(s.date)}</p></div>
       <div class="grid2"><div class="stat"><b>${s.mins} хв</b><span>тривалість</span></div><div class="stat"><b>${work}</b><span>робочих підходів</span></div>
       <div class="stat"><b>${vol ? fmt(Math.round(vol)) + ' кг' : '—'}</b><span>обсяг${dv !== null ? ' · ' + (dv >= 0 ? '+' : '') + dv + ' % до минулого' : ''}</span></div><div class="stat"><b>${s.prs || 0}</b><span>рекордів</span></div></div>
       ${s.prList && s.prList.length ? `<h2>🏆 Рекорди</h2><div class="card"><ul class="list">${s.prList.map((x) => `<li><span>${esc(prog.ex[x.ex].name)}</span><span class="chip g">${x.types.map((t) => ({ e1rm: 'максимум', weight: 'вага', reps: 'повторення' }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}
       <h2>Що попрацювало</h2><div class="card">${CHARTS.bodyMap(ms, 6)}</div>
-      <p class="small muted">Наступне: ${esc(prog.workouts[np.workout].title)} (тиждень ${np.week}).</p>
+      <p class="small muted">Наступне: ${esc(woTitle(np.workout))} (тиждень ${np.week}).</p>
       <button type="button" class="wide" data-act="shareSum">Поділитися підсумком</button><p></p>
       <button type="button" class="pri wide big" data-act="sumDone">Готово</button>`;
   }
@@ -832,7 +918,7 @@ window.APP_START = () => {
     g.fillStyle = '#14514f'; g.fillRect(0, 0, 1080, 1350);
     g.fillStyle = '#c8a96a'; g.fillRect(80, 200, 140, 6);
     g.fillStyle = '#fff'; g.font = F(700, 64); g.fillText('Тренування завершено', 80, 170);
-    g.font = F(400, 40); g.globalAlpha = 0.9; g.fillText(prog.workouts[s.workout].title + ' · ' + dm(s.date), 80, 240); g.globalAlpha = 1;
+    g.font = F(400, 40); g.globalAlpha = 0.9; g.fillText(woTitle(s.workout) + ' · ' + dm(s.date), 80, 240); g.globalAlpha = 1;
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
     [[s.mins + ' хв', 'тривалість'], [String(s.sets.filter((x) => x.type !== 'W').length), 'підходів'], [vol ? Math.round(vol) + ' кг' : '—', 'обсяг'], [String(s.prs || 0), 'рекордів']].forEach((x, k) => {
       const X = 80 + (k % 2) * 480, Y = 380 + Math.floor(k / 2) * 240;
@@ -877,7 +963,10 @@ window.APP_START = () => {
     home: [['.hero .pri', 'Почніть тут. Застосунок спитає про спину, підставить вагу й поведе тренування голосом — крок за кроком.'],
       ['.dly', 'Щоденні звички: відмічайте галочкою. «Як робити» — коротка інструкція.'],
       ['#tabs', 'План — 12 тижнів і історія. Прогрес — графіки й рекорди. Тіло — заміри, харчування, фото. Більше — голос і налаштування.']],
-    coach: [['.ctarget', 'Ціль підходу. Вага — скільки дисків на гантель; поруч — повторення. Міняйте кнопками − і + або торкніться числа.'],
+    /* текст про вагу — за тим, що в рамці: диски, тренажер, еспандер чи лише повторення */
+    coach: [['.ctarget', () => { const l = (document.querySelector('.ctarget .cl2') || {}).textContent || '', t = ' Міняйте кнопками − і + або торкніться числа.';
+      return /диски/.test(l) ? 'Ціль підходу. Вага — скільки дисків на гантель; поруч — повторення.' + t : /вага/.test(l) ? 'Ціль підходу. Вага на тренажері чи блоці, кг; поруч — повторення.' + t
+        : /еспандер/.test(l) ? 'Ціль підходу. Рівень еспандера; поруч — повторення.' + t : 'Ціль підходу: ' + (/секунди/.test(l) ? 'секунди.' : 'повторення.') + t; }],
       ['.coach .plt', 'Скільки дисків надіти з кожного боку гантелі.'],
       ['.cdone', 'Зробили підхід — натисніть. Тренер сам запустить відпочинок і скаже, що далі.'],
       ['#cMore', 'Тут — як робити, заміна вправи, пропуск, нотатка.'],
@@ -892,12 +981,14 @@ window.APP_START = () => {
     if (!steps || k >= steps.length) { S().tour[id] = true; save(); return; }
     const t = document.querySelector(steps[k][0]);
     if (!t || !t.getClientRects().length) return tour(id, k + 1);
+    /* нумерація — лише видимих кроків (на тренажері немає рядка дисків, у вправі без ваги — рамки ваги) */
+    const vis = steps.filter((s) => { const e = document.querySelector(s[0]); return e && e.getClientRects().length; }), pos = vis.indexOf(steps[k]) + 1;
     t.scrollIntoView({ block: 'center' });
     const r = t.getBoundingClientRect(), H = window.innerHeight, below = r.bottom + 170 < H;
     const ov = document.createElement('div'); ov.id = 'tour';
     ov.innerHTML = `<div class="th" style="left:${Math.max(4, r.left - 6)}px;top:${r.top - 6}px;width:${Math.min(window.innerWidth - 8, r.width + 12)}px;height:${r.height + 12}px"></div>
-      <div class="tbx" style="${below ? 'top:' + Math.round(r.bottom + 14) + 'px' : 'bottom:' + Math.round(H - r.top + 14) + 'px'}"><p>${esc(steps[k][1])}</p>
-      <div class="sp"><span class="tiny">${k + 1} з ${steps.length}</span><span class="row"><button type="button" class="sm ghost" data-tour="skip">Пропустити</button><button type="button" class="sm pri" data-tour="next">${k + 1 === steps.length ? 'Зрозуміло' : 'Далі'}</button></span></div></div>`;
+      <div class="tbx" style="${below ? 'top:' + Math.round(r.bottom + 14) + 'px' : 'bottom:' + Math.round(H - r.top + 14) + 'px'}"><p>${esc(typeof steps[k][1] === 'function' ? steps[k][1]() : steps[k][1])}</p>
+      <div class="sp"><span class="tiny">${pos} з ${vis.length}</span><span class="row"><button type="button" class="sm ghost" data-tour="skip">Пропустити</button><button type="button" class="sm pri" data-tour="next">${pos === vis.length ? 'Зрозуміло' : 'Далі'}</button></span></div></div>`;
     document.body.appendChild(ov);
     /* дотик повз підказку теж закриває навчання — щоб екран ніколи не «завис» під затемненням */
     ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) { if (!e.target.closest('.tbx')) { ov.remove(); S().tour[id] = true; save(); } return; } if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
@@ -906,6 +997,9 @@ window.APP_START = () => {
     openSheet(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
+        <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
+        <li style="display:block"><b>⚙️ Одне джерело</b><div class="small muted">Дні тренувань, гриф і диски («Більше»), зріст і вік («Харчування») одразу йдуть у програму й в анкету; поточний тиждень зберігається.</div></li>
+        <li style="display:block"><b>🍽 Норма одразу</b><div class="small muted">Норма калорій і білка — одразу за вагою з анкети; після зважувань у «Замірах» — за ними.</div></li>
         <li style="display:block"><b>🔒 Вхід через Face ID</b><div class="small muted">«Більше» → «Захистити Face ID»: PIN і Face ID, щоб ніхто інший на телефоні не відкрив ваш журнал.</div></li>
         <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: навіщо вправа, як робити, чого не робити, вага й диски, відпочинок, «Час!», рекорди. Характер — жорсткий з гумором. Природний записаний голос: чоловічий і жіночий («Більше» → «Голосовий тренер»).</div></li>
         <li style="display:block"><b>📻 Радіо для тренувань</b><div class="small muted">Кнопка «♪»: 11 станцій. Коли говорить тренер, музика плавно притихає.</div></li>
@@ -917,14 +1011,14 @@ window.APP_START = () => {
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
     S().tour.v3 = true; save();
   }
-  function readySheet(wid) {
+  function readySheet(wid, place) {
     const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl && G().ex.rdl;
     openSheet(`<b>${her ? 'Як спина й суглоби сьогодні?' : 'Як спина сьогодні?'}</b> ${q('ready')}
       <p class="small muted">Від відповіді залежать вправи на поперек.</p>
       <div class="pick rd">
-        <button type="button" data-act="go" data-r="g" data-w="${wid || ''}"><b>🟢 Добре</b><span class="small muted">тренування за планом</span></button>
-        <button type="button" data-act="go" data-r="y" data-w="${wid || ''}"><b>🟡 Ниє, але терпимо</b><span class="small muted">${sw ? 'румунська тяга → міст, решта вправ на поперек — на крок легше' : 'вправи на поперек — на крок легше, запас 3'}</span></button>
-        <button type="button" data-act="go" data-r="r" data-w="${wid || ''}"><b>🔴 Болить або віддає в ногу</b><span class="small muted">сьогодні без вправ на поперек</span></button>
+        <button type="button" data-act="go" data-r="g" data-w="${wid || ''}" data-p="${place || ''}"><b>🟢 Добре</b><span class="small muted">тренування за планом</span></button>
+        <button type="button" data-act="go" data-r="y" data-w="${wid || ''}" data-p="${place || ''}"><b>🟡 Ниє, але терпимо</b><span class="small muted">${sw ? 'румунська тяга → міст, решта вправ на поперек — на крок легше' : 'вправи на поперек — на крок легше, запас 3'}</span></button>
+        <button type="button" data-act="go" data-r="r" data-w="${wid || ''}" data-p="${place || ''}"><b>🔴 Болить або віддає в ногу</b><span class="small muted">сьогодні без вправ на поперек</span></button>
       </div>
       <div class="note b small"><b>Негайно до лікаря:</b> оніміння в паху чи між ногами, порушення сечовипускання чи стільця, слабкість у нозі, що наростає.</div>`);
   }
@@ -1016,7 +1110,7 @@ window.APP_START = () => {
     const nd = nextDayText(p.days);
     app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div>
       ${alerts()}
-      ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(prog.workouts[d.workout].title)} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
+      ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(woTitle(d.workout))} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
       <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з ${prog.perWeek || 3}</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
         <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
         <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
@@ -1030,7 +1124,7 @@ window.APP_START = () => {
   }
   function otherSheet() {
     const prog = G();
-    openSheet(`<b>Інше тренування</b><p class="small muted">Тиждень і підказки лишаються за планом.</p><div class="pick">${Object.keys(prog.workouts).map((k) => `<button type="button" data-act="startW" data-w="${k}"><b>${esc(prog.workouts[k].title)}</b><span class="small muted">${prog.workouts[k].items.length} вправ</span></button>`).join('')}</div>`);
+    openSheet(`<b>Інше тренування</b><p class="small muted">Тиждень і підказки лишаються за планом.</p><div class="pick">${Object.keys(prog.workouts).map((k) => `<button type="button" data-act="startW" data-w="${k}"><b>${esc(prog.workouts[k].title)}</b><span class="small muted">${plural(prog.workouts[k].items.length, 'вправа', 'вправи', 'вправ')}${prog.gymWorkouts && prog.gymWorkouts[k] ? ' удома · ' + prog.gymWorkouts[k].items.length + ' у залі' : ''}</span></button>`).join('')}</div>`);
   }
 
   /* ---------- план та історія ---------- */
@@ -1048,7 +1142,7 @@ window.APP_START = () => {
           const short = { A: 'А', B: 'Б', D1: 'Д1', D2: 'Д2', D3: 'Д3' }[wid] || wid;
           return `<button type="button" class="slot${done ? ' done' : isNext ? ' next' : ''}" data-act="${done ? 'sess' : isNext ? 'start' : 'noop'}" data-id="${done ? done.id : ''}">${done ? '✓ ' : ''}${esc(short)}<small>${done ? dm(done.date) : isNext ? 'наступне' : ''}</small></button>`;
         }).join('')}</div>`;
-      }).join('')}</div><p class="tiny muted">А / Б — тренування фази 1, Д1–Д3 — дні фаз 2–3. Легкий тиждень — підходів удвічі менше.</p>`;
+      }).join('')}</div><p class="tiny muted">${weeks.some((w) => prog.week(w).some((x) => /^D/.test(x))) ? 'А / Б — тренування фази 1, Д1–Д3 — дні фаз 2–3.' : 'А / Б — два тренування на все тіло, по черзі.'} Легкий тиждень — підходів удвічі менше.</p>`;
     } else {
       const ym = ui.calMonth || today().slice(0, 7);
       const marks = {}; p.sessions.forEach((s) => { marks[s.date] = 't'; });
@@ -1056,7 +1150,7 @@ window.APP_START = () => {
       const list = p.sessions.filter((s) => s.date.slice(0, 7) === ym).slice().reverse();
       body = `<div class="card"><div class="sp"><button type="button" class="sm" data-act="calPrev">‹</button><b>${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}</b><button type="button" class="sm" data-act="calNext">›</button></div><p></p>${CHARTS.month(ym, marks, today())}
         <div class="legend"><span><i></i>тренування</span><span><i style="background:var(--ok-soft)"></i>щоденне</span></div></div>
-        <div class="card">${list.length ? `<ul class="list">${list.map((s) => `<li data-act="sess" data-id="${s.id}" style="cursor:pointer"><span><b>${esc(prog.workouts[s.workout] ? prog.workouts[s.workout].title : s.workout)}</b><div class="tiny muted">${dm(s.date)} · тиждень ${s.week} · ${s.mins || '?'} хв · ${plural(s.sets.filter((x) => x.type !== 'W').length, 'підхід', 'підходи', 'підходів')}</div></span><span>${s.prs ? '<span class="chip g">🏆 ' + s.prs + '</span>' : '›'}</span></li>`).join('')}</ul>` : '<div class="empty">У цьому місяці тренувань немає</div>'}</div>`;
+        <div class="card">${list.length ? `<ul class="list">${list.map((s) => `<li data-act="sess" data-id="${s.id}" style="cursor:pointer"><span><b>${esc(woTitle(s.workout))}${placeTag(s)}</b><div class="tiny muted">${dm(s.date)} · тиждень ${s.week} · ${s.mins || '?'} хв · ${plural(s.sets.filter((x) => x.type !== 'W').length, 'підхід', 'підходи', 'підходів')}</div></span><span>${s.prs ? '<span class="chip g">🏆 ' + s.prs + '</span>' : '›'}</span></li>`).join('')}</ul>` : '<div class="empty">У цьому місяці тренувань немає</div>'}</div>`;
     }
     app.innerHTML = `<h1>План</h1><div class="seg"><button type="button" class="${ui.planTab === 'w' ? 'on' : ''}" data-act="planTab" data-v="w">12 тижнів</button><button type="button" class="${ui.planTab === 'h' ? 'on' : ''}" data-act="planTab" data-v="h">Історія</button></div>${body}`;
   }
@@ -1064,10 +1158,10 @@ window.APP_START = () => {
     const p = P(), prog = G(), s = p.sessions.find((x) => x.id === id); if (!s) return;
     const groups = []; s.sets.forEach((x, k) => { let g = groups.find((y) => y.ex === x.ex); if (!g) { g = { ex: x.ex, sets: [] }; groups.push(g); } g.sets.push({ x, k }); });
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
-    openSheet(`<div class="sp"><b>${esc(prog.workouts[s.workout] ? prog.workouts[s.workout].title : s.workout)}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+    openSheet(`<div class="sp"><b>${esc(woTitle(s.workout))}${placeTag(s)}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <p class="small muted">${dm(s.date)} · тиждень ${s.week} · ${s.mins || '?'} хв${vol ? ' · обсяг ' + fmt(Math.round(vol)) + ' кг' : ''}${s.ready ? ' · спина ' + ({ g: '🟢', y: '🟡', r: '🔴' }[s.ready] || '') : ''}</p>
       ${groups.map((g) => { const ex = prog.ex[g.ex] || { name: g.ex, type: 'bw' }; return `<div class="card" style="padding:10px 12px"><b class="small">${esc(ex.name)}</b>${g.sets.map(({ x, k }) => edit
-        ? `<div class="row" style="flex-wrap:nowrap;margin-top:6px"><span class="tiny muted" style="width:22px">${x.type === 'W' ? 'Р' : x.type === 'D' ? 'Д' : x.type === 'F' ? 'В' : '•'}</span>${isLoad(ex) ? `<input inputmode="decimal" data-ed="load" data-sk="${k}" value="${x.load === null || x.load === undefined ? '' : fmt(x.load)}" placeholder="${ex.type === 'band' ? 'рівень' : 'кг'}">` : ''}<input inputmode="numeric" data-ed="reps" data-sk="${k}" value="${x.reps}"></div>`
+        ? `<div class="row" style="flex-wrap:nowrap;margin-top:6px"><span class="tiny muted" style="width:22px">${x.type === 'W' ? 'Р' : x.type === 'D' ? 'Д' : x.type === 'F' ? 'В' : '•'}</span>${isLoad(ex) ? `<input inputmode="decimal" data-ed="load" data-sk="${k}"${loadTip(ex, ' у цьому підході. Порожньо — без ваги.')} value="${x.load === null || x.load === undefined ? '' : fmt(x.load)}" placeholder="${ex.type === 'band' ? 'рівень' : 'кг'}">` : ''}<input inputmode="numeric" data-ed="reps" data-sk="${k}" value="${x.reps}"></div>`
         : `<div class="small" style="margin-top:4px">${x.type === 'W' ? '<span class="chip w">Р</span> ' : x.type === 'D' ? '<span class="chip">Д</span> ' : x.type === 'F' ? '<span class="chip">В</span> ' : x.type === 'M' ? '<span class="chip g">М</span> ' : ''}${esc(setText(ex, x))}${x.mini && x.mini.length ? ' + ' + x.mini.join(' + ') : ''}${x.rir !== null && x.rir !== undefined ? ' · запас ' + x.rir : ''}</div>`).join('')}</div>`; }).join('')}
       ${edit ? `<button type="button" class="pri wide" data-act="sessSave" data-id="${s.id}">Зберегти зміни</button>` : `<button type="button" class="wide" data-act="sessEdit" data-id="${s.id}">Редагувати</button>`}<p></p>
       <button type="button" class="ghost wide" style="color:var(--bad)" data-act="sessDel" data-id="${s.id}">Видалити тренування</button>`);
@@ -1083,7 +1177,7 @@ window.APP_START = () => {
       const ids = Object.keys(prog.ex).filter((id) => !prog.ex[id].retired || used[id]).sort((a, b) => (used[b] ? 1 : 0) - (used[a] ? 1 : 0) || (prog.ex[b].main ? 1 : 0) - (prog.ex[a].main ? 1 : 0));
       if (!ui.progEx || !prog.ex[ui.progEx]) ui.progEx = ids[0];
       const ex = prog.ex[ui.progEx], histAll = ENGINE.history(p, ui.progEx, 'all');
-      const metrics = ex.type === 'db' ? [['e1rm', 'Максимум'], ['heavy', 'Вага'], ['vol', 'Обсяг']] : ex.type === 'dbopt' ? [['reps', 'Повторення'], ['heavy', 'Вага']] : ex.type === 'band' ? [['e1rm', 'Рівень × повт.']] : ex.type === 'time' ? [['e1rm', 'Секунди']] : [['e1rm', 'Повторення']];
+      const metrics = ex.type === 'db' || isMach(ex) ? [['e1rm', 'Максимум'], ['heavy', 'Вага'], ['vol', 'Обсяг']] : ex.type === 'dbopt' ? [['reps', 'Повторення'], ['heavy', 'Вага']] : ex.type === 'band' ? [['e1rm', 'Рівень × повт.']] : ex.type === 'time' ? [['e1rm', 'Секунди']] : [['e1rm', 'Повторення']];
       if (!metrics.some((m) => m[0] === ui.metric)) ui.metric = metrics[0][0];
       const cut = ui.range === '4' ? Date.now() - 28 * 864e5 : ui.range === '12' ? Date.now() - 84 * 864e5 : 0;
       let best = -Infinity;
@@ -1097,17 +1191,17 @@ window.APP_START = () => {
         return { t: tms(x.date), v: Math.round(v * 10) / 10, pr };
       }).filter((q) => q.t >= cut);
       const rec = ENGINE.records(ex, histAll, h);
-      const unit = ui.metric === 'vol' ? 'кг за тренування' : ui.metric === 'heavy' ? 'кг у руках' : ui.metric === 'reps' ? 'повторень' : ENGINE.metricLabel(ex);
+      const unit = ui.metric === 'vol' ? 'кг за тренування' : ui.metric === 'heavy' ? (isMach(ex) ? 'кг на тренажері' : 'кг у руках') : ui.metric === 'reps' ? 'повторень' : ENGINE.metricLabel(ex);
       const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
       body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}${used[id] ? '' : ' (ще не виконували)'}</option>`).join('')}</select>
-        <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}">${l}</button>`).join('')}</div>
+        <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}"${k === 'heavy' && isMach(ex) ? ' data-tip="Найбільша вага на тренажері за кожне тренування."' : ''}>${l}</button>`).join('')}</div>
         <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)} · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">${[['4', '4 т'], ['12', '12 т'], ['all', 'усе']].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;min-width:44px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
         ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: 'Ще немає підходів у цій вправі' })}</div>
         ${histAll.length ? `<div class="grid3">
-          <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' ? 'рекорд максимуму, кг' : 'найкращий показник'}</span></div>
-          <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>найважче в руках, кг${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
+          <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' || isMach(ex) ? 'рекорд максимуму, кг' : 'найкращий показник'}</span></div>
+          <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? 'найбільша вага' : 'найважче в руках'}, кг${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
           <div class="stat"><b>${rec.vol ? fmt(Math.round(rec.vol.v)) : '—'}</b><span>найбільший обсяг, кг</span></div></div>
-          ${repRows.length ? `<h2>Рекорди повторень</h2><div class="card"><ul class="list">${repRows.map((L) => `<li><span>${ex.type === 'band' ? 'рівень ' + fmt(L) : 'гриф + ' + fmt(L) + ' кг'}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}
+          ${repRows.length ? `<h2>Рекорди повторень</h2><div class="card"><ul class="list">${repRows.map((L) => `<li><span>${ex.type === 'band' ? 'рівень ' + fmt(L) : isMach(ex) ? fmt(L) + ' кг' : 'гриф + ' + fmt(L) + ' кг'}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}
           <h2>Останні тренування</h2><div class="card"><ul class="list">${histAll.slice(-6).reverse().map((x) => `<li><span>${dm(x.date)}</span><span class="small">${x.sets.map((s) => esc(setText(ex, s))).join(', ')}</span></li>`).join('')}</ul></div>` : ''}
         ${ex.tip ? `<div class="note small">${esc(ex.tip)}</div>` : ''}`;
     } else if (ui.progTab === 'mu') {
@@ -1159,7 +1253,9 @@ window.APP_START = () => {
       }).join('');
     } else if (ui.bodyTab === 'n') {
       const food = prog.food, me = Object.assign({ sex: prog.sex }, p.me || {});
-      const wts = (p.body.weight || []), avg = ENGINE.rolling7(wts), wNow = avg.length ? avg[avg.length - 1].v : null;
+      /* вага: середня за 7 днів із «Замірів»; поки зважувань немає — з анкети (її людина вже вказала) */
+      const wts = (p.body.weight || []), avg = ENGINE.rolling7(wts), wMeas = avg.length ? avg[avg.length - 1].v : null;
+      const wAns = Number(((DB.custom || {}).answers || {}).weight) || null, wNow = wMeas || wAns;
       const nu = ENGINE.nutrition(food, me, wNow);
       const tr = ENGINE.weightTrend(wts), adv = ENGINE.foodAdvice(food, tr);
       const goalTxt = food.goal === 'loss' ? 'мета — менше жиру, більше мʼязів: дефіцит ≈ ' + Math.round(food.deficit * 100) + ' % від витрат' : 'мета — сила й тонус: калорії на рівні підтримки, без дієт';
@@ -1167,6 +1263,7 @@ window.APP_START = () => {
         <div class="grid2"><div><label class="f">Зріст, см</label><input inputmode="numeric" id="meH" value="${me.height || ''}"></div><div><label class="f">Вік, років</label><input inputmode="numeric" id="meA" value="${me.age || ''}"></div></div>
         ${food.basis === 'target' ? `<label class="f">Цільова вага, кг (для білка; порожньо — порахую за зростом)</label><input inputmode="decimal" id="meT" value="${me.target || ''}">` : ''}
         <p></p><button type="button" class="wide" data-act="meSave">Зберегти</button></div>
+        ${!wMeas && wAns ? `<div class="note">Поки зважувань немає — норма за вагою з анкети (${fmt(wAns)} кг). Зважтеся й додайте вагу у «Заміри» — норма стане точнішою.</div>` : ''}
         ${!wNow ? '<div class="note w">Додайте вагу у «Заміри» — і тут зʼявиться норма.</div>' : !nu ? '<div class="note w">Вкажіть зріст і вік — і тут зʼявиться норма.</div>' : `
         <div class="grid2"><div class="stat"><b>${fmt(nu.kLo)}–${fmt(nu.kHi)}</b><span>ккал на день</span></div><div class="stat"><b>${nu.pLo}–${nu.pHi} г</b><span>білка на день</span></div></div>
         <p class="tiny muted">${esc(goalTxt)}. Розрахунок: формула Міффліна — Сан Жеора × 1,45 (основний обмін ≈ ${fmt(nu.bmr)}, витрати ≈ ${fmt(nu.tdee)} ккал); білок — ${fmt(food.protein[0])}–${fmt(food.protein[1])} г на кг ${food.basis === 'target' ? 'цільової ваги ' + fmt(nu.target) + ' кг' : 'поточної ваги'}.</p>
@@ -1282,7 +1379,8 @@ window.APP_START = () => {
   function rMore() {
     const p = P(), prog = G(), V = S().voice, hasDb = Object.values(prog.ex).some((ex) => GEN.needs(ex) === 'db');
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    const curWeek = ENGINE.planFor(prog, nextN()).week;
+    /* після 12 тижнів — цикли з тижнів 5–12 (як у «Плані»): вибір тижня — у поточному циклі */
+    const cp = ENGINE.planFor(prog, nextN()), curWeek = cp.week, wks = cp.cycle === 1 ? Array.from({ length: 12 }, (_, k) => k + 1) : Array.from({ length: 8 }, (_, k) => k + 5);
     const sw = (k, l, d) => `<label class="sw"><span>${l}<div class="tiny muted">${d}</div></span><input type="checkbox" data-set="${k}"${S()[k] ? ' checked' : ''}></label>`;
     const seg = (key, opts, cur) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
     const vl = VOICE.list();
@@ -1292,7 +1390,7 @@ window.APP_START = () => {
     app.innerHTML = `<h1>Більше</h1>
       ${accountCard()}
       ${standalone ? '' : '<div class="note w small"><b>Встановіть як застосунок:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>'}
-      <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">вага й диски, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
+      <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">${hasDb ? 'вага й диски' : 'вага'}, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
         ${packBox()}
         ${packId() ? '' : voiceBox}
         <label class="sw"><span>Говорити й у беззвучному режимі<div class="tiny muted">вимкніть, якщо слухаєте музику в іншому застосунку і вона ставатиме на паузу</div></span><input type="checkbox" id="voiceSilent"${V.silent === false ? '' : ' checked'}></label>
@@ -1305,9 +1403,9 @@ window.APP_START = () => {
       <h2>Тренування</h2><div class="card"><label class="f">Екран тренування</label>${seg('mode', [['coach', 'Тренер · крок за кроком'], ['list', 'Список вправ']], S().mode)}
         ${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', 'на iPhone з iOS 18+, якщо підтримується')}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
       <h2>Програма</h2><div class="card">${progCard()}
-        <button type="button" class="wide" style="margin-top:10px" data-act="qEdit">${DB.custom ? 'Змінити анкету й оновити програму' : 'Скласти програму за анкетою'}</button>
-        <label class="f">Наступне тренування — тиждень</label><select id="weekSel"${p.draft ? ' disabled' : ''}>${Array.from({ length: 12 }, (_, k) => `<option value="${k + 1}"${k + 1 === curWeek ? ' selected' : ''}>${k + 1}</option>`).join('')}</select>
-        <label class="f">Дні тренувань</label><div class="row">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}">${DAYS[d]}</button>`).join('')}</div></div>
+        <button type="button" class="wide" style="margin-top:10px" data-act="qEdit"${p.draft ? ' disabled' : ''}>${DB.custom ? 'Змінити анкету й оновити програму' : 'Скласти програму за анкетою'}</button>
+        <label class="f">Наступне тренування — тиждень</label><select id="weekSel"${p.draft ? ' disabled' : ''}>${wks.map((w) => `<option value="${w}"${w === curWeek ? ' selected' : ''}>${w}${cp.cycle > 1 ? ' · цикл ' + cp.cycle : ''}</option>`).join('')}</select>
+        <label class="f">Дні тренувань</label><div class="row">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${p.draft ? '<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>' : ''}</div>
       ${hasDb ? `<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="${fmt(p.handle)}">
         <label class="f">Диски на обидві гантелі: 5 · 2,5 · 1,25 кг (штук)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="${p.inv[5]}"><input inputmode="numeric" data-inv="2.5" value="${p.inv[2.5]}"><input inputmode="numeric" data-inv="1.25" value="${p.inv[1.25]}"></div>
         <p class="tiny muted">Крок ваги зараз: ${fmt(ENGINE.stepFor(p.inv))} кг на гантель.</p></div>` : ''}
@@ -1322,9 +1420,12 @@ window.APP_START = () => {
     document.getElementById('voiceSilent').onchange = (e) => { V.silent = e.target.checked; save(); audioMode(); };
     const vs = document.getElementById('voiceSel'); if (vs) vs.onchange = () => { V.uri = vs.value; save(); talk('Так звучить цей голос.'); };
     if (document.getElementById('progSel')) document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); initPacks(); };
-    document.getElementById('weekSel').onchange = (e) => { const w = Number(e.target.value); p.offset = (w - 1) * (G().perWeek || 3) - p.sessions.length; save(); toast('Наступне тренування — тиждень ' + w); };
-    if (hasDb) document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast('Вага грифа — від 0 до 10 кг'); e.target.value = fmt(p.handle); return; } p.handle = v; save(); toast('Збережено'); };
-    app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); save(); rMore(); }; });
+    document.getElementById('weekSel').onchange = (e) => {
+      const w = Number(e.target.value), pw = G().perWeek || 3, base = cp.cycle === 1 ? (w - 1) * pw : 12 * pw + (cp.cycle - 2) * 8 * pw + (w - 5) * pw;
+      p.offset = base - p.sessions.length; save(); toast('Наступне тренування — тиждень ' + w + (cp.cycle > 1 ? ' · цикл ' + cp.cycle : ''));
+    };
+    if (hasDb) document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast('Вага грифа — від 0 до 10 кг'); e.target.value = fmt(p.handle); return; } p.handle = v; syncAnswers({ handle: v }); save(); toast('Збережено'); };
+    app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); syncAnswers({ inv: { 5: p.inv[5], 2.5: p.inv[2.5], 1.25: p.inv[1.25] } }); save(); rMore(); }; });
     app.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { S()[el.dataset.set] = el.checked; save(); if (el.dataset.set === 'haptics' && el.checked) haptic(); }; });
     document.getElementById('restoreIn').onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
     if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then((v) => { const el = document.getElementById('persist'); if (el) el.textContent = v ? 'сховище захищене від автоочищення' : 'робіть резервні копії'; }).catch(() => {});
@@ -1344,7 +1445,7 @@ window.APP_START = () => {
     if (ok) { DB.lastBackup = today(); save(); toast('Резервну копію створено'); rMore(); }
   }
   function csv() {
-    const prog = G(), h = P().handle, rows = [['дата', 'тиждень', 'тренування', 'спина', 'вправа', 'варіант', 'тип', 'підхід', 'диски_кг', 'у_руках_кг', 'повторення_або_с', 'запас', 'міні_підходи']];
+    const prog = G(), h = P().handle, rows = [['дата', 'тиждень', 'тренування', 'спина', 'вправа', 'варіант', 'тип', 'підхід', 'вага_кг', 'разом_кг', 'повторення_або_с', 'запас', 'міні_підходи']];
     P().sessions.forEach((s) => { const cnt = {}; s.sets.forEach((x) => { const ex = prog.ex[x.ex] || { name: x.ex }; cnt[x.ex] = (cnt[x.ex] || 0) + 1;
       const tot = (x.load === null || x.load === undefined || ex.type === 'band') ? '' : String(ENGINE.totalLoad(ex, x.load, h, x.variant));
       rows.push([s.date, s.week, s.workout, s.ready || '', ex.name, x.variant || '', x.type || 'N', cnt[x.ex], x.load === null || x.load === undefined ? '' : x.load, tot, x.reps, x.rir === null || x.rir === undefined ? '' : x.rir, (x.mini || []).join('+')]); }); });
@@ -1362,8 +1463,9 @@ window.APP_START = () => {
         if (o.db.custom && o.db.custom.answers) { PROGRAMS.me = buildMe(o.db.custom.answers); STORE.update(STORE.current, { name: o.db.custom.answers.name, sub: PROGRAMS.me.sub }); }
         else if ((STORE.account(STORE.current) || {}).name === 'Новий акаунт') STORE.update(STORE.current, { name: 'Мій профіль' });
         ui.q = null;
-        DB = fixProfiles(ENGINE.migrate(o.db)); if (!DB.active || !DB.profiles[DB.active] || !PROGRAMS[DB.active]) DB.active = Object.keys(DB.profiles).filter((k) => PROGRAMS[k])[0] || null;
-        VOICE.init(DB.settings.voice); RADIO.setDuck(DB.settings.radio.duck);
+        DB = fixProfiles(ENGINE.migrate(o.db)); if (DB.custom && DB.custom.answers) PROGRAMS.me = buildMe(DB.custom.answers);  // вибулі вправи — з відновленої історії
+        if (!DB.active || !DB.profiles[DB.active] || !PROGRAMS[DB.active]) DB.active = Object.keys(DB.profiles).filter((k) => PROGRAMS[k])[0] || null;
+        VOICE.init(DB.settings.voice); RADIO.setDuck(DB.settings.radio.duck); syncLegacy();
         if (o.photos && o.photos.length) { for (const x of o.photos) { try { await STORE.putPhoto({ id: x.id, profile: x.profile, date: x.date, pose: x.pose, blob: STORE.dataToBlob(x.data) }); } catch (e) { /* пропуск */ } } }
         save(); toast('Дані відновлено'); view = DB.active ? 'home' : 'onboard'; render(); initPacks();
       } catch (e) { toast('Це не схоже на резервну копію журналу'); }
@@ -1375,7 +1477,7 @@ window.APP_START = () => {
   function exMenu(i) {
     const d = P().draft, it = d.items[i], ex = G().ex[it.ex];
     const fw = it.sets.find((s) => s.type !== 'W');
-    const canWarm = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(P().inv), G().warm).length && !it.sets.some((s) => s.type === 'W');
+    const canWarm = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(P().inv), G().warm, isMach(ex) ? loadStep(ex, it.ex) : 0).length && !it.sets.some((s) => s.type === 'W');
     const started = it.sets.some((s) => s.done);
     openSheet(`<div class="sp"><b>${esc(ex.name)}</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <p class="small muted">${esc(ex.m.p.map(mName).join(' · '))}${ex.m.s.length ? ' · допоміжні: ' + esc(ex.m.s.map(mName).join(', ')) : ''}</p>
@@ -1393,7 +1495,7 @@ window.APP_START = () => {
   }
   function swapSheet(i) {
     const d = P().draft, it = d.items[i], prog = G();
-    const alts = ENGINE.alternatives(prog, it.ex, d.ready && d.ready !== 'g', d.items.map((x) => x.ex)).slice(0, 6);
+    const alts = ENGINE.alternatives(prog, it.ex, d.ready && d.ready !== 'g', d.items.map((x) => x.ex), d.place).slice(0, 6);
     openSheet(`<div class="sp"><b>Замінити «${esc(prog.ex[it.ex].name)}»</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <p class="small muted">Вправи на ті самі мʼязи з вашої програми${d.ready && d.ready !== 'g' ? ', без навантаження на поперек' : ''}.</p>
       ${alts.length ? `<div class="pick">${alts.map((id) => `<button type="button" data-act="swapTo" data-i="${i}" data-ex="${id}"><b>${esc(prog.ex[id].name)}</b><span class="small muted">${esc(prog.ex[id].m.p.map(mName).join(' · '))}</span></button>`).join('')}</div>` : '<div class="empty">Рівноцінної заміни в програмі немає — можна пропустити вправу.</div>'}`);
@@ -1462,10 +1564,11 @@ window.APP_START = () => {
     });
     if (act === 'ownFace') { ACC.faceOk(STORE.current).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Телефон не підтвердив особу'); }, () => pinErr('Face ID скасовано — спробуйте ще або введіть PIN')); return; }
     if (act === 'ownPin') { const v = (document.getElementById('ownPin') || {}).value || ''; ACC.pinOk(STORE.current, v).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Невірний PIN'); }); return; }
-    if (act === 'qEdit') { ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
+    /* під час тренування анкета не змінюється: нова програма скасувала б незавершене тренування */
+    if (act === 'qEdit') { if (P() && P().draft) return; ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
     /* анкета */
-    if (act === 'qSex' || act === 'qGoal' || act === 'qLevel') {
-      qRead(); const a = qState().a; a[{ qSex: 'sex', qGoal: 'goal', qLevel: 'level' }[act]] = b.dataset.v;
+    if (act === 'qSex' || act === 'qGoal' || act === 'qLevel' || act === 'qPlace') {
+      qRead(); const a = qState().a; a[{ qSex: 'sex', qGoal: 'goal', qLevel: 'level', qPlace: 'place' }[act]] = b.dataset.v;
       if (a.sex === 'm') a.limits = a.limits.filter((x) => x !== 'pregnant');
       haptic(); return rOnboard();
     }
@@ -1480,20 +1583,21 @@ window.APP_START = () => {
     if (act === 'qBack') { qRead(); const q = qState(); q.err = false; q.step = Math.max(0, q.step - 1); rOnboard(); window.scrollTo(0, 0); return; }
     if (act === 'qCancel') { ui.q = null; view = 'more'; render(); return; }
     if (act === 'qNext') {
-      qRead(); const q = qState(), step = QSTEPS[q.step];
+      qRead(); const q = qState(), QS = qSteps(q.a), step = QS[q.step];
       if (Object.keys(qErrors(step)).length) { q.err = true; rOnboard(); const e = document.querySelector('.qerr'); if (e) e.scrollIntoView({ block: 'center' }); return; }
       if (step === 'agree' && GEN.check(q.a).block) { q.err = true; return rOnboard(); }
       q.err = false;
-      if (q.step === QSTEPS.length - 1) return qFinish();
+      if (q.step === QS.length - 1) return qFinish();
       q.step++; rOnboard(); window.scrollTo(0, 0); return;
     }
     const p = P();
     /* головна */
     /* питання про спину — лише там, де від нього щось залежить */
-    if (act === 'start') { VOICE.unlock(); if (G().custom && !G().askReady) return startWorkout(null, 'g'); return readySheet(null); }
-    if (act === 'go') { closeSheet(); return startWorkout(b.dataset.w || null, b.dataset.r); }
+    if (act === 'start') { VOICE.unlock(); return beginWorkout(null); }
+    if (act === 'place') { closeSheet(); return beginWorkout(b.dataset.w || null, b.dataset.v); }
+    if (act === 'go') { closeSheet(); return startWorkout(b.dataset.w || null, b.dataset.r, b.dataset.p || undefined); }
     if (act === 'other') return otherSheet();
-    if (act === 'startW') { VOICE.unlock(); if (G().custom && !G().askReady) return startWorkout(b.dataset.w, 'g'); return readySheet(b.dataset.w); }
+    if (act === 'startW') { VOICE.unlock(); return beginWorkout(b.dataset.w); }
     if (act === 'resume') { view = 'workout'; return render(); }
     if (act === 'jump') { const k = Number(b.dataset.k), t = today(); const r = p.daily[t] = p.daily[t] || {}; r.jumps = (r.jumps || 0) >= k ? k - 1 : k; save(); haptic(); return rHome(); }
     /* тренування */
@@ -1511,11 +1615,11 @@ window.APP_START = () => {
       const it = p.draft.items[i], s = it.sets[j], ex = G().ex[it.ex], dir = Number(b.dataset.d);
       if (b.dataset.f === 'reps') { const stp = ex.type === 'time' ? 5 : 1; s.reps = Math.max(0, (Number(s.reps) || 0) + stp * dir); }
       else {
-        const stp = ex.type === 'band' ? 1 : ENGINE.stepFor(p.inv), cur = (s.load === null || s.load === undefined || s.load === '') ? null : Number(s.load);
+        const stp = loadStep(ex, it.ex), cur = (s.load === null || s.load === undefined || s.load === '') ? null : Number(s.load);
         let v;
-        if (cur === null) v = dir > 0 ? (ex.type === 'band' ? 1 : 0) : null;
+        if (cur === null) v = dir > 0 ? (ex.type === 'band' ? 1 : isMach(ex) ? stp : 0) : null;
         else if (cur === 0 && dir < 0 && ex.type === 'dbopt') v = null;
-        else v = Math.max(0, Math.min(hasKg(ex) ? G().cap : 99, Math.round((cur + stp * dir) * 100) / 100));
+        else v = Math.max(0, Math.min(loadCap(ex), Math.round((cur + stp * dir) * 100) / 100));
         s.load = v;
       }
       s.touched = true; save(); haptic(); return rWorkout();
@@ -1533,7 +1637,7 @@ window.APP_START = () => {
     if (act === 'copyprev') { const s = p.draft.items[i].sets[j]; if (!s.prev || s.done) return; s.load = s.prev.load; s.reps = s.prev.reps; s.touched = true; save(); haptic(); return rWorkout(); }
     if (act === 'variant') { p.draft.items[i].variant = b.dataset.v; save(); return rWorkout(); }
     if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false }); save(); closeSheet(); return rWorkout(); }
-    if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); closeSheet(); return rWorkout(); }
+    if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm, isMach(ex) ? loadStep(ex, it.ex) : 0); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); closeSheet(); return rWorkout(); }
     if (act === 'exmenu') return exMenu(i);
     if (act === 'noteSave') { const it = p.draft.items[i]; const v = document.getElementById('exNote').value.trim(); if (v) p.notes[it.ex] = v; else delete p.notes[it.ex]; save(); closeSheet(); toast('Нотатку збережено'); return rWorkout(); }
     if (act === 'delset') { const it = p.draft.items[i]; if (it.sets.length > 1 && !it.sets[it.sets.length - 1].done) it.sets.pop(); save(); closeSheet(); return rWorkout(); }
@@ -1576,8 +1680,13 @@ window.APP_START = () => {
     if (act === 'photoDel') { if (!confirm('Видалити фото?')) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
     if (act === 'meSave') {
       const h = num(document.getElementById('meH').value), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? num(document.getElementById('meT').value) : null;
-      if ((h !== null && (h < 120 || h > 230)) || (a !== null && (a < 14 || a > 100)) || (te !== null && (te < 35 || te > 250))) { toast('Перевірте числа'); return; }
-      p.me = { height: h, age: a, target: te }; save(); toast('Збережено'); return rBody();
+      /* межі — як в анкеті: зріст і вік ідуть і в програму (вік від 55 — інший обсяг) */
+      if (h !== null && (h < 130 || h > 220)) { toast('Зріст — від 130 до 220 см'); return; }
+      if (a !== null && (a < 16 || a > 85)) { toast('Вік — від 16 до 85'); return; }
+      if (te !== null && (te < 35 || te > 250)) { toast('Цільова вага — від 35 до 250 кг'); return; }
+      p.me = { height: h, age: a, target: te };
+      const sa = {}; if (h !== null) sa.height = h; if (a !== null) sa.age = a; if (Object.keys(sa).length) syncAnswers(sa);
+      save(); toast('Збережено'); return rBody();
     }
     if (act === 'saveTests') {
       const rec = { d: today() }; let any = false;
@@ -1596,7 +1705,13 @@ window.APP_START = () => {
       VOICEPACK.download(id, (d, t) => { if (el) el.textContent = 'Зберігаю: ' + (t ? Math.round(d / t * 100) + ' %' : Math.round(d / 1e6) + ' МБ') + '…'; }).then(() => { toast('Голос збережено в телефоні'); packState(); b.disabled = false; }).catch(() => { toast('Не вдалося — перевірте інтернет'); b.disabled = false; });
       return; }
     if (act === 'tourReset') { S().tour = { v3: true }; save(); toast('Навчання покажеться на головній і в першому тренуванні'); view = 'home'; return render(); }
-    if (act === 'day') { const dd = Number(b.dataset.d), k = p.days.indexOf(dd); if (k >= 0) p.days.splice(k, 1); else p.days.push(dd); p.days.sort(); save(); return rMore(); }
+    if (act === 'day') {
+      if (p.draft) return;
+      const dd = Number(b.dataset.d), nd = p.days.slice(), k = nd.indexOf(dd); if (k >= 0) nd.splice(k, 1); else nd.push(dd); nd.sort();
+      /* програма за анкетою — від 2 до 4 днів, як в анкеті; дні йдуть і в програму (скільки тренувань на тиждень) */
+      if (DB.custom && (nd.length < 2 || nd.length > 4)) { toast('Від 2 до 4 днів на тиждень'); return; }
+      p.days = nd; syncAnswers({ days: nd }); save(); return rMore();
+    }
     if (act === 'backup') return backup();
     if (act === 'csv') return csv();
   }
