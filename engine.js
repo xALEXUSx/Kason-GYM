@@ -6,10 +6,11 @@ var ENGINE = (function () {
 
   /* Сесія n (0, 1, 2…) → тиждень і тренування. Після 12 тижнів цикл повторюється з тижня 5. */
   function planFor(prog, n) {
-    var wIdx = Math.floor(n / 3), cycle = 1, wk;
+    var pw = prog.perWeek || 3;  // тренувань на тиждень (індивідуальна програма — 2…4)
+    var wIdx = Math.floor(n / pw), cycle = 1, wk;
     if (wIdx < 12) wk = wIdx + 1;
     else { var r = wIdx - 12; cycle = 2 + Math.floor(r / 8); wk = 5 + (r % 8); }
-    var slot = n % 3;
+    var slot = n % pw;
     var order = prog.week(wk);
     var wid = order[slot];
     return { n: n, week: wk, cycle: cycle, slot: slot, workout: wid, deload: prog.deload.indexOf(wk) >= 0, note: prog.note(wk) };
@@ -70,6 +71,8 @@ var ENGINE = (function () {
     }
     if (!last) {
       var startLoad = (ex.type === 'bw' || (ex.type === 'time' && !ex.load)) ? null : (ex.start === undefined ? null : ex.start);
+      /* стартова вага — не більша за межу набору й кратна кроку дисків (інакше її не зібрати) */
+      if (startLoad !== null && (ex.type === 'db' || ex.type === 'time')) startLoad = Math.max(0, Math.floor(Math.min(startLoad, cap) / STEP + 1e-9) * STEP);
       fill(startLoad, max);
       var aim = ex.type === 'time' ? max + ' с' : max + ' повторень';
       out.note = startLoad === null ? 'Перший раз: ' + aim + ' із запасом 2–3' + (ex.type === 'dbopt' ? ', без гантелі' : '') + '; важко — легший варіант.'
@@ -215,7 +218,19 @@ var ENGINE = (function () {
 
   /* ---------- v2 ---------- */
   var INV = { 5: 4, 2.5: 8, 1.25: 4 };
-  function stepFor(inv) { return (inv && inv[1.25] >= 4) ? 2.5 : 5; }
+  /* Крок ваги на гантель — подвоєний найменший диск, якого вистачає на обидва боки обох гантелей (4 шт.);
+     з дисками 1,25 — 2,5 кг, з 2,5 — 5 кг, лише з 5 — 10 кг. Без жодної четвірки — за парою (одна гантель). */
+  function stepFor(inv) {
+    inv = inv || {};
+    var four = [1.25, 2.5, 5].filter(function (s) { return inv[s] >= 4; })[0], two = [1.25, 2.5, 5].filter(function (s) { return inv[s] >= 2; })[0];
+    return 2 * (four || two || 2.5);
+  }
+  /* Найбільша вага дисків на гриф, яку можна зібрати з набору: для двох гантелей (а якщо на дві дисків не вистачає — для однієї). */
+  function capOf(inv) {
+    var two = 0, one = 0;
+    [5, 2.5, 1.25].forEach(function (s) { var n = Number((inv || {})[s]) || 0; two += Math.floor(n / 4) * 2 * s; one += Math.floor(n / 2) * 2 * s; });
+    return two || one;
+  }
   function dbCountOf(ex, variant) {
     var db = ex.db || 1;
     if (ex.variants && variant) ex.variants.forEach(function (v) { if (v.id === variant && v.db) db = v.db; });
@@ -493,7 +508,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();

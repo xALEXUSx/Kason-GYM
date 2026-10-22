@@ -1,12 +1,26 @@
 /* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
-(() => {
+/* Запускає ACC (accounts.js) після вибору користувача й входу. */
+window.APP_START = () => {
   'use strict';
-  const VERSION = '3.5.2';
+  window.APP_STARTED = true;
+  document.body.classList.add('started');
+  const VERSION = '3.7.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
-  const MARK = '<svg class="mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" style="fill:var(--mark-tile)"/><g fill="#fff"><rect x="88" y="240" width="336" height="32"/><rect x="110" y="196" width="28" height="120"/><rect x="146" y="160" width="40" height="192"/><rect x="326" y="160" width="40" height="192"/><rect x="374" y="196" width="28" height="120"/></g><rect x="186" y="240" width="140" height="32" fill="#c8a96a"/></svg>';
+  const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
-  let DB = fixProfiles(STORE.load());
+  let DB = STORE.load();
+  /* індивідуальна програма цього користувача — відтворюється з відповідей анкети;
+     межа ваги на гриф — з його власного набору дисків (змінюється в «Більше» → «Гантелі») */
+  function buildMe(answers) {
+    const g = GEN.build(answers), base = g.cap;
+    Object.defineProperty(g, 'cap', { configurable: true, enumerable: true, get: () => { const p = DB && DB.profiles && DB.profiles.me; return base && p && p.inv ? ENGINE.capOf(p.inv) || base : base; } });
+    return g;
+  }
+  if (DB.custom && DB.custom.answers) PROGRAMS.me = buildMe(DB.custom.answers);
+  DB = fixProfiles(DB);
+  /* підпис у списку «Хто тренується?» — назва програми (для старих журналів — одразу) */
+  { const acc = STORE.account(STORE.current); if (acc && !acc.sub && DB.active && PROGRAMS[DB.active]) STORE.update(STORE.current, { sub: PROGRAMS[DB.active].title }); }
   function fixProfiles(db) { Object.keys(db.profiles || {}).forEach((id) => { const p = db.profiles[id]; if (p && !Array.isArray(p.days) && PROGRAMS[id]) p.days = PROGRAMS[id].days.slice(); }); return db; }
   VOICE.init(DB.settings.voice);
   RADIO.setDuck(DB.settings.radio.duck);
@@ -133,23 +147,103 @@
     updateRadio();
   }
 
-  /* ---------- знайомство ---------- */
-  function rOnboard() {
-    if (ui.ob === 1) {
-      app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><h1>Журнал тренувань</h1><p class="muted">Ваші програми, підказки ваги за правилами прогресії, рекорди, графіки, карта мʼязів і фото — усе в телефоні, без реєстрації й підписок.</p>
-        <h2>Чия це програма?</h2><div class="pick">${Object.values(PROGRAMS).map((p) => `<button type="button" data-act="obProg" data-id="${p.id}"><b>${esc(p.title)}</b><span class="muted small">${esc(p.sub)}</span></button>`).join('')}</div>`;
-      return;
+  /* ---------- знайомство: анкета (усі поля обовʼязкові) ---------- */
+  const QSTEPS = ['who', 'body', 'goal', 'level', 'equip', 'limits', 'days', 'agree'];
+  const QFIELDS = { who: ['name', 'sex'], body: ['age', 'height', 'weight'], goal: ['goal'], level: ['level'], equip: ['equip'], limits: ['limits'], days: ['days'], agree: ['agree'] };
+  function qState() {
+    if (!ui.q) {
+      const acc = STORE.account(STORE.current) || {}, old = DB.custom && DB.custom.answers;
+      ui.q = { step: 0, err: false, edit: !!old, a: old ? JSON.parse(JSON.stringify(old)) : { name: acc.name && acc.name !== 'Новий акаунт' ? acc.name : '', equip: [], limits: [], days: [], agree: false } };
+      const p = P(); if (!ui.q.a.inv) { ui.q.a.handle = p ? p.handle : 1; ui.q.a.inv = p ? Object.assign({}, p.inv) : { 5: 4, 2.5: 8, 1.25: 4 }; }
     }
-    const id = ui.obProg, pr = newProfile(id);
-    app.innerHTML = `<h1>Налаштування</h1><p class="muted small">Можна змінити пізніше в «Більше».</p>
-      <div class="card"><label class="f">Вага грифа без дисків, кг (зважте на кухонних вагах)</label><input inputmode="decimal" id="obHandle" value="1">
-      <label class="f">Диски на обидві гантелі: 5 кг · 2,5 кг · 1,25 кг (штук)</label>
-      <div class="grid3"><input inputmode="numeric" id="obI5" value="4"><input inputmode="numeric" id="obI25" value="8"><input inputmode="numeric" id="obI125" value="4"></div>
-      <p class="tiny muted">Без дисків 1,25 кг крок ваги — 5 кг; з ними — 2,5 кг.</p>
-      <label class="f">Дні тренувань</label><div class="row" id="obDays">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${pr.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="obDay" data-d="${d}">${DAYS[d]}</button>`).join('')}</div>
-      <label class="f">Почати з тижня</label><select id="obWeek">${Array.from({ length: 12 }, (_, k) => `<option value="${k + 1}">${k + 1}</option>`).join('')}</select></div>
-      <button type="button" class="pri wide big" data-act="obDone">Почати</button><p></p><button type="button" class="ghost wide" data-act="obBack">Назад</button>`;
-    ui.obDays = pr.days.slice();
+    return ui.q;
+  }
+  /* поточні значення полів вводу — у відповіді (і під час набору, і перед «Далі») */
+  function qRead() {
+    const q = qState(), a = q.a, v = (id) => { const e = document.getElementById(id); return e ? e.value : undefined; };
+    if (v('qName') !== undefined) a.name = v('qName').trim();
+    ['age', 'height', 'weight'].forEach((k) => { const x = v('q' + k); if (x !== undefined) a[k] = num(x); });
+    if (v('qHandle') !== undefined) a.handle = num(v('qHandle'));
+    [['5', 'qI5'], ['2.5', 'qI25'], ['1.25', 'qI125']].forEach(([k, id]) => { const x = v(id); if (x !== undefined) a.inv[k] = num(x); });
+  }
+  function qErrors(step) {
+    const a = qState().a, e = GEN.check(a).errors, out = {};
+    QFIELDS[step].forEach((k) => { if (e[k]) out[k] = e[k]; });
+    if (step === 'equip' && a.equip.indexOf('db') >= 0) {
+      if (!(a.handle >= 0 && a.handle <= 10)) out.handle = 'Вага грифа — від 0 до 10 кг';
+      if (['5', '2.5', '1.25'].some((k) => !(a.inv[k] >= 0 && a.inv[k] <= 40 && Number.isInteger(a.inv[k])))) out.inv = 'Кількість дисків — ціле число від 0 до 40';
+      else if (!(a.inv['5'] + a.inv['2.5'] + a.inv['1.25'] > 0)) out.inv = 'Вкажіть, скільки дисків є';
+      else if (!ENGINE.capOf(a.inv)) out.inv = 'Потрібна хоча б пара однакових дисків — по одному на кожен бік грифа';
+    }
+    return out;
+  }
+  function rOnboard() {
+    const q = qState(), step = QSTEPS[q.step], a = q.a, errs = q.err ? qErrors(step) : {};
+    /* кілька відповідей (обладнання, здоровʼя) — з галочкою */
+    const opt = (act, v, label, sub, on) => { const m = act === 'qLimit' || act === 'qEquip';
+      return `<button type="button" class="qopt${m ? ' multi' : ''}${on ? ' on' : ''}" data-act="${act}" data-v="${v}" ${m ? `role="checkbox" aria-checked="${on}"` : `aria-pressed="${on}"`}><b>${label}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</button>`; };
+    const err = (k) => (errs[k] ? `<p class="qerr">${esc(errs[k])}</p>` : '');
+    const numIn = (id, label, val, mode) => `<label class="f" for="${id}">${label}</label><input id="${id}" inputmode="${mode || 'numeric'}" autocomplete="off" value="${val === null || val === undefined || isNaN(val) ? '' : fmt(val)}">`;
+    let body = '';
+    if (step === 'who') body = `<h1>Як вас звати?</h1><p class="muted small">Імʼя бачитимете на екрані входу.</p>
+      <label class="f" for="qName">Імʼя</label><input id="qName" maxlength="24" autocomplete="given-name" value="${esc(a.name || '')}">${err('name')}
+      <h2>Стать</h2><div class="grid2">${opt('qSex', 'm', 'Чоловік', '', a.sex === 'm')}${opt('qSex', 'f', 'Жінка', '', a.sex === 'f')}</div>${err('sex')}`;
+    else if (step === 'body') body = `<h1>Про вас</h1><p class="muted small">Потрібно, щоб розрахувати навантаження й харчування.</p>
+      ${numIn('qage', 'Вік, років', a.age)}${err('age')}${numIn('qheight', 'Зріст, см', a.height)}${err('height')}${numIn('qweight', 'Вага, кг', a.weight, 'decimal')}${err('weight')}`;
+    else if (step === 'goal') body = `<h1>Ваша мета</h1><div class="pick">${[['loss', 'Схуднути', 'менше жиру, більше сил'], ['muscle', 'Набрати мʼязи', 'більше обʼєму й сили'], ['health', 'Сила й здоровʼя', 'міцне тіло без крайнощів'], ['posture', 'Спина й осанка', 'рівна спина, менше болю від сидіння']].map(([v, l, d]) => opt('qGoal', v, l, d, a.goal === v)).join('')}</div>${err('goal')}`;
+    else if (step === 'level') body = `<h1>Досвід тренувань</h1><div class="pick">${opt('qLevel', 'new', 'Новачок', 'або перерва понад пів року', a.level === 'new')}${opt('qLevel', 'exp', 'Тренуюсь регулярно', 'пів року й більше без перерв', a.level === 'exp')}</div>${err('level')}`;
+    else if (step === 'equip') {
+      const db = a.equip.indexOf('db') >= 0;
+      body = `<h1>Що є вдома</h1><p class="muted small">Можна обрати обидва. Без жодного з них програма не складається: для тяг потрібні гантелі або петля.</p>
+      <div class="pick">${opt('qEquip', 'db', 'Гантелі з дисками', 'розбірні: гриф + диски', db)}${opt('qEquip', 'band', 'Петля-еспандер', 'резинка з кріпленням до дверей', a.equip.indexOf('band') >= 0)}</div>${err('equip')}
+      ${db ? `<div class="card"><b>Ваші гантелі</b>${numIn('qHandle', 'Вага одного грифа без дисків, кг', a.handle, 'decimal')}${err('handle')}
+        <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>${numIn('qI5', '5 кг', a.inv['5'])}</div><div>${numIn('qI25', '2,5 кг', a.inv['2.5'])}</div><div>${numIn('qI125', '1,25 кг', a.inv['1.25'])}</div></div>${err('inv')}</div>` : ''}`;
+    } else if (step === 'limits') body = `<h1>Здоровʼя</h1><p class="muted small">Позначте все, що у вас є. Програма прибере або полегшить вправи, які можуть зашкодити.</p>
+      <div class="pick">${[['back', 'Грижа або біль у спині', 'грижа, протрузія, часто болить поперек'], ['knees', 'Коліна', 'біль або травма коліна'], ['shoulders', 'Плечі', 'біль або травма плеча'], ['heart', 'Тиск або серце', 'гіпертонія, хвороби серця'], ['pregnant', 'Вагітність', ''], ['none', 'Нічого з цього', '']].filter(([v]) => v !== 'pregnant' || a.sex !== 'm').map(([v, l, d]) => opt('qLimit', v, l, d, a.limits.indexOf(v) >= 0)).join('')}</div>${err('limits')}`;
+    else if (step === 'days') body = `<h1>Дні тренувань</h1><p class="muted small">Оберіть від 2 до 4 днів. Краще з днем відпочинку між ними.</p>
+      <div class="qdays">${GEN.DAYS.map(([d, l]) => opt('qDay', d, l, '', a.days.indexOf(d) >= 0)).join('')}</div>${err('days')}`;
+    else {
+      const blk = GEN.check(a).block, lim = a.limits.filter((x) => x !== 'none');
+      body = `<h1>Майже готово</h1><div class="card"><ul class="list">
+        <li><span>Імʼя</span><b>${esc(a.name)}</b></li><li><span>Вік · зріст · вага</span><b>${fmt(a.age)} · ${fmt(a.height)} см · ${fmt(a.weight)} кг</b></li>
+        <li><span>Мета</span><b>${esc(GEN.GOALS[a.goal] || '')}</b></li><li><span>Обладнання</span><b>${a.equip.map((x) => ({ db: 'гантелі', band: 'петля' }[x])).join(', ')}</b></li>
+        <li><span>Здоровʼя</span><b>${lim.length ? lim.map((x) => ({ back: 'спина', knees: 'коліна', shoulders: 'плечі', heart: 'тиск/серце', pregnant: 'вагітність' }[x])).join(', ') : 'без обмежень'}</b></li>
+        <li><span>Дні</span><b>${GEN.DAYS.filter(([d]) => a.days.indexOf(d) >= 0).map(([, l]) => l).join(', ')}</b></li></ul></div>
+        ${blk ? `<div class="note b small">${esc(blk)}</div>` : ''}
+        ${lim.some((x) => x === 'back' || x === 'heart') && !blk ? '<div class="note w small">Перед стартом покажіть програму лікарю: при болю в спині чи проблемах із тиском це розумна страховка.</div>' : ''}
+        <label class="chk"><input type="checkbox" id="qAgree"${a.agree ? ' checked' : ''}><span>Розумію: застосунок не замінює лікаря. При болю під час вправи — зупиняюсь.</span></label>${err('agree')}`;
+    }
+    const last = q.step === QSTEPS.length - 1;
+    app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div>
+      <div class="qprog" aria-hidden="true"><i style="width:${Math.round((q.step + 1) / QSTEPS.length * 100)}%"></i></div><p class="tiny muted">Крок ${q.step + 1} з ${QSTEPS.length}${q.edit ? ' · зміна анкети' : ''}</p>
+      ${body}
+      <div class="qnav">${q.step ? '<button type="button" class="ghost" data-act="qBack">Назад</button>' : (q.edit ? '<button type="button" class="ghost" data-act="qCancel">Скасувати</button>' : '<span></span>')}
+      <button type="button" class="pri big" data-act="qNext">${last ? (q.edit ? 'Оновити програму' : 'Скласти програму') : 'Далі'}</button></div>
+      ${q.step || q.edit ? '' : '<p></p><label class="btn ghost" style="display:block;text-align:center">Є резервна копія? Відновити<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label>'}`;
+    const ri = document.getElementById('restoreIn'); if (ri) ri.onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
+  }
+  function qToggle(list, v, max) { const k = list.indexOf(v); if (k >= 0) list.splice(k, 1); else { if (max && list.length >= max) return false; list.push(v); } return true; }
+  /* завершення анкети: програма, профіль, імʼя акаунта */
+  function qFinish() {
+    const q = qState(), a = q.a, c = GEN.check(a);
+    if (!c.ok) { q.err = true; return rOnboard(); }
+    a.name = a.name.trim();
+    DB.custom = { answers: JSON.parse(JSON.stringify(a)), ver: GEN.VER, date: today() };
+    PROGRAMS.me = buildMe(DB.custom.answers);
+    const fresh = !DB.profiles.me;
+    if (fresh) DB.profiles.me = newProfile('me');
+    const p = DB.profiles.me;
+    p.days = a.days.slice().sort(); p.handle = a.handle; p.inv = { 5: a.inv['5'], 2.5: a.inv['2.5'], 1.25: a.inv['1.25'] };
+    p.me = Object.assign({}, p.me || {}, { height: a.height, age: a.age });
+    if (p.draft) p.draft = null;
+    /* новому користувачеві картка «Нове» ні до чого — для нього все нове */
+    if (fresh && Object.keys(DB.profiles).length === 1) S().tour.v3 = true;
+    DB.active = 'me'; ENGINE.migrate(DB); save();
+    STORE.update(STORE.current, { name: a.name, sub: PROGRAMS.me.sub });
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    ui.q = null; view = 'home'; render(); initPacks();
+    toast(fresh ? 'Програму складено' : 'Програму оновлено — історія тренувань збережена');
+    if (fresh && !ACC.locked(STORE.current)) setTimeout(protectSheet, 400);
   }
 
   /* ---------- допоміжне до вправ ---------- */
@@ -297,7 +391,14 @@
   /* Тренер: характер (жорсткий з гумором або спокійний) і сценарій вправи. */
   const hard = () => S().voice.tone !== 'calm';
   const L = (kind, seed) => (hard() ? COACH.line(kind, G().sex, seed) + ' ' : '');
-  const script = (exId) => COACH.get(DB.active, exId);
+  /* сценарій тренера: у власній програмі — з тієї програми, звідки взято вправу */
+  /* орієнтир обʼєму: мʼязи (10–20 підходів) чи сила й тонус (6–12) */
+  const volHi = () => DB.active === 'him' || (G().custom && DB.custom && DB.custom.answers.goal === 'muscle');
+  const script = (exId) => {
+    const g = G(), sc = COACH.get((g.coachFrom && g.coachFrom[exId]) || DB.active, exId);
+    /* спину в анкеті не позначено — «Чого не робити» без згадки про грижу */
+    return sc && sc.dontGen && g.custom && !g.backCare ? Object.assign({}, sc, { dont: sc.dontGen }) : sc;
+  };
   /* Фраза про наступний підхід. Перший раз у вправі — навіщо, положення, рух і дихання; другий — чого не робити й чому;
      останній робочий — характер. brief — лише ціль (для «Почати раніше» й повтору). */
   function setSpeech(d, st, brief) {
@@ -792,20 +893,22 @@
     ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) { if (!e.target.closest('.tbx')) { ov.remove(); S().tour[id] = true; save(); } return; } if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
   }
   function whatsNew() {
-    openSheet(`<div class="sp"><b>Що нового у версії 3</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
+    openSheet(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
+        <li style="display:block"><b>🔒 Вхід через Face ID</b><div class="small muted">«Більше» → «Захистити Face ID»: PIN і Face ID, щоб ніхто інший на телефоні не відкрив ваш журнал.</div></li>
         <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: навіщо вправа, як робити, чого не робити, вага й диски, відпочинок, «Час!», рекорди. Характер — жорсткий з гумором. Природний записаний голос: чоловічий і жіночий («Більше» → «Голосовий тренер»).</div></li>
         <li style="display:block"><b>📻 Радіо для тренувань</b><div class="small muted">Кнопка «♪»: 11 станцій. Коли говорить тренер, музика плавно притихає.</div></li>
-        <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Перед тренуванням. Від відповіді застосунок сам полегшує або прибирає вправи на поперек.</div></li>
-        <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети з першого тижня, міо-підходи в ізоляції з тижня 5 — менше часу, та сама робота.</div></li>
+        <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Якщо в анкеті позначено спину: перед тренуванням застосунок питає, як вона, і сам полегшує або прибирає вправи на поперек.</div></li>
+        <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети — дві вправи поспіль, відпочинок після пари; у частині програм ще й міо-підходи в ізоляції. Менше часу, та сама робота.</div></li>
         <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
-        <li style="display:block"><b>🎨 Новий вигляд</b><div class="small muted">Кольори й шрифт нашого бренду, як на сайті. Знак застосунку — штанга. Світла й темна тема — за налаштуванням телефона.</div></li>
+        <li style="display:block"><b>🎨 Новий вигляд</b><div class="small muted">Спокійні кольори, знак застосунку — штанга. Світла й темна тема — за налаштуванням телефона.</div></li>
         <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
     S().tour.v3 = true; save();
   }
   function readySheet(wid) {
-    const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl;
+    const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl && G().ex.rdl;
     openSheet(`<b>${her ? 'Як спина й суглоби сьогодні?' : 'Як спина сьогодні?'}</b> ${q('ready')}
       <p class="small muted">Від відповіді залежать вправи на поперек.</p>
       <div class="pick rd">
@@ -904,13 +1007,13 @@
     app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div>
       ${alerts()}
       ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(prog.workouts[d.workout].title)} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
-      <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з 3</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
+      <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з ${prog.perWeek || 3}</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
         <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
         <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
         ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
       ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
       ${S().tour.v3 ? '' : '<div class="card"><div class="sp"><div><b>Нове: тренер голосом</b><div class="small muted">Питання про спину, суперсети, міо-підходи, підказки.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
-      <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, 3, thisWeek + '/3', 'тиждень')}</div>
+      <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}`;
     tourMaybe('home');
@@ -928,9 +1031,9 @@
     if (ui.planTab === 'w') {
       const weeks = cur.cycle === 1 ? Array.from({ length: 12 }, (_, k) => k + 1) : Array.from({ length: 8 }, (_, k) => k + 5);
       body = `<div class="card">${weeks.map((w) => {
-        const base = cur.cycle === 1 ? (w - 1) * 3 : 36 + (cur.cycle - 2) * 24 + (w - 5) * 3;
+        const pw = prog.perWeek || 3, base = cur.cycle === 1 ? (w - 1) * pw : 12 * pw + (cur.cycle - 2) * 8 * pw + (w - 5) * pw;
         const order = prog.week(w);
-        return `<div class="wk${prog.deload.indexOf(w) >= 0 ? ' dl' : ''}"><div class="wl"><b>${w}</b>тиждень</div>${order.map((wid, s) => {
+        return `<div class="wk${prog.deload.indexOf(w) >= 0 ? ' dl' : ''}" style="grid-template-columns:58px repeat(${prog.perWeek || 3},1fr)"><div class="wl"><b>${w}</b>тиждень</div>${order.map((wid, s) => {
           const n = base + s, done = byN[n], isNext = n === nn;
           const short = { A: 'А', B: 'Б', D1: 'Д1', D2: 'Д2', D3: 'Д3' }[wid] || wid;
           return `<button type="button" class="slot${done ? ' done' : isNext ? ' next' : ''}" data-act="${done ? 'sess' : isNext ? 'start' : 'noop'}" data-id="${done ? done.id : ''}">${done ? '✓ ' : ''}${esc(short)}<small>${done ? dm(done.date) : isNext ? 'наступне' : ''}</small></button>`;
@@ -1003,8 +1106,8 @@
       Object.keys(raw).forEach((k) => { wkv[k] = Math.round(raw[k] / (days / 7) * 10) / 10; });
       const present = MUSCLES.filter((m) => Object.values(prog.ex).some((e) => e.m.p.indexOf(m[0]) >= 0));
       body = `<div class="seg">${[[7, '7 днів'], [28, '28 днів (сер. за тиждень)']].map(([k, l]) => `<button type="button" class="${ui.musDays === k ? 'on' : ''}" data-act="musDays" data-v="${k}">${l}</button>`).join('')}</div>
-        <div class="card">${CHARTS.bodyMap(wkv, DB.active === 'him' ? 12 : 8)}<p class="tiny muted" style="text-align:center">Що темніше — то більше підходів на тиждень. Основний мʼяз вправи — 1 підхід, допоміжний — 0,5.</p></div>
-        <h2>Підходи на тиждень</h2><div class="card">${CHARTS.hbars(present.map(([k, l]) => ({ label: l, v: wkv[k] || 0 })), DB.active === 'him' ? { lo: 10, hi: 20, zoneLabel: 'наукові огляди: 10–20 робочих підходів на тиждень для росту мʼязів' } : { lo: 6, hi: 12, zoneLabel: 'орієнтир для сили й тонусу: 6–12 підходів на тиждень' })}</div>`;
+        <div class="card">${CHARTS.bodyMap(wkv, volHi() ? 12 : 8)}<p class="tiny muted" style="text-align:center">Що темніше — то більше підходів на тиждень. Основний мʼяз вправи — 1 підхід, допоміжний — 0,5.</p></div>
+        <h2>Підходи на тиждень</h2><div class="card">${CHARTS.hbars(present.map(([k, l]) => ({ label: l, v: wkv[k] || 0 })), volHi() ? { lo: 10, hi: 20, zoneLabel: 'наукові огляди: 10–20 робочих підходів на тиждень для росту мʼязів' } : { lo: 6, hi: 12, zoneLabel: 'орієнтир для сили й тонусу: 6–12 підходів на тиждень' })}</div>`;
     } else {
       const ym = ui.repMonth || today().slice(0, 7);
       const [Y, M] = ym.split('-').map(Number); const prevYm = M === 1 ? (Y - 1) + '-12' : Y + '-' + pad(M - 1);
@@ -1119,8 +1222,55 @@
     try { const p = await VOICEPACK.load(id), have = await VOICEPACK.cached(id); el.textContent = have ? 'Голос збережено в телефоні: працює без інтернету.' : 'Голос ще не збережено в телефоні (' + (p.bytes ? Math.round(p.bytes / 1e6) + ' МБ' : 'кілька МБ') + '). Без інтернету тренер говоритиме системним голосом.'; }
     catch (e) { el.textContent = 'Не вдалося завантажити голос — перевірте інтернет.'; }
   }
+  /* ---------- користувач і захист ---------- */
+  const PIN_IN = (id) => `<input id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="new-password">`;
+  async function protectSheet() {
+    const face = await ACC.canFace();
+    openSheet(`<div class="sp"><b>Захистити вхід</b><button type="button" class="sm ghost" data-act="closeSheet">Не зараз</button></div>
+      <p class="small">Щоб ніхто інший на цьому телефоні не відкрив ваш журнал. PIN із 4 цифр — обовʼязковий запасний вхід${face ? '; далі телефон попросить Face ID' : ''}.</p>
+      <label class="f" for="pin1">Новий PIN</label>${PIN_IN('pin1')}<label class="f" for="pin2">Ще раз</label>${PIN_IN('pin2')}
+      <p class="qerr" id="pinErr" hidden></p>
+      <button type="button" class="pri wide" data-act="pinSave" data-face="${face ? 1 : ''}">${face ? 'Зберегти PIN і ввімкнути Face ID' : 'Зберегти PIN'}</button>
+      ${face ? '' : '<p class="tiny muted">Face ID тут недоступний — вхід буде за PIN.</p>'}`);
+  }
+  function pinErr(t) { const e = document.getElementById('pinErr'); if (e) { e.textContent = t; e.hidden = false; } }
+  /* Face ID викликаємо одразу в натисканні (вимога iPhone), PIN зберігаємо після */
+  function protectSave(b) {
+    const v1 = (document.getElementById('pin1') || {}).value || '', v2 = (document.getElementById('pin2') || {}).value || '', id = STORE.current;
+    if (!/^\d{4}$/.test(v1)) return pinErr('PIN — рівно 4 цифри');
+    if (v1 !== v2) return pinErr('PIN-коди не збігаються');
+    if (/^(\d)\1{3}$/.test(v1) || v1 === '1234' || v1 === '0000') return pinErr('Занадто простий PIN — оберіть інший');
+    const face = b.dataset.face ? ACC.enroll(id).then(() => true, () => false) : Promise.resolve(false);
+    b.disabled = true;
+    face.then(async (ok) => {
+      await ACC.setPin(id, v1); closeSheet(); rMore();
+      toast(b.dataset.face ? (ok ? 'Захист увімкнено: Face ID + PIN' : 'Face ID не ввімкнено — вхід за PIN') : 'Захист увімкнено: PIN');
+    }).catch(() => { b.disabled = false; pinErr('Не вдалося зберегти — спробуйте ще'); });
+  }
+  /* підтвердити, що це власник акаунта (Face ID або PIN), тоді виконати дію */
+  function confirmOwner(title, cb) {
+    const a = STORE.account(STORE.current) || {};
+    if (!ACC.locked(STORE.current)) return cb();
+    openSheet(`<div class="sp"><b>${esc(title)}</b><button type="button" class="sm ghost" data-act="closeSheet">Скасувати</button></div>
+      ${a.cred ? '<button type="button" class="pri wide" data-act="ownFace">Підтвердити Face ID</button><p></p>' : ''}
+      ${a.pin ? `<label class="f" for="ownPin">PIN</label>${PIN_IN('ownPin')}<button type="button" class="wide" data-act="ownPin">Підтвердити PIN</button>` : ''}<p class="qerr" id="pinErr" hidden></p>`);
+    ui.ownCb = cb;
+  }
+  function accountCard() {
+    const id = STORE.current, a = STORE.account(id) || {}, on = ACC.locked(id), many = STORE.accounts().length > 1;
+    return `<h2>Профіль</h2><div class="card"><div class="sp"><div><b>${esc(a.name || '')}</b><div class="small muted">${on ? (a.cred ? 'вхід: Face ID або PIN' : 'вхід: PIN') : 'вхід без захисту'}</div></div>${many ? '<button type="button" class="sm" data-act="accSwitch">Змінити</button>' : ''}</div>
+      <div class="row" style="margin-top:10px">${on ? '<button type="button" class="sm" data-act="accLockNow">Заблокувати</button><button type="button" class="sm ghost" data-act="accUnprotect">Зняти захист</button>' : '<button type="button" class="sm pri" data-act="accProtect">Захистити Face ID</button>'}<button type="button" class="sm ghost" data-act="accRename">Змінити імʼя</button></div>
+      <button type="button" class="danger wide" style="margin-top:10px" data-act="accDelete">Видалити мої дані й почати заново</button></div>`;
+  }
+  /* вибір програми — лише якщо з попередньої версії лишилось кілька журналів */
+  function progCard() {
+    const own = Object.keys(DB.profiles).filter((k) => PROGRAMS[k]), g = G();
+    return own.length > 1
+      ? `<label class="f">Програма</label><select id="progSel">${own.map((k) => `<option value="${k}"${k === DB.active ? ' selected' : ''}>${esc(PROGRAMS[k].title)}</option>`).join('')}</select>`
+      : `<div><b>${esc(g.title)}</b>${g.sub ? `<div class="small muted">${esc(g.sub)}</div>` : ''}</div>`;
+  }
   function rMore() {
-    const p = P(), prog = G(), V = S().voice;
+    const p = P(), prog = G(), V = S().voice, hasDb = Object.values(prog.ex).some((ex) => GEN.needs(ex) === 'db');
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     const curWeek = ENGINE.planFor(prog, nextN()).week;
     const sw = (k, l, d) => `<label class="sw"><span>${l}<div class="tiny muted">${d}</div></span><input type="checkbox" data-set="${k}"${S()[k] ? ' checked' : ''}></label>`;
@@ -1130,6 +1280,7 @@
       : !vl.length ? '<div class="note w small"><b>Українського голосу не знайдено.</b> На iPhone: Параметри → Доступність → розділ про озвучення вмісту (англ. Spoken Content) → Голоси → Українська — завантажте голос і перезапустіть застосунок.</div>'
       : `<label class="f">Голос</label><select id="voiceSel">${vl.map((v) => `<option value="${esc(v.uri)}"${v.uri === V.uri ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
     app.innerHTML = `<h1>Більше</h1>
+      ${accountCard()}
       ${standalone ? '' : '<div class="note w small"><b>Встановіть як застосунок:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>'}
       <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">вага й диски, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
         ${packBox()}
@@ -1137,32 +1288,32 @@
         <label class="sw"><span>Говорити й у беззвучному режимі<div class="tiny muted">вимкніть, якщо слухаєте музику в іншому застосунку і вона ставатиме на паузу</div></span><input type="checkbox" id="voiceSilent"${V.silent === false ? '' : ' checked'}></label>
         <label class="f">Характер тренера</label>${seg('tone', [['hard', 'Жорсткий з гумором'], ['calm', 'Спокійний']], V.tone || 'hard')}
         <label class="f">Скільки говорити</label>${seg('level', [['full', 'Детально'], ['short', 'Коротко']], V.level)}
-        <label class="f">Темп</label>${seg('rate', [[0.9, 'Повільніше'], [1, 'Звичайно'], [1.1, 'Швидше']], V.rate)}
+        ${packId() ? '' : `<label class="f">Темп</label>${seg('rate', [[0.9, 'Повільніше'], [1, 'Звичайно'], [1.1, 'Швидше']], V.rate)}`}
         <button type="button" class="wide" data-act="say" data-what="test">🔊 Перевірити голос</button>
         <p class="tiny muted">Голос звучить, коли застосунок відкритий і екран увімкнений («Не гасити екран» нижче). Не чути — перевірте гучність і перемикач беззвучного режиму.</p></div>
       <h2>Музика</h2><div class="card"><div class="sp"><div><b>Радіо для тренувань</b><div class="small muted">${RADIO.cur ? esc(RADIO.cur.name) + ' · ' + ({ playing: 'грає', loading: 'підключаюся', paused: 'пауза', error: 'не відповідає' }[RADIO.state] || '') : RADIO.STATIONS.length + ' станцій: денс, хіти, українські, рок, метал, драм-н-бейс'}</div></div><button type="button" class="sm pri" data-act="radio">Відкрити</button></div></div>
       <h2>Тренування</h2><div class="card"><label class="f">Екран тренування</label>${seg('mode', [['coach', 'Тренер · крок за кроком'], ['list', 'Список вправ']], S().mode)}
         ${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', 'на iPhone з iOS 18+, якщо підтримується')}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
-      <h2>Програма</h2><div class="card"><label class="f">Програма на цьому телефоні</label><select id="progSel">${Object.values(PROGRAMS).map((q2) => `<option value="${q2.id}"${q2.id === DB.active ? ' selected' : ''}>${esc(q2.title)}</option>`).join('')}</select>
+      <h2>Програма</h2><div class="card">${progCard()}
+        <button type="button" class="wide" style="margin-top:10px" data-act="qEdit">${DB.custom ? 'Змінити анкету й оновити програму' : 'Скласти програму за анкетою'}</button>
         <label class="f">Наступне тренування — тиждень</label><select id="weekSel"${p.draft ? ' disabled' : ''}>${Array.from({ length: 12 }, (_, k) => `<option value="${k + 1}"${k + 1 === curWeek ? ' selected' : ''}>${k + 1}</option>`).join('')}</select>
         <label class="f">Дні тренувань</label><div class="row">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}">${DAYS[d]}</button>`).join('')}</div></div>
-      <h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="${fmt(p.handle)}">
+      ${hasDb ? `<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="${fmt(p.handle)}">
         <label class="f">Диски на обидві гантелі: 5 · 2,5 · 1,25 кг (штук)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="${p.inv[5]}"><input inputmode="numeric" data-inv="2.5" value="${p.inv[2.5]}"><input inputmode="numeric" data-inv="1.25" value="${p.inv[1.25]}"></div>
-        <p class="tiny muted">Крок ваги зараз: ${fmt(ENGINE.stepFor(p.inv))} кг на гантель.</p></div>
-      <h2>Порадник і підказки</h2><div class="card" style="padding:10px 12px">${guideChips()}<div class="quick"><button type="button" class="sm" data-act="food">Харчування</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Що нового</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
+        <p class="tiny muted">Крок ваги зараз: ${fmt(ENGINE.stepFor(p.inv))} кг на гантель.</p></div>` : ''}
+      <h2>Порадник і підказки</h2><div class="card" style="padding:10px 12px">${guideChips()}<div class="quick"><button type="button" class="sm" data-act="food">Харчування</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Можливості</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
       <h2>Резервна копія</h2><div class="card"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: ${DB.lastBackup ? dm(DB.lastBackup) : 'ще не було'}</p>
         <label class="sw"><span>Разом із фото<div class="tiny muted">файл буде більшим</div></span><input type="checkbox" id="bkPhotos"></label>
         <button type="button" class="pri wide" data-act="backup">Зберегти резервну копію</button><p></p>
         <label class="btn" style="display:block;text-align:center">Відновити з копії<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label><p></p>
         <button type="button" class="wide" data-act="csv">Вивантажити таблицю (CSV)</button></div>
-      <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації, реклами й передачі даних. Голос — системний синтез телефону, без інтернету. Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.</p>
-        <button type="button" class="ghost wide" style="color:var(--bad)" data-act="wipe">Стерти дані цієї програми</button></div>`;
+      <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації й реклами: ваші дані не залишають телефон. Голос тренера — записані фрази; збережені в телефоні, вони працюють без інтернету. Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.</p></div>`;
     document.getElementById('voiceOn').onchange = (e) => { V.on = e.target.checked; save(); if (V.on) { VOICE.unlock(); talk('Голос увімкнено.'); } else { VOICE.stop(); VOICEPACK.stop(); } };
     document.getElementById('voiceSilent').onchange = (e) => { V.silent = e.target.checked; save(); audioMode(); };
     const vs = document.getElementById('voiceSel'); if (vs) vs.onchange = () => { V.uri = vs.value; save(); talk('Так звучить цей голос.'); };
-    document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); initPacks(); };
-    document.getElementById('weekSel').onchange = (e) => { const w = Number(e.target.value); p.offset = (w - 1) * 3 - p.sessions.length; save(); toast('Наступне тренування — тиждень ' + w); };
-    document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast('Вага грифа — від 0 до 10 кг'); e.target.value = fmt(p.handle); return; } p.handle = v; save(); toast('Збережено'); };
+    if (document.getElementById('progSel')) document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); initPacks(); };
+    document.getElementById('weekSel').onchange = (e) => { const w = Number(e.target.value); p.offset = (w - 1) * (G().perWeek || 3) - p.sessions.length; save(); toast('Наступне тренування — тиждень ' + w); };
+    if (hasDb) document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast('Вага грифа — від 0 до 10 кг'); e.target.value = fmt(p.handle); return; } p.handle = v; save(); toast('Збережено'); };
     app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); save(); rMore(); }; });
     app.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { S()[el.dataset.set] = el.checked; save(); if (el.dataset.set === 'haptics' && el.checked) haptic(); }; });
     document.getElementById('restoreIn').onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
@@ -1198,7 +1349,10 @@
         if (!o || o.app !== 'trening' || !o.db || !o.db.profiles) throw new Error('format');
         const cnt = Object.values(o.db.profiles).reduce((a, q) => a + ((q && q.sessions) ? q.sessions.length : 0), 0);
         if (!confirm('Відновити копію від ' + String(o.exported || '').slice(0, 10) + ' (' + plural(cnt, 'тренування', 'тренування', 'тренувань') + ')? Поточні дані на цьому телефоні буде замінено.')) return;
-        DB = fixProfiles(ENGINE.migrate(o.db)); if (!DB.active || !DB.profiles[DB.active]) DB.active = Object.keys(DB.profiles)[0] || null;
+        if (o.db.custom && o.db.custom.answers) { PROGRAMS.me = buildMe(o.db.custom.answers); STORE.update(STORE.current, { name: o.db.custom.answers.name, sub: PROGRAMS.me.sub }); }
+        else if ((STORE.account(STORE.current) || {}).name === 'Новий акаунт') STORE.update(STORE.current, { name: 'Мій профіль' });
+        ui.q = null;
+        DB = fixProfiles(ENGINE.migrate(o.db)); if (!DB.active || !DB.profiles[DB.active] || !PROGRAMS[DB.active]) DB.active = Object.keys(DB.profiles).filter((k) => PROGRAMS[k])[0] || null;
         VOICE.init(DB.settings.voice); RADIO.setDuck(DB.settings.radio.duck);
         if (o.photos && o.photos.length) { for (const x of o.photos) { try { await STORE.putPhoto({ id: x.id, profile: x.profile, date: x.date, pose: x.pose, blob: STORE.dataToBlob(x.data) }); } catch (e) { /* пропуск */ } } }
         save(); toast('Дані відновлено'); view = DB.active ? 'home' : 'onboard'; render(); initPacks();
@@ -1279,26 +1433,57 @@
     if (act === 'rduck') { S().radio.duck = Number(b.dataset.v); RADIO.setDuck(S().radio.duck); save(); return radioSheet(); }
     if (act === 'food') { view = 'body'; ui.bodyTab = 'n'; render(); window.scrollTo(0, 0); return; }
     /* знайомство */
-    if (act === 'obProg') { ui.obProg = b.dataset.id; ui.ob = 2; return rOnboard(); }
-    if (act === 'obBack') { ui.ob = 1; return rOnboard(); }
-    if (act === 'obDay') { const dd = Number(b.dataset.d), k = ui.obDays.indexOf(dd); if (k >= 0) ui.obDays.splice(k, 1); else ui.obDays.push(dd); b.classList.toggle('pri'); return; }
-    if (act === 'obDone') {
-      const id = ui.obProg; DB.active = id; if (!DB.profiles[id]) DB.profiles[id] = newProfile(id);
-      const p = DB.profiles[id], hv = num(document.getElementById('obHandle').value);
-      p.handle = hv !== null && hv >= 0 && hv <= 10 ? hv : 1;
-      p.inv = { 5: Math.round(num(document.getElementById('obI5').value) || 0), 2.5: Math.round(num(document.getElementById('obI25').value) || 0), 1.25: Math.round(num(document.getElementById('obI125').value) || 0) };
-      p.days = ui.obDays.slice().sort();
-      const w = Number(document.getElementById('obWeek').value); p.offset = (w - 1) * 3 - p.sessions.length;
-      ENGINE.migrate(DB); save();
-      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-      view = 'home'; render(); initPacks(); return;
+    /* користувач і захист */
+    if (act === 'accSwitch') return ACC.leave('pick');
+    if (act === 'accLockNow') return ACC.leave('lock');
+    if (act === 'accProtect') { protectSheet(); return; }
+    if (act === 'pinSave') return protectSave(b);
+    if (act === 'accUnprotect') return confirmOwner('Зняти захист', () => { ACC.disable(STORE.current); closeSheet(); rMore(); toast('Захист знято'); });
+    if (act === 'accRename') {
+      const cur = (STORE.account(STORE.current) || {}).name || '', nm = (prompt('Нове імʼя', cur) || '').trim();
+      if (!nm || nm === cur) return; if (nm.length > 24) { toast('Імʼя — до 24 знаків'); return; }
+      STORE.update(STORE.current, { name: nm }); if (DB.custom) { DB.custom.answers.name = nm; save(); } rMore(); return;
+    }
+    if (act === 'accDelete') return confirmOwner('Видалити мої дані', () => {
+      closeSheet();
+      if (!confirm('Видалити всі ваші тренування, заміри й фото на цьому телефоні й почати з анкети?')) return;
+      if (!confirm('Точно? Повернути можна лише з резервної копії.')) return;
+      ACC.wipe(STORE.current);
+    });
+    if (act === 'ownFace') { ACC.faceOk(STORE.current).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Телефон не підтвердив особу'); }, () => pinErr('Face ID скасовано — спробуйте ще або введіть PIN')); return; }
+    if (act === 'ownPin') { const v = (document.getElementById('ownPin') || {}).value || ''; ACC.pinOk(STORE.current, v).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Невірний PIN'); }); return; }
+    if (act === 'qEdit') { ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
+    /* анкета */
+    if (act === 'qSex' || act === 'qGoal' || act === 'qLevel') {
+      qRead(); const a = qState().a; a[{ qSex: 'sex', qGoal: 'goal', qLevel: 'level' }[act]] = b.dataset.v;
+      if (a.sex === 'm') a.limits = a.limits.filter((x) => x !== 'pregnant');
+      haptic(); return rOnboard();
+    }
+    if (act === 'qEquip') { qRead(); qToggle(qState().a.equip, b.dataset.v); haptic(); return rOnboard(); }
+    if (act === 'qLimit') {
+      qRead(); const L = qState().a.limits, v = b.dataset.v;
+      if (v === 'none') { const had = L.indexOf('none') >= 0; L.length = 0; if (!had) L.push('none'); }
+      else { const k = L.indexOf('none'); if (k >= 0) L.splice(k, 1); qToggle(L, v); }
+      haptic(); return rOnboard();
+    }
+    if (act === 'qDay') { qRead(); if (!qToggle(qState().a.days, Number(b.dataset.v), 4)) toast('Максимум 4 дні — оберіть, який прибрати'); haptic(); return rOnboard(); }
+    if (act === 'qBack') { qRead(); const q = qState(); q.err = false; q.step = Math.max(0, q.step - 1); rOnboard(); window.scrollTo(0, 0); return; }
+    if (act === 'qCancel') { ui.q = null; view = 'more'; render(); return; }
+    if (act === 'qNext') {
+      qRead(); const q = qState(), step = QSTEPS[q.step];
+      if (Object.keys(qErrors(step)).length) { q.err = true; rOnboard(); const e = document.querySelector('.qerr'); if (e) e.scrollIntoView({ block: 'center' }); return; }
+      if (step === 'agree' && GEN.check(q.a).block) { q.err = true; return rOnboard(); }
+      q.err = false;
+      if (q.step === QSTEPS.length - 1) return qFinish();
+      q.step++; rOnboard(); window.scrollTo(0, 0); return;
     }
     const p = P();
     /* головна */
-    if (act === 'start') { VOICE.unlock(); return readySheet(null); }
+    /* питання про спину — лише там, де від нього щось залежить */
+    if (act === 'start') { VOICE.unlock(); if (G().custom && !G().askReady) return startWorkout(null, 'g'); return readySheet(null); }
     if (act === 'go') { closeSheet(); return startWorkout(b.dataset.w || null, b.dataset.r); }
     if (act === 'other') return otherSheet();
-    if (act === 'startW') { VOICE.unlock(); return readySheet(b.dataset.w); }
+    if (act === 'startW') { VOICE.unlock(); if (G().custom && !G().askReady) return startWorkout(b.dataset.w, 'g'); return readySheet(b.dataset.w); }
     if (act === 'resume') { view = 'workout'; return render(); }
     if (act === 'jump') { const k = Number(b.dataset.k), t = today(); const r = p.daily[t] = p.daily[t] || {}; r.jumps = (r.jumps || 0) >= k ? k - 1 : k; save(); haptic(); return rHome(); }
     /* тренування */
@@ -1404,19 +1589,21 @@
     if (act === 'day') { const dd = Number(b.dataset.d), k = p.days.indexOf(dd); if (k >= 0) p.days.splice(k, 1); else p.days.push(dd); p.days.sort(); save(); return rMore(); }
     if (act === 'backup') return backup();
     if (act === 'csv') return csv();
-    if (act === 'wipe') { if (confirm('Стерти всі тренування й заміри цієї програми на цьому телефоні?') && confirm('Точно? Відновити можна лише з резервної копії.')) { DB.profiles[DB.active] = newProfile(DB.active); save(); toast('Дані стерто'); render(); } }
   }
   app.addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b) handle(b, e); });
   app.addEventListener('change', (e) => {
     const t = e.target;
+    if (t.id === 'qAgree') { qState().a.agree = t.checked; return; }
     if (t.dataset && t.dataset.act === 'daily') { const d = today(); const r = P().daily[d] = P().daily[d] || {}; r[t.dataset.id] = t.checked; save(); haptic(); }
   });
 
   /* ---------- запуск ---------- */
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {}); });
-    /* нова версія взяла керування — один раз перезавантажитись, щоб не лишатися на старих файлах */
-    navigator.serviceWorker.addEventListener('controllerchange', () => { try { if (sessionStorage.getItem('swReloaded') !== VERSION) { sessionStorage.setItem('swReloaded', VERSION); location.reload(); } } catch (e) { /* немає */ } });
+    /* нова версія взяла керування — один раз перезавантажитись, щоб не лишатися на старих файлах.
+       Перший запуск (керування ще не було) — без перезавантаження: файли вже нові, а анкета не має губитися. */
+    const hadCtl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!hadCtl) return; try { if (sessionStorage.getItem('swReloaded') !== VERSION) { sessionStorage.setItem('swReloaded', VERSION); location.reload(); } } catch (e) { /* немає */ } });
   }
   /* сторінка й код різних версій (недокачане оновлення) — чистимо кеш файлів і перезавантажуємось один раз */
   (function () {
@@ -1434,4 +1621,4 @@
   render();
   initPacks();
   window.__app = { get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
-})();
+};

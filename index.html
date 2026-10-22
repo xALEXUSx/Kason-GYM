@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.5.2">
+<meta name="app-version" content="3.7.0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -70,7 +70,8 @@ button,.btn{font:inherit;font-size:.95rem;font-weight:500;min-height:44px;border
 button:active{opacity:.82}
 button.pri{background:var(--accent);border:1px solid var(--accent);color:var(--accent-ink);font-weight:500}
 button.pri:active{background:var(--accent2);border-color:var(--accent2);opacity:1}
-button.ghost{background:transparent;border:1px solid var(--accent-text);color:var(--accent-text);font-weight:500}
+button.ghost,.btn.ghost{background:transparent;border:1px solid var(--accent-text);color:var(--accent-text);font-weight:500}
+button.danger{background:transparent;border:1px solid var(--bad);color:var(--bad);font-weight:500}
 button.sm{min-height:44px;min-width:44px;padding:8px 12px;font-size:.86rem;border-radius:0}
 button.wide{width:100%} button.big{min-height:54px;font-size:1.05rem}
 input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:0;padding:10px;min-height:44px;width:100%}
@@ -241,6 +242,27 @@ h3.rg{margin:14px 0 6px;font-size:.7rem;font-weight:700;color:var(--muted);text-
 .wradio{grid-column:1/-1;display:flex;align-items:center;gap:6px} .wradio:empty{display:none}
 .wradio .rbt{flex:1;min-width:0;min-height:44px;border:0;background:var(--soft);display:flex;align-items:center;gap:8px;text-align:left;padding:4px 10px;box-shadow:none;border-radius:0}
 .wradio .rbt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem} .wradio .rbt span.small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* анкета */
+.qprog{height:3px;background:var(--soft);margin:8px 0 4px} .qprog i{display:block;height:100%;background:var(--ochre);transition:width .3s}
+.qopt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:14px 16px;border-left:3px solid var(--line);min-height:52px}
+.qopt.on{border-color:var(--accent-text);border-left-color:var(--ochre);background:var(--accent-soft)}
+.qopt b{font-size:1.02rem} .grid2 .qopt{align-items:center}
+.qopt.multi{position:relative;padding-left:52px}
+.qopt.multi::before{content:'';position:absolute;left:16px;top:50%;width:22px;height:22px;margin-top:-11px;border:2px solid var(--muted);box-sizing:border-box}
+.qopt.multi.on::before{border-color:var(--accent-text);background:var(--accent-text)}
+.qopt.multi.on::after{content:'';position:absolute;left:24px;top:50%;width:6px;height:11px;margin-top:-8px;border:solid var(--card);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.qdays{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px} .qdays .qopt{align-items:center;padding:12px 4px}
+.qerr{color:var(--bad);font-size:.86rem;font-weight:500;margin:6px 0}
+.qnav{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:22px}
+/* користувачі й вхід */
+.acct{display:inline-grid;place-items:center;width:44px;height:44px;flex:0 0 auto;background:var(--mark-tile);color:#fff;font-weight:700;font-size:1.2rem}
+.pick.acc button{display:flex;flex-direction:row;align-items:center;gap:12px}
+.pick.acc button>span:last-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lockbox{text-align:center;margin-top:24px} .lockbox .acct{width:64px;height:64px;font-size:1.6rem;margin:0 auto 8px}
+.lockbox input{text-align:center;font-size:1.4rem;letter-spacing:.4em}
+.lockbox input+button{margin-top:10px}
+/* поки не обрано користувача — без нижнього меню й панелей застосунку */
+body:not(.started) nav#tabs,body:not(.started) #rbar,body:not(.started) #timer{display:none!important}
 #tour{position:fixed;inset:0;z-index:60}
 #tour .th{position:fixed;border-radius:0;box-shadow:0 0 0 9999px rgba(8,32,31,.66);outline:2px solid var(--ochre);pointer-events:none;transition:all .2s}
 #tour .tbx{position:fixed;left:16px;right:16px;max-width:520px;margin:0 auto;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-left:3px solid var(--ochre);border-radius:0;padding:14px}
@@ -263,15 +285,17 @@ h3.rg{margin:14px 0 6px;font-size:.7rem;font-weight:700;color:var(--muted);text-
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="program.js?v=3.5.2"></script>
-<script src="engine.js?v=3.5.2"></script>
-<script src="voice.js?v=3.5.2"></script>
-<script src="coach.js?v=3.5.2"></script>
-<script src="radio.js?v=3.5.2"></script>
-<script src="voicepack.js?v=3.5.2"></script>
-<script src="tips.js?v=3.5.2"></script>
-<script src="charts.js?v=3.5.2"></script>
-<script src="store.js?v=3.5.2"></script>
-<script src="app.js?v=3.5.2"></script>
+<script src="program.js?v=3.7.0"></script>
+<script src="engine.js?v=3.7.0"></script>
+<script src="voice.js?v=3.7.0"></script>
+<script src="coach.js?v=3.7.0"></script>
+<script src="radio.js?v=3.7.0"></script>
+<script src="voicepack.js?v=3.7.0"></script>
+<script src="tips.js?v=3.7.0"></script>
+<script src="charts.js?v=3.7.0"></script>
+<script src="store.js?v=3.7.0"></script>
+<script src="generator.js?v=3.7.0"></script>
+<script src="app.js?v=3.7.0"></script>
+<script src="accounts.js?v=3.7.0"></script>
 </body>
 </html>

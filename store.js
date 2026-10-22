@@ -1,11 +1,38 @@
 /* Дані: журнал — localStorage (ключ версії 1, дані переносяться), фото — IndexedDB. Усе лише в цьому телефоні. */
 var STORE = (function () {
-  var KEY = 'trening_v1';
-  function load() {
-    try { var raw = localStorage.getItem(KEY); if (raw) { var d = JSON.parse(raw); if (d && d.profiles) return ENGINE.migrate(d); } } catch (e) { /* немає сховища */ }
+  /* Акаунти на одному телефоні: реєстр (імена, замок) і окремий журнал кожного.
+     Перший акаунт лишається на старому ключі 'trening_v1' — наявні дані нікуди не переносяться. */
+  var LEGACY = 'trening_v1', REG = 'trening_accounts', acc = null;
+  function keyOf(id) { return id === 'a1' ? LEGACY : LEGACY + '@' + id; }
+  function readReg() {
+    try { var r = JSON.parse(localStorage.getItem(REG) || 'null'); if (r && Array.isArray(r.list)) return r; } catch (e) { /* немає */ }
+    var r0 = { v: 1, list: [], last: null };
+    try { if (localStorage.getItem(LEGACY)) { r0.list.push({ id: 'a1', name: 'Мій акаунт', created: Date.now() }); r0.last = 'a1'; writeReg(r0); } } catch (e) { /* немає сховища */ }
+    return r0;
+  }
+  function writeReg(r) { try { localStorage.setItem(REG, JSON.stringify(r)); return true; } catch (e) { return false; } }
+  function accounts() { return readReg().list; }
+  function account(id) { return accounts().filter(function (a) { return a.id === id; })[0] || null; }
+  function use(id) { acc = id; var r = readReg(); r.last = id; writeReg(r); }
+  function update(id, fields) { var r = readReg(); r.list.forEach(function (a) { if (a.id === id) Object.keys(fields).forEach(function (k) { if (fields[k] === undefined) delete a[k]; else a[k] = fields[k]; }); }); writeReg(r); }
+  function create(name) {
+    var r = readReg(), id = r.list.length || localStorage.getItem(LEGACY) ? 'a' + Date.now().toString(36) : 'a1';
+    r.list.push({ id: id, name: name, created: Date.now() }); writeReg(r); return id;
+  }
+  function remove(id) {
+    var r = readReg(); r.list = r.list.filter(function (a) { return a.id !== id; }); if (r.last === id) r.last = r.list.length ? r.list[0].id : null; writeReg(r);
+    try { localStorage.removeItem(keyOf(id)); } catch (e) { /* немає */ }
+    return tx('readonly', function (st) { return st.getAll(); }).then(function (all) {
+      return Promise.all((all || []).filter(function (p) { return (p.acc || 'a1') === id; }).map(function (p) { return delPhoto(p.id); }));
+    }).catch(function () { /* фото немає */ });
+  }
+  function loadOf(id) {
+    try { var raw = localStorage.getItem(keyOf(id)); if (raw) { var d = JSON.parse(raw); if (d && d.profiles) return ENGINE.migrate(d); } } catch (e) { /* немає сховища */ }
     return ENGINE.migrate({ v: 2, active: null, profiles: {}, lastBackup: null, settings: {} });
   }
-  function save(db) { try { localStorage.setItem(KEY, JSON.stringify(db)); return true; } catch (e) { return false; } }
+  function saveOf(id, db) { try { localStorage.setItem(keyOf(id), JSON.stringify(db)); return true; } catch (e) { return false; } }
+  function load() { return loadOf(acc || 'a1'); }
+  function save(db) { return saveOf(acc || 'a1', db); }
 
   var dbp = null;
   function idb() {
@@ -27,11 +54,11 @@ var STORE = (function () {
       });
     });
   }
-  function putPhoto(rec) { return tx('readwrite', function (st) { st.put(rec); }); }
+  function putPhoto(rec) { if (!rec.acc) rec.acc = acc || 'a1'; return tx('readwrite', function (st) { st.put(rec); }); }
   function delPhoto(id) { return tx('readwrite', function (st) { st.delete(id); }); }
   function listPhotos(profileId) {
     return tx('readonly', function (st) { return st.getAll(); }).then(function (all) {
-      return (all || []).filter(function (p) { return p.profile === profileId; }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+      return (all || []).filter(function (p) { return p.profile === profileId && (p.acc || 'a1') === (acc || 'a1'); }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
     });
   }
   /* Стискання фото до 1080 px по довшій стороні, JPEG 0,82. */
@@ -51,6 +78,7 @@ var STORE = (function () {
   }
   function blobToData(b) { return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(b); }); }
   function dataToBlob(d) { var parts = d.split(','), bin = atob(parts[1]), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); return new Blob([arr], { type: (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg' }); }
-  function allPhotos() { return tx('readonly', function (st) { return st.getAll(); }); }
-  return { load: load, save: save, putPhoto: putPhoto, delPhoto: delPhoto, listPhotos: listPhotos, allPhotos: allPhotos, compress: compress, blobToData: blobToData, dataToBlob: dataToBlob };
+  function allPhotos() { return tx('readonly', function (st) { return st.getAll(); }).then(function (all) { return (all || []).filter(function (p) { return (p.acc || 'a1') === (acc || 'a1'); }); }); }
+  return { accounts: accounts, account: account, use: use, update: update, create: create, remove: remove, loadOf: loadOf, saveOf: saveOf, get current() { return acc; },
+    load: load, save: save, putPhoto: putPhoto, delPhoto: delPhoto, listPhotos: listPhotos, allPhotos: allPhotos, compress: compress, blobToData: blobToData, dataToBlob: dataToBlob };
 })();
