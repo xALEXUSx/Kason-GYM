@@ -435,14 +435,15 @@ var ENGINE = (function () {
       var a = items[i];
       if (a.ss && a.ss.k === 1 && items[i + 1] && items[i + 1].ss && items[i + 1].ss.k === 2) {
         var b = items[i + 1];
+        /* дроп-сет (D) — одразу після свого підходу, без відпочинку: у суперсеті він іде разом із ним, а не після вправи пари */
         var aw = [], an = [], bw = [], bn = [];
-        a.sets.forEach(function (s, j) { (s.type === 'W' ? aw : an).push(j); });
-        b.sets.forEach(function (s, j) { (s.type === 'W' ? bw : bn).push(j); });
+        var grp = function (sets, w, n) { sets.forEach(function (s, j) { if (s.type === 'W') w.push(j); else if (s.type === 'D' && n.length) n[n.length - 1].push(j); else n.push([j]); }); };
+        grp(a.sets, aw, an); grp(b.sets, bw, bn);
         if (!a.skipped) aw.forEach(function (j) { out.push({ i: i, j: j }); });
         if (!b.skipped) bw.forEach(function (j) { out.push({ i: i + 1, j: j }); });
         for (var k = 0; k < Math.max(an.length, bn.length); k++) {
-          if (!a.skipped && k < an.length) out.push({ i: i, j: an[k] });
-          if (!b.skipped && k < bn.length) out.push({ i: i + 1, j: bn[k] });
+          if (!a.skipped && k < an.length) an[k].forEach(function (j) { out.push({ i: i, j: j }); });
+          if (!b.skipped && k < bn.length) bn[k].forEach(function (j) { out.push({ i: i + 1, j: j }); });
         }
         i += 2;
       } else {
@@ -456,11 +457,13 @@ var ENGINE = (function () {
   function restAfter(items, i, j) {
     var it = items[i], s = it.sets[j];
     if (s.type === 'W') return 45;
+    if (it.sets[j + 1] && it.sets[j + 1].type === 'D') return 0;  // далі дроп-сет — одразу, без відпочинку
     if (it.ss && it.ss.k === 1) {
       var b = items[i + 1];
       if (b && !b.skipped) {
-        var nW = it.sets.slice(0, j + 1).filter(function (x) { return x.type !== 'W'; }).length;
-        if (b.sets.filter(function (x) { return x.type !== 'W'; }).length >= nW) return 0;
+        var work = function (x) { return x.type !== 'W' && x.type !== 'D'; };
+        var nW = it.sets.slice(0, j + 1).filter(work).length;
+        if (b.sets.filter(work).length >= nW) return 0;
       }
       return it.rest;
     }

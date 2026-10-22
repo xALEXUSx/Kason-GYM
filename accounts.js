@@ -1,4 +1,5 @@
-/* Вхід у застосунок: один користувач на телефоні, захист — Face ID (ключ доступу WebAuthn, без сервера) і запасний PIN.
+/* Вхід у застосунок: один користувач на телефоні; захист — необовʼязковий код із 4 цифр (за замовчуванням вимкнений:
+   iPhone і так відкривається Face ID). Face ID через «ключ входу» прибрано з 3.11 — див. нижче.
    Це замок на дверях застосунку, а не шифрування: дані лишаються в телефоні, захищеному його власним блокуванням.
    Список «Хто тренується?» показується лише тим, у кого з попередньої версії лишилося кілька користувачів.
    Після входу запускає застосунок (APP_START). Уся розмітка — у #app, стилі — з index.html. */
@@ -13,20 +14,9 @@ var ACC = (function () {
   function rnd(n) { var a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
   function b64u(buf) { var s = '', b = new Uint8Array(buf); for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
   function unb64u(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; var bin = atob(s), out = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
-  async function canFace() {
-    try { return !!(window.PublicKeyCredential && window.isSecureContext && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch (e) { return false; }
-  }
-  /* Створити ключ (iPhone спитає Face ID). Викликати лише з натискання. */
-  async function enroll(id) {
-    var a = STORE.account(id); if (!a) throw new Error('немає акаунта');
-    var cred = await navigator.credentials.create({ publicKey: {
-      challenge: rnd(32), rp: { name: 'Тренування', id: location.hostname },
-      user: { id: rnd(16), name: a.name + ' · Тренування', displayName: a.name },
-      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
-      timeout: 60000, attestation: 'none' } });
-    STORE.update(id, { cred: b64u(cred.rawId) });
-  }
+  /* Face ID через «ключ входу» (passkey) прибрано з 3.11: вебзастосунку iPhone не дає справжній Face ID — лише вікно ключа входу,
+     схоже на збереження пароля. Нових ключів не створюємо; faceOk лишився тільки для тих, у кого ключ уже був (один раз — до вибору:
+     лишити код чи вимкнути, app.js credSheet). */
   /* Перевірити обличчя. true — лише якщо телефон підтвердив особу (прапорець UV). */
   async function faceOk(id) {
     var a = STORE.account(id); if (!a || !a.cred) return false;
@@ -72,20 +62,21 @@ var ACC = (function () {
   function enter(id) { return locked(id) ? lockScreen(id) : open(id); }
   function lockScreen(id, msg) {
     var a = STORE.account(id); if (!a) return picker();
+    if (!locked(id)) return open(id);  // блокувати нічим (код вимкнено) — одразу в застосунок, а не порожній екран
     var w = waitLeft(id);
     app.innerHTML = '<div class="brand">' + window.MARK_SVG + '<b>Тренування</b></div><div class="lockbox">' + tile(a.name) + '<h1>' + esc(a.name) + '</h1>' +
       (msg ? '<div class="note b small">' + esc(msg) + '</div>' : '') +
       (a.cred ? '<button type="button" class="pri wide big" data-face="' + esc(id) + '">Увійти з Face ID</button><p></p>' : '') +
-      (a.pin ? '<label class="f">PIN-код</label><input id="pinIn" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••"' + (w ? ' disabled' : '') + '>' +
-        '<button type="button" class="wide" data-pin="' + esc(id) + '"' + (w ? ' disabled' : '') + '>' + (w ? 'Зачекайте ' + w + ' с' : 'Увійти з PIN') + '</button>' : '') +
+      (a.pin ? '<label class="f">Код (4 цифри)</label><input id="pinIn" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••"' + (w ? ' disabled' : '') + '>' +
+        '<button type="button" class="wide" data-pin="' + esc(id) + '"' + (w ? ' disabled' : '') + '>' + (w ? 'Зачекайте ' + w + ' с' : 'Увійти') + '</button>' : '') +
       (STORE.accounts().length > 1 ? '<p></p><button type="button" class="ghost wide" data-acc-list="1">Інший користувач</button>' : '') +
-      '<p></p><button type="button" class="ghost wide" data-reset="' + esc(id) + '">Забули PIN?</button></div>';
+      '<p></p><button type="button" class="ghost wide" data-reset="' + esc(id) + '">Забули код?</button></div>';
     if (w) setTimeout(function () { if (document.querySelector('[data-pin="' + id + '"]')) lockScreen(id); }, w * 1000 + 200);
   }
-  /* Забули PIN, а Face ID не працює: почати заново. Нічого не відкриває — лише стирає дані цього користувача. */
+  /* Забули код: почати заново. Нічого не відкриває — лише стирає дані цього користувача. */
   function resetScreen(id) {
     app.innerHTML = '<div class="brand">' + window.MARK_SVG + '<b>Тренування</b></div><div class="lockbox"><h1>Почати заново?</h1>' +
-      '<div class="note b small">Без PIN чи Face ID відкрити ці дані не можна. Можна лише видалити їх і пройти анкету знову. Усі тренування, заміри й фото на цьому телефоні буде стерто.</div>' +
+      '<div class="note b small">Без коду відкрити ці дані не можна. Можна лише видалити їх і пройти анкету знову. Усі тренування, заміри й фото на цьому телефоні буде стерто.</div>' +
       '<p class="small">Є резервна копія? Після анкети відкрийте її: «Більше» → «Відновити з копії».</p>' +
       '<button type="button" class="wide danger" data-reset-yes="' + esc(id) + '">Видалити все й почати заново</button><p></p>' +
       '<button type="button" class="pri wide" data-reset-no="' + esc(id) + '">Назад до входу</button></div>';
@@ -114,21 +105,21 @@ var ACC = (function () {
       if (busy) return;
       var pid = d.pin, inp = document.getElementById('pinIn'), v = inp ? inp.value.trim() : '';
       if (waitLeft(pid)) return lockScreen(pid);
-      if (!/^\d{4}$/.test(v)) return lockScreen(pid, 'PIN — 4 цифри');
+      if (!/^\d{4}$/.test(v)) return lockScreen(pid, 'Код — 4 цифри');
       /* поки звіряємо — кнопка зайнята: повторні натискання не рахуються як помилки */
       busy = true; b.disabled = true; b.textContent = 'Перевіряю…';
       try {
         if (await pinOk(pid, v)) { clearFails(pid); return open(pid); }
         miss(pid);
         /* поки звіряли, людина могла перейти на інший екран — тоді не повертаємо її назад */
-        if (document.querySelector('[data-pin]')) lockScreen(pid, 'Невірний PIN');
+        if (document.querySelector('[data-pin]')) lockScreen(pid, 'Невірний код');
       }
       finally { busy = false; }
     }
   }
   async function tryFace(id) {
     try { if (await faceOk(id)) { clearFails(id); return open(id); } lockScreen(id, 'Телефон не підтвердив особу'); }
-    catch (e) { lockScreen(id, e && e.name === 'NotAllowedError' ? 'Face ID скасовано або не спрацював — спробуйте ще або введіть PIN' : 'Face ID недоступний — введіть PIN'); }
+    catch (e) { lockScreen(id, e && e.name === 'NotAllowedError' ? 'Face ID скасовано або не спрацював — спробуйте ще або введіть код' : 'Face ID недоступний — введіть код'); }
   }
 
   /* ---------- запуск ---------- */
@@ -159,7 +150,7 @@ var ACC = (function () {
     });
   }
 
-  return { boot: boot, leave: leave, watch: watch, wipe: wipe, canFace: canFace, enroll: enroll, faceOk: faceOk, setPin: setPin, pinOk: pinOk, locked: locked,
+  return { boot: boot, leave: leave, watch: watch, wipe: wipe, faceOk: faceOk, setPin: setPin, pinOk: pinOk, locked: locked,
     disable: function (id) { STORE.update(id, { cred: undefined, pin: undefined, fails: undefined, waitUntil: undefined }); } };
 })();
 ACC.boot();

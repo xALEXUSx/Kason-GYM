@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.10.2';
+  const VERSION = '3.11.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -305,7 +305,7 @@ window.APP_START = () => {
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     ui.q = null; view = 'home'; render(); initPacks();
     toast(fresh ? 'Програму складено' : 'Програму оновлено — історія тренувань збережена');
-    if (fresh && !ACC.locked(STORE.current)) setTimeout(protectSheet, 400);
+    /* захист після анкети не пропонуємо: код необовʼязковий, вмикається в «Більше» → «Профіль» */
   }
 
   /* ---------- допоміжне до вправ ---------- */
@@ -490,13 +490,14 @@ window.APP_START = () => {
   }
   function setName(it, k) {
     const s = it.sets[k]; if (!s) return '';
-    return s.type === 'W' ? 'розминка' : 'підхід ' + it.sets.slice(0, k + 1).filter((x) => x.type !== 'W').length;
+    return s.type === 'W' ? 'розминка' : s.type === 'D' ? 'дроп-сет' : 'підхід ' + it.sets.slice(0, k + 1).filter((x) => x.type !== 'W' && x.type !== 'D').length;
   }
-  const workCount = (it) => it.sets.filter((x) => x.type !== 'W').length;
+  /* робочі підходи — без розминкових і дроп-сетів (дроп — продовження свого підходу) */
+  const workCount = (it) => it.sets.filter((x) => x.type !== 'W' && x.type !== 'D').length;
   const curStep = (d) => ENGINE.stepOrder(d.items).find((st) => !d.items[st.i].sets[st.j].done) || null;
   function stepTitle(d, st) {
     const it = d.items[st.i], s = it.sets[st.j];
-    return s.type === 'W' ? 'Розминковий підхід' : 'Підхід ' + it.sets.slice(0, st.j + 1).filter((x) => x.type !== 'W').length + ' з ' + workCount(it);
+    return s.type === 'W' ? 'Розминковий підхід' : s.type === 'D' ? 'Дроп-сет' : 'Підхід ' + it.sets.slice(0, st.j + 1).filter((x) => x.type !== 'W' && x.type !== 'D').length + ' з ' + workCount(it);
   }
   function nextLabel(d) {
     const st = curStep(d); if (!st) return '';
@@ -519,6 +520,7 @@ window.APP_START = () => {
     const it = d.items[st.i], ex = G().ex[it.ex], s = it.sets[st.j], full = S().voice.level !== 'short', sc = script(it.ex);
     let t = ex.name + '. ' + stepTitle(d, st) + '. ' + VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null);
     if (s.type === 'M') t += ' Міо-підхід: до відмови, далі короткі паузи.';
+    if (s.type === 'D') t += ' Одразу.';
     if (ex.spine && s.type !== 'W') t += ' Запас два.';
     if (it.ss && it.ss.k === 1) { const b = d.items[st.i + 1]; if (b && !b.skipped) t += ' Суперсет: одразу після — ' + G().ex[b.ex].name + '.'; }
     if (brief) return sp(t);
@@ -534,7 +536,7 @@ window.APP_START = () => {
     return sp(t);
   }
   /* розминка й заминка: для «і вдома, і в залі» в день залу — залу (без квартири й крісла), інакше — з довідки програми */
-  function warmSrc() { const d = P() && P().draft, prog = G(); return d && d.place === 'gym' && prog.gymWorkouts ? { id: 'warm', items: GEN.GYM_WARM } : (prog.guide || []).find((g) => g.id === 'warm'); }
+  function warmSrc() { const d = P() && P().draft, prog = G(); return d && d.place === 'gym' && prog.gymWorkouts ? { id: 'warm', items: prog.gymWarm || GEN.GYM_WARM } : (prog.guide || []).find((g) => g.id === 'warm'); }
   function coolText() {
     const w = warmSrc(); if (!w) return '';
     const k = w.items.findIndex((x) => /^#Заминка/.test(x)); if (k < 0) return '';
@@ -814,12 +816,33 @@ window.APP_START = () => {
     ['D', 'Д — дроп', 'Одразу після підходу — ще один у легшому варіанті тією самою вагою (напр., з колін), без відпочинку.'],
     ['F', 'В — до відмови', 'Робите, доки виходить із правильною технікою, без запасу.'],
     ['M', 'М — міо', 'Підхід до відмови, далі 2–3 міні-підходи по 3–5 повторень з паузою 15 с.']];
+  /* дроп-сет: одразу після підходу, без відпочинку, легше — як саме, залежить від обладнання */
+  function dropHow(ex) {
+    if (isMach(ex)) return 'Одразу після підходу, без відпочинку — ще один із легшою вагою: фіксатор на 1–2 кроки нижче (приблизно на чверть легше).';
+    if (ex.type === 'band') return 'Одразу після підходу, без відпочинку — ще один із легшим опором: на рівень нижче або ближче до дверей.';
+    return SET_TYPES.find((t) => t[0] === 'D')[2];
+  }
+  /* «Дроп-сет» у меню вправи — у фазі 3 (тижні 9–11), як у затвердженій програмі; не для вправ на поперек, не там, де програма без відмови,
+     і не у вправах з міо-підходом (ізоляція вже має свій підхід до відмови) */
+  function dropOk(it) {
+    const prog = G(), ex = prog.ex[it.ex], d = P().draft, plan = ENGINE.planFor(prog, d.n);
+    return !!prog.myoFrom && !ex.spine && plan.week >= 9 && plan.week <= 11 && !plan.deload && ex.type !== 'time'
+      && !it.skipped && it.sets.some((x) => x.type !== 'W') && ['D', 'M'].indexOf((it.sets[it.sets.length - 1] || {}).type) < 0;  // після міо — ні: два підходи до відмови на одну вправу
+  }
+  function dropLoad(it) {
+    const ex = G().ex[it.ex], last = it.sets.filter((x) => x.type !== 'W' && x.type !== 'D').slice(-1)[0] || {}, L = Number(last.load);
+    if (last.load === null || last.load === undefined || last.load === '' || !(L > 0)) return last.load === undefined ? null : last.load;
+    if (isMach(ex)) { const st = loadStep(ex, it.ex); return Math.max(st, Math.round(Math.floor(L * 0.75 / st + 1e-9) * st * 100) / 100); }
+    if (ex.type === 'band') return Math.max(1, L - 1);
+    return L;  // гантелі — легший варіант тією самою вагою
+  }
   function typeSheet(i, j) {
-    const it = P().draft.items[i], s = it.sets[j], spine = G().ex[it.ex].spine;
-    const list = SET_TYPES.filter((t) => !spine || t[0] === 'N' || t[0] === 'W');
+    const it = P().draft.items[i], s = it.sets[j], ex = G().ex[it.ex], spine = ex.spine, noFail = !G().myoFrom;
+    /* поперек — без відмови (як у програмі); тиск чи серце або вік від 55 (програма без міо) — теж без підходів до відмови */
+    const list = SET_TYPES.filter((t) => !(spine || noFail) || t[0] === 'N' || t[0] === 'W');
     openSheet(`<div class="sp"><b>Тип підходу</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
-      ${spine ? '<p class="small muted">Вправа навантажує поперек — лише звичайні й розминкові підходи, щоб берегти спину.</p>' : ''}
-      ${list.map((t) => `<button type="button" class="wide tsel${(s.type || 'N') === t[0] ? ' on' : ''}" data-act="stypeSet" data-i="${i}" data-j="${j}" data-t="${t[0]}"><b>${t[1]}</b><span class="small muted">${t[2]}</span></button>`).join('')}`);
+      ${spine ? '<p class="small muted">Вправа навантажує поперек — лише звичайні й розминкові підходи, щоб берегти спину.</p>' : noFail ? '<p class="small muted">Ваша програма — без підходів до відмови (тиск чи серце або вік від 55): лише звичайні й розминкові.</p>' : ''}
+      ${list.map((t) => `<button type="button" class="wide tsel${(s.type || 'N') === t[0] ? ' on' : ''}" data-act="stypeSet" data-i="${i}" data-j="${j}" data-t="${t[0]}"><b>${t[1]}</b><span class="small muted">${t[0] === 'D' ? dropHow(ex) : t[2]}</span></button>`).join('')}`);
   }
   function minisSheet(i, j, keep) {
     /* keep — перемальовуємо після вибору: беремо вже вибране, а не збережене */
@@ -1019,10 +1042,11 @@ window.APP_START = () => {
       <ul class="list">
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
+        <li style="display:block"><b>⬇ Дроп-сет і розминка за станом</b><div class="small muted">У фазі 3 (тижні 9–11) — «⋯ Ще» → «Дроп-сет»: одразу після останнього підходу, без відпочинку, легше (на тренажері — фіксатор на 1–2 кроки нижче). Розминка: без обмежень, до 55 років і до 100 кг — 3 хв (тіло розігріває перший легкий підхід), інакше — повні 10 хв.</div></li>
         <li style="display:block"><b>🏠 Тренажери вдома</b><div class="small muted">У «Що є вдома» — ті самі тренажери, що в залі (або «Усе, як у залі»): удома програма бере їх першими; історія й рекорди спільні з залом, вага — окремо для дому й залу. Додати чи прибрати — будь-коли: «Більше» → «Обладнання вдома»; історія й рекорди лишаються.</div></li>
         <li style="display:block"><b>⚙️ Одне джерело</b><div class="small muted">Дні тренувань, гриф і диски («Більше»), зріст і вік («Харчування») одразу йдуть у програму й в анкету; поточний тиждень зберігається.</div></li>
         <li style="display:block"><b>🍽 Норма одразу</b><div class="small muted">Норма калорій і білка — одразу за вагою з анкети; після зважувань у «Замірах» — за ними.</div></li>
-        <li style="display:block"><b>🔒 Вхід через Face ID</b><div class="small muted">«Більше» → «Захистити Face ID»: PIN і Face ID, щоб ніхто інший на телефоні не відкрив ваш журнал.</div></li>
+        <li style="display:block"><b>🔒 Код при вході — за бажанням</b><div class="small muted">«Більше» → «Профіль» → «Код при вході»: якщо телефоном користуються інші. iPhone і так відкривається Face ID.</div></li>
         <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: навіщо вправа, як робити, чого не робити, вага й диски, відпочинок, «Час!», рекорди. Характер — жорсткий з гумором. Природний записаний голос: чоловічий і жіночий («Більше» → «Голосовий тренер»).</div></li>
         <li style="display:block"><b>📻 Радіо для тренувань</b><div class="small muted">Кнопка «♪»: 11 станцій. Коли говорить тренер, музика плавно притихає.</div></li>
         <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Якщо в анкеті позначено спину: перед тренуванням застосунок питає, як вона, і сам полегшує або прибирає вправи на поперек.</div></li>
@@ -1142,6 +1166,8 @@ window.APP_START = () => {
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}`;
+    /* був Face ID (до 3.11) — один раз вибір: лишити код чи вимкнути */
+    if ((STORE.account(STORE.current) || {}).cred) { if (!document.body.classList.contains('sheet')) credSheet(); return; }
     tourMaybe('home');
   }
   function otherSheet() {
@@ -1353,42 +1379,43 @@ window.APP_START = () => {
   }
   /* ---------- користувач і захист ---------- */
   const PIN_IN = (id) => `<input id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="new-password">`;
-  async function protectSheet() {
-    const face = await ACC.canFace();
-    openSheet(`<div class="sp"><b>Захистити вхід</b><button type="button" class="sm ghost" data-act="closeSheet">Не зараз</button></div>
-      <p class="small">Щоб ніхто інший на цьому телефоні не відкрив ваш журнал. PIN із 4 цифр — обовʼязковий запасний вхід${face ? '; далі телефон попросить Face ID' : ''}.</p>
-      <label class="f" for="pin1">Новий PIN</label>${PIN_IN('pin1')}<label class="f" for="pin2">Ще раз</label>${PIN_IN('pin2')}
+  /* код при вході — необовʼязковий: iPhone і так відкривається Face ID; код — коли телефоном користуються інші */
+  function protectSheet() {
+    openSheet(`<div class="sp"><b>Код при вході</b><button type="button" class="sm ghost" data-act="closeSheet">Не зараз</button></div>
+      <p class="small">Необовʼязково: ваш iPhone і так відкривається Face ID. Код потрібен, лише якщо телефоном користуються інші. Забули код — дані можна лише стерти, тому зберігайте резервну копію.</p>
+      <label class="f" for="pin1">Новий код (4 цифри)</label>${PIN_IN('pin1')}<label class="f" for="pin2">Ще раз</label>${PIN_IN('pin2')}
       <p class="qerr" id="pinErr" hidden></p>
-      <button type="button" class="pri wide" data-act="pinSave" data-face="${face ? 1 : ''}">${face ? 'Зберегти PIN і ввімкнути Face ID' : 'Зберегти PIN'}</button>
-      ${face ? '' : '<p class="tiny muted">Face ID тут недоступний — вхід буде за PIN.</p>'}`);
+      <button type="button" class="pri wide" data-act="pinSave">Зберегти код</button>`);
   }
   function pinErr(t) { const e = document.getElementById('pinErr'); if (e) { e.textContent = t; e.hidden = false; } }
-  /* Face ID викликаємо одразу в натисканні (вимога iPhone), PIN зберігаємо після */
   function protectSave(b) {
     const v1 = (document.getElementById('pin1') || {}).value || '', v2 = (document.getElementById('pin2') || {}).value || '', id = STORE.current;
-    if (!/^\d{4}$/.test(v1)) return pinErr('PIN — рівно 4 цифри');
-    if (v1 !== v2) return pinErr('PIN-коди не збігаються');
-    if (/^(\d)\1{3}$/.test(v1) || v1 === '1234' || v1 === '0000') return pinErr('Занадто простий PIN — оберіть інший');
-    const face = b.dataset.face ? ACC.enroll(id).then(() => true, () => false) : Promise.resolve(false);
+    if (!/^\d{4}$/.test(v1)) return pinErr('Код — рівно 4 цифри');
+    if (v1 !== v2) return pinErr('Коди не збігаються');
+    if (/^(\d)\1{3}$/.test(v1) || v1 === '1234' || v1 === '0000') return pinErr('Занадто простий код — оберіть інший');
     b.disabled = true;
-    face.then(async (ok) => {
-      await ACC.setPin(id, v1); closeSheet(); rMore();
-      toast(b.dataset.face ? (ok ? 'Захист увімкнено: Face ID + PIN' : 'Face ID не ввімкнено — вхід за PIN') : 'Захист увімкнено: PIN');
-    }).catch(() => { b.disabled = false; pinErr('Не вдалося зберегти — спробуйте ще'); });
+    ACC.setPin(id, v1).then(() => { closeSheet(); rMore(); toast('Код при вході ввімкнено'); }).catch(() => { b.disabled = false; pinErr('Не вдалося зберегти — спробуйте ще'); });
   }
-  /* підтвердити, що це власник акаунта (Face ID або PIN), тоді виконати дію */
+  /* підтвердити, що це власник (кодом; Face ID — лише старий, до вибору в credSheet), тоді виконати дію */
+  /* до 3.11 був Face ID через «ключ входу»: один раз — пояснення й вибір (без «Закрити»: вибір обовʼязковий) */
+  function credSheet() {
+    openSheet(`<b>Face ID у застосунку прибрано</b>
+      <p class="small">Справжній Face ID iPhone дає лише звичайним застосункам. Вебзастосунку він показує вікно «ключа входу», схоже на збереження пароля, — тому його прибрано. Ваш iPhone і так відкривається Face ID.</p>
+      <button type="button" class="pri wide" data-act="credOff">Вимкнути код — відкривати одразу</button><p></p>
+      <button type="button" class="wide" data-act="credKeep">Залишити вхід за кодом</button>`);
+  }
   function confirmOwner(title, cb) {
     const a = STORE.account(STORE.current) || {};
     if (!ACC.locked(STORE.current)) return cb();
     openSheet(`<div class="sp"><b>${esc(title)}</b><button type="button" class="sm ghost" data-act="closeSheet">Скасувати</button></div>
       ${a.cred ? '<button type="button" class="pri wide" data-act="ownFace">Підтвердити Face ID</button><p></p>' : ''}
-      ${a.pin ? `<label class="f" for="ownPin">PIN</label>${PIN_IN('ownPin')}<button type="button" class="wide" data-act="ownPin">Підтвердити PIN</button>` : ''}<p class="qerr" id="pinErr" hidden></p>`);
+      ${a.pin ? `<label class="f" for="ownPin">Код</label>${PIN_IN('ownPin')}<button type="button" class="wide" data-act="ownPin">Підтвердити код</button>` : ''}<p class="qerr" id="pinErr" hidden></p>`);
     ui.ownCb = cb;
   }
   function accountCard() {
     const id = STORE.current, a = STORE.account(id) || {}, on = ACC.locked(id), many = STORE.accounts().length > 1;
-    return `<h2>Профіль</h2><div class="card"><div class="sp"><div><b>${esc(a.name || '')}</b><div class="small muted">${on ? (a.cred ? 'вхід: Face ID або PIN' : 'вхід: PIN') : 'вхід без захисту'}</div></div>${many ? '<button type="button" class="sm" data-act="accSwitch">Змінити</button>' : ''}</div>
-      <div class="row" style="margin-top:10px">${on ? '<button type="button" class="sm" data-act="accLockNow">Заблокувати</button><button type="button" class="sm ghost" data-act="accUnprotect">Зняти захист</button>' : '<button type="button" class="sm pri" data-act="accProtect">Захистити Face ID</button>'}<button type="button" class="sm ghost" data-act="accRename">Змінити імʼя</button></div>
+    return `<h2>Профіль</h2><div class="card"><div class="sp"><div><b>${esc(a.name || '')}</b><div class="small muted">${on ? 'вхід: код' : 'вхід без коду (iPhone і так відкривається Face ID)'}</div></div>${many ? '<button type="button" class="sm" data-act="accSwitch">Змінити</button>' : ''}</div>
+      <div class="row" style="margin-top:10px">${on ? '<button type="button" class="sm" data-act="accLockNow">Заблокувати</button><button type="button" class="sm ghost" data-act="accUnprotect">Вимкнути код</button>' : '<button type="button" class="sm" data-act="accProtect">Код при вході</button>'}<button type="button" class="sm ghost" data-act="accRename">Змінити імʼя</button></div>
       <button type="button" class="danger wide" style="margin-top:10px" data-act="accDelete">Видалити мої дані й почати заново</button></div>`;
   }
   /* вибір програми — лише якщо з попередньої версії лишилось кілька журналів */
@@ -1521,6 +1548,7 @@ window.APP_START = () => {
         <button type="button" data-act="skip" data-i="${i}">⏭ Пропустити</button>
         <button type="button" data-act="addset" data-i="${i}">+ Підхід</button>
         <button type="button" data-act="delset" data-i="${i}">− Останній підхід</button>
+        ${dropOk(it) ? `<button type="button" data-act="dropset" data-i="${i}">⬇ Дроп-сет</button>` : ''}
         ${canWarm ? `<button type="button" data-act="warm" data-i="${i}">Розминковий підхід</button>` : ''}
       </div>${started ? '<p class="tiny muted">Заміна — лише до першого підходу вправи.</p>' : ''}
       <label class="f">Моя нотатка до вправи (видно щоразу)</label><textarea id="exNote" placeholder="наприклад: крісло біля стіни, хват ширший">${esc(P().notes[it.ex] || '')}</textarea><p></p>
@@ -1583,7 +1611,10 @@ window.APP_START = () => {
     if (act === 'accLockNow') return ACC.leave('lock');
     if (act === 'accProtect') { protectSheet(); return; }
     if (act === 'pinSave') return protectSave(b);
-    if (act === 'accUnprotect') return confirmOwner('Зняти захист', () => { ACC.disable(STORE.current); closeSheet(); rMore(); toast('Захист знято'); });
+    if (act === 'accUnprotect') return confirmOwner('Вимкнути код', () => { ACC.disable(STORE.current); closeSheet(); rMore(); toast('Код вимкнено'); });
+    /* перехід із Face ID (до 3.11): один вибір — лишити код чи вимкнути; старий ключ входу більше не використовується */
+    if (act === 'credOff') { ACC.disable(STORE.current); closeSheet(); render(); toast('Код вимкнено — застосунок відкривається одразу'); return; }
+    if (act === 'credKeep') { STORE.update(STORE.current, { cred: undefined }); closeSheet(); render(); toast('Вхід — за кодом'); return; }
     if (act === 'accRename') {
       const cur = (STORE.account(STORE.current) || {}).name || '', nm = (prompt('Нове імʼя', cur) || '').trim();
       if (!nm || nm === cur) return; if (nm.length > 24) { toast('Імʼя — до 24 знаків'); return; }
@@ -1596,7 +1627,7 @@ window.APP_START = () => {
       ACC.wipe(STORE.current);
     });
     if (act === 'ownFace') { ACC.faceOk(STORE.current).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Телефон не підтвердив особу'); }, () => pinErr('Face ID скасовано — спробуйте ще або введіть PIN')); return; }
-    if (act === 'ownPin') { const v = (document.getElementById('ownPin') || {}).value || ''; ACC.pinOk(STORE.current, v).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Невірний PIN'); }); return; }
+    if (act === 'ownPin') { const v = (document.getElementById('ownPin') || {}).value || ''; ACC.pinOk(STORE.current, v).then((ok) => { if (ok && ui.ownCb) { const cb = ui.ownCb; ui.ownCb = null; cb(); } else pinErr('Невірний кIN'); }); return; }
     /* під час тренування анкета не змінюється: нова програма скасувала б незавершене тренування */
     if (act === 'qEdit') { if (P() && P().draft) return; ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
     /* анкета */
@@ -1679,6 +1710,11 @@ window.APP_START = () => {
     if (act === 'swapTo') return doSwap(i, b.dataset.ex);
     if (act === 'copyprev') { const s = p.draft.items[i].sets[j]; if (!s.prev || s.done) return; s.load = s.prev.load; s.reps = s.prev.reps; s.touched = true; save(); haptic(); return rWorkout(); }
     if (act === 'variant') { p.draft.items[i].variant = b.dataset.v; save(); return rWorkout(); }
+    if (act === 'dropset') {
+      const it = p.draft.items[i]; if (!dropOk(it)) return;
+      it.sets.push({ type: 'D', load: dropLoad(it), reps: it.min || null, rir: null, done: false, pr: [], prev: null, touched: true });
+      save(); haptic(); closeSheet(); toast('Дроп-сет додано — одразу після останнього підходу, без відпочинку'); return rWorkout();
+    }
     if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false }); save(); closeSheet(); return rWorkout(); }
     if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm, isMach(ex) ? loadStep(ex, it.ex) : 0); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); closeSheet(); return rWorkout(); }
     if (act === 'exmenu') return exMenu(i);

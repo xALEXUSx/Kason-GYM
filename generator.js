@@ -174,6 +174,9 @@ var GEN = (function () {
     var lim = (a.limits || []).filter(function (x) { return x !== 'none'; });
     var avoid = {}; lim.forEach(function (l) { (AVOID[l] || []).concat(GAVOID[l] || []).forEach(function (id) { avoid[id] = true; }); });
     var age = Number(a.age), older = age >= 55, novice = a.level !== 'exp', heart = lim.indexOf('heart') >= 0, back = lim.indexOf('back') >= 0;
+    /* коротка розминка (3 хв) — лише без обмежень, до 55 і до 100 кг: тіло розігріває перший легкий підхід вправи;
+       з тиском чи серцем, спиною, суглобами, від 55 або від 100 кг — повна, 10 хв (поступово, як радить ACSM) */
+    var shortWarm = !lim.length && !older && !(Number(a.weight) >= 100);
     var perWeek = Math.min(4, Math.max(2, (a.days || []).length || 3));
 
     /* визначення вправ: своєї статі, інакше — з другої програми; лише ті, що можна з цим обладнанням і цими обмеженнями */
@@ -251,6 +254,7 @@ var GEN = (function () {
       ready: { swap: back ? { rdl: 'bridge' } : {} },
       myoFrom: (heart || older) ? 0 : 5,
       tests: older || a.goal === 'posture',
+      gymWarm: has.gym ? (shortWarm ? GYM_WARM_SHORT : GYM_WARM).slice() : null,
       warm: (has.db || has.gym || has.mach) ? PROGRAMS.him.warm : PROGRAMS.her.warm, heavy: Number(a.weight) >= 100,
       week: function (wk) {
         if (split && wk >= 5) return ['D1', 'D2', 'D3'];
@@ -277,14 +281,14 @@ var GEN = (function () {
         if (wk === 8) return { phase: 'Легкий тиждень', rir: 'запас 3–4', text: 'Підходів удвічі менше, вага та сама або на крок нижча. Без міо-підходів.' };
         if (wk === 12) return { phase: 'Легкий тиждень і заміри', rir: 'запас 3–4', text: 'Підходів удвічі менше. Заміри: вага, талія, фото — розділ «Тіло».' };
         if (wk <= 7) return { phase: 'Фаза 2 · обʼєм', rir: heart ? 'запас 3' : 'запас 2', text: (this.myoFrom ? 'Нове — міо-підходи в останньому підході ізоляції. ' : '') + 'Не затримуйте дихання: видих на зусиллі.' + ss };
-        return { phase: 'Фаза 3 · інтенсивність', rir: rirHard, text: 'Опускання 3–4 с, пауза внизу. Техніка важливіша за вагу.' + ss };
+        return { phase: 'Фаза 3 · інтенсивність', rir: rirHard, text: 'Опускання 3–4 с, пауза внизу. Техніка важливіша за вагу.' + (this.myoFrom ? ' Дроп-сет за бажанням — у базових вправах (в ізоляції вже є міо-підхід): після останнього підходу «⋯ Ще» → «Дроп-сет»' + (back ? ', не для вправ на поперек' : '') + '.' : '') + ss };
       },
       /* осанка щодня: без еспандера — без розведення петлі (решта вправ — без обладнання) */
       daily: [].concat(back ? [PROGRAMS.him.daily[0]] : [], a.goal === 'posture' ? [has.band ? PROGRAMS.her.daily[0] : Object.assign({}, PROGRAMS.her.daily[0], { label: 'Осанка 5 хв (підборіддя, ангел, розтяжки)' })] : [], [{ id: 'walk', label: 'Ходьба 30–45 хв або 7–10 тис. кроків' }]),
       posture: PROGRAMS.her.posture.filter(function (r) { return has.band || !/петл/i.test(r[0] + r[2]); }),
       testsHow: PROGRAMS.her.testsHow,
       food: food(a),
-      guide: guides(has, back, a.goal, sex, ex, !(heart || older), [workouts, gymWorkouts || {}], home)
+      guide: guides(has, back, a.goal, sex, ex, !(heart || older), [workouts, gymWorkouts || {}], home, shortWarm)
     };
     return prog;
   }
@@ -345,6 +349,14 @@ var GEN = (function () {
   var GYM_WARM = ['#Розминка · 10 хв', 'Велотренажер або доріжка — 5 хв у легкому темпі.', 'Суглоби: кола плечима, ліктями, кистями, тазом, коліньми — по 10 разів.',
     'Перед першою базовою вправою — 1 підхід × 12 з половинною вагою: застосунок додає його сам. До інших вправ — «Ще» → «Розминковий підхід».',
     '#Заминка · 5 хв', '5 хв повільної ходьби та легка розтяжка грудей, задньої поверхні стегна, литок — по 20–30 с.'];
+  /* Коротка розминка — без обмежень, до 55 і до 100 кг: суглоби й рух без ваги, далі тіло розігріває перший легкий підхід
+     (його застосунок додає сам). Фрази — ті самі, що в повній розминці, нові лише заголовок і «2 хв» у залі. */
+  var HOME_WARM_SHORT = ['#Розминка · 3 хв', 'Суглоби: кола плечима, ліктями, кистями, тазом, коліньми — по 10 разів.', '10 присідань до крісла без ваги + 10 нахилів «відвести таз назад» без ваги.',
+    'Перед першою базовою вправою — 1 підхід × 12 з половинною вагою: застосунок додає його сам. До інших вправ — «Ще» → «Розминковий підхід».',
+    '#Заминка · 5 хв', '5 хв повільної ходьби та легка розтяжка грудей, задньої поверхні стегна, литок — по 20–30 с.'];
+  var GYM_WARM_SHORT = ['#Розминка · 3 хв', 'Велотренажер або доріжка — 2 хв у легкому темпі.', 'Суглоби: кола плечима, ліктями, кистями, тазом, коліньми — по 10 разів.',
+    'Перед першою базовою вправою — 1 підхід × 12 з половинною вагою: застосунок додає його сам. До інших вправ — «Ще» → «Розминковий підхід».',
+    '#Заминка · 5 хв', '5 хв повільної ходьби та легка розтяжка грудей, задньої поверхні стегна, литок — по 20–30 с.'];
   var GYM_SAFETY = ['Тренажер: перед підходом підлаштуйте сидіння й упори під свій зріст; фіксатор ваги — у блок до кінця.', 'Вагу не кидайте: опускайте плавно до кінця руху.'];
   var GYM_GEAR = ['#Налаштування', 'Сидіння, валики й упори — під свій зріст, перш ніж брати вагу. Вісь обертання тренажера — навпроти суглоба, що працює.',
     'Фіксатор ваги — у блок до кінця. Трос і ручка цілі — тоді працюйте.', '#Вага', 'Застосунок пропонує вагу кроком: на тренажерах — 5 кг, на блоках — 2,5 кг. Інший крок на вашому тренажері — вводьте свою вагу цифрами: застосунок підхопить крок цього тренажера з ваших ваг і далі пропонуватиме вагу на ньому. Удома й у залі вага рахується окремо: це різні тренажери.',
@@ -370,7 +382,7 @@ var GEN = (function () {
       .concat(['Вправи, що найбільше навантажують поперек чи згинають хребет під вагою (румунська тяга, шраги, фермерська прогулянка, тяга в нахилі, пуловер, скручування), у програму не входять.'])
       .concat(src.slice(src.indexOf('#Правило болю'))) };
   }
-  function guides(has, back, goal, sex, ex, myo, lists, home) {
+  function guides(has, back, goal, sex, ex, myo, lists, home, shortWarm) {
     /* пункти про грижі й питання про спину — лише тим, хто позначив спину */
     var clean = function (g) {
       if (!g) return g;
@@ -390,7 +402,8 @@ var GEN = (function () {
     else if (has.gym || has.mach) { var stop = safe.items.filter(function (x) { return /^Стоп-сигнали:/.test(x); }); safe = { id: 'safety', title: safe.title, items: safe.items.filter(function (x) { return stop.indexOf(x) < 0; }).concat(GYM_SAFETY, stop) }; }
     out.push(safe);
     /* розминка — та, що відповідає розминковому підходу програми (гантелі чи тренажери — 1 × 12; лише петля — підходу немає) */
-    var warm = gymOnly ? { id: 'warm', title: 'Розминка й заминка', items: GYM_WARM.slice() } : pick(loadWarm ? 'him' : 'her', 'warm');
+    var warm = gymOnly ? { id: 'warm', title: 'Розминка й заминка', items: (shortWarm ? GYM_WARM_SHORT : GYM_WARM).slice() }
+      : shortWarm ? { id: 'warm', title: 'Розминка й заминка', items: HOME_WARM_SHORT.slice() } : pick(loadWarm ? 'him' : 'her', 'warm');
     warm = { id: warm.id, title: warm.title, items: warm.items.map(function (x) {
       if (!/^Перед першою/.test(x)) return x;
       if (!loadWarm) return null;                                            // лише петля: розминковий підхід застосунок не додає
@@ -408,6 +421,6 @@ var GEN = (function () {
     return out.filter(Boolean);
   }
 
-  return { VER: VER, GOALS: GOALS, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM };
+  return { VER: VER, GOALS: GOALS, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
 })();
 if (typeof module !== 'undefined') module.exports = GEN;
