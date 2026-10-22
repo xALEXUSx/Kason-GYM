@@ -12,5 +12,19 @@
   "note": "базовий голос Google, спокійніший",
   "gender": "f",
   "priority": 1
+ },
+ {
+  "id": "tm",
+  "name": "Тренер · Algenib",
+  "note": "природний голос з характером (Gemini)",
+  "gender": "m",
+  "priority": 2
+ },
+ {
+  "id": "tf",
+  "name": "Тренерка · Sulafat",
+  "note": "природний голос з характером (Gemini)",
+  "gender": "f",
+  "priority": 2
  }
 ]
