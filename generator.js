@@ -8,6 +8,25 @@ var GEN = (function () {
   /* ---------- анкета: усі поля обовʼязкові ---------- */
   var GOALS = { loss: 'Схуднути', muscle: 'Набрати мʼязи', health: 'Сила й здоровʼя', posture: 'Спина й осанка' };
   var EQUIP = { db: 'Гантелі з дисками', band: 'Петля-еспандер (резинка з кріпленням до дверей)' };
+  /* Тренажери вдома — те саме обладнання, що в залі: ті самі вправи, тож історія й рекорди спільні з залом (вагу застосунок
+     підказує з разів на тому самому місці — app.js, histAt).
+     Ключ — обладнання так, як його купують; значення — [назва, підпис, вправи залу на ньому]. Додати чи прибрати можна будь-коли:
+     програма перебудовується, вправи, що вибули, лишаються в історії. */
+  var MACH = {
+    cable: ['Блок (верхній і нижній)', 'тяги зверху й знизу, руки, тяга каната, паллоф', ['g_latpull', 'g_cablerow', 'g_pushdown', 'g_cablecurl', 'g_facepull', 'g_cablelat', 'g_pallof']],
+    legpress: ['Жим ногами', '', ['g_legpress']],
+    legcurl: ['Згинання й розгинання ніг', 'один тренажер або два', ['g_legcurl', 'g_legext']],
+    chestpress: ['Жим від грудей', '', ['g_chestpress']],
+    shpress: ['Жим угору сидячи', '', ['g_shpress']],
+    pecdeck: ['Зведення рук (пек-дек)', 'і зворотні розведення', ['g_pecdeck', 'g_revfly']],
+    abduct: ['Розведення ніг', '', ['g_abduct']],
+    machrow: ['Тяга з упором у груди', '', ['g_machrow']],
+    bicep: ['Тренажер для біцепса', '', ['g_machcurl']],
+    tricep: ['Тренажер для трицепса', '', ['g_triext']]
+  };
+  /* без чого вдома немає тяг зверху й знизу (спини): гантелі, петля або блок. Тяга з упором у груди — лише тяга знизу:
+     сама по собі (навіть з іншими тренажерами) дає тренування з 3–4 вправ — перевірено на всіх наборах */
+  var PULL = ['db', 'band', 'cable'];
   /* Де тренуються: удома (гантелі, петля), у залі (тренажери й блоки) або і там, і там — тоді перед тренуванням застосунок питає «Де сьогодні?» */
   var PLACES = { home: 'Вдома', gym: 'У тренажерному залі', both: 'І вдома, і в залі' };
   /* Здоровʼя — лише те, що справді змінює програму: кожен пункт прибирає або полегшує певні вправи */
@@ -29,7 +48,7 @@ var GEN = (function () {
     if (a.level !== 'new' && a.level !== 'exp') e.level = 'Оберіть досвід';
     if (!PLACES[a.place]) e.place = 'Оберіть, де тренуєтесь';
     var eq = a.equip || [];
-    if (a.place !== 'gym' && !eq.length) e.equip = 'Потрібні гантелі або петля-еспандер';
+    if (a.place !== 'gym' && !eq.some(function (x) { return PULL.indexOf(x) >= 0; })) e.equip = 'Для тяг (спина) потрібні гантелі, петля або блок';
     var lim = a.limits || [];
     if (a.sex === 'm') lim = lim.filter(function (x) { return x !== 'pregnant'; });
     if (!lim.length) e.limits = 'Позначте, що у вас є, або «Нічого з цього»';
@@ -128,6 +147,19 @@ var GEN = (function () {
     B: [['hinge', ['g_legcurl']], ['single', ['g_legext', 'splitsquat', 'calf']], ['row', ['g_cablerow']], ['side', ['g_cablelat', 'g_facepull']],
       ['rear', ['g_facepull', 'g_cablelat']], ['chest', ['g_pecdeck', 'pushup']], ['tri', ['g_pushdown']], ['core', ['g_pallof', 'sideplank', 'deadbug']]]
   };
+  /* Вдома з тренажерами: на кожне місце — спершу тренажер того самого руху (як у залі; є вдома — вдома як у залі),
+     далі затверджені домашні вправи (FULL), далі запасні вправи залу. Без тренажерів удома — рівно FULL, як і раніше. */
+  var HM = {
+    A: { squat: ['g_legpress'], push: ['g_chestpress'], row: ['g_cablerow', 'g_machrow'], vpull: ['g_latpull'], press: ['g_shpress'], glute: ['g_abduct'], arms: ['g_cablecurl', 'g_machcurl'] },
+    B: { hinge: ['g_legcurl'], single: ['g_legext'], row: ['g_cablerow', 'g_machrow'], side: ['g_cablelat'], rear: ['g_facepull'], chest: ['g_pecdeck'], tri: ['g_pushdown', 'g_triext'], core: ['g_pallof'] }
+  };
+  var HFULL = {};
+  ['A', 'B'].forEach(function (w) {
+    HFULL[w] = FULL[w].map(function (slot) {
+      var g = (GFULL[w].filter(function (x) { return x[0] === slot[0]; })[0] || [0, []])[1], list = [].concat(HM[w][slot[0]] || [], slot[1], g);
+      return [slot[0], list.filter(function (id, i) { return list.indexOf(id) === i; })];
+    });
+  });
   /* Обмеження для тренажерів — як для домашніх вправ того самого руху */
   var GAVOID = { back: [], knees: ['g_legext'], shoulders: ['g_shpress', 'g_pecdeck', 'g_cablelat'], heart: [] };
 
@@ -136,6 +168,9 @@ var GEN = (function () {
     /* старі анкети (до 3.9) місця не мали — це вдома */
     var place = PLACES[a.place] ? a.place : 'home', home = place !== 'gym';
     var has = { db: home && (a.equip || []).indexOf('db') >= 0, band: home && (a.equip || []).indexOf('band') >= 0, gym: place !== 'home' };
+    /* тренажери вдома: вправи залу на обладнанні, яке є вдома */
+    var homeMach = {}; if (home) Object.keys(MACH).forEach(function (k) { if ((a.equip || []).indexOf(k) >= 0) MACH[k][2].forEach(function (id) { homeMach[id] = true; }); });
+    has.mach = Object.keys(homeMach).length > 0;
     var lim = (a.limits || []).filter(function (x) { return x !== 'none'; });
     var avoid = {}; lim.forEach(function (l) { (AVOID[l] || []).concat(GAVOID[l] || []).forEach(function (id) { avoid[id] = true; }); });
     var age = Number(a.age), older = age >= 55, novice = a.level !== 'exp', heart = lim.indexOf('heart') >= 0, back = lim.indexOf('back') >= 0;
@@ -162,8 +197,8 @@ var GEN = (function () {
     });
     Object.keys(ex).forEach(function (id) { T[id] = coachFrom[id] === src ? (ts[id] || ta[id]) : (ta[id] || ts[id]); });
     /* тренажери залу: стартова вага для жінок — 60 % (униз до кроку тренажера) */
-    if (has.gym) Object.keys(GYM.ex).forEach(function (id) {
-      if (avoid[id]) return;
+    if (has.gym || has.mach) Object.keys(GYM.ex).forEach(function (id) {
+      if (avoid[id] || (!has.gym && !homeMach[id])) return;
       var e = GYM.ex[id], st = sex === 'f' ? Math.max(e.step, Math.floor(e.start * 0.6 / e.step) * e.step) : e.start;
       ex[id] = (!back && e.spine) ? Object.assign({}, e, { spine: false, start: st }) : Object.assign({}, e, { start: st });
       coachFrom[id] = 'gym'; var t = GYM.tpl[id]; T[id] = { ex: id, sets: t[0], min: t[1], max: t[2], rest: t[3] };
@@ -171,7 +206,7 @@ var GEN = (function () {
 
     /* тренування: на кожне місце — перша доступна вправа, без повторів у межах тренування */
     /* домашні вправи (dumbbell/band/власна вага) — лише вдома; тренажери — лише в залі */
-    var homeOk = function (id) { return !ex[id].gym; }, gymOk = function (id) { var e = ex[id]; return !!e.gym || !needs(e); };
+    var homeOk = function (id) { return !ex[id].gym || !!homeMach[id]; }, gymOk = function (id) { var e = ex[id]; return !!e.gym || !needs(e); };
     var build1 = function (plan, ok, slots) {
       var out = {};
       ['A', 'B'].forEach(function (w) {
@@ -191,9 +226,9 @@ var GEN = (function () {
       return out;
     };
     var slotEx = {}, slotGym = {};
-    var workouts = home ? build1(FULL, homeOk, slotEx) : {}, gymWorkouts = has.gym ? build1(GFULL, gymOk, slotGym) : null;
+    var workouts = home ? build1(HFULL, homeOk, slotEx) : {}, gymWorkouts = has.gym ? build1(GFULL, gymOk, slotGym) : null;
     /* досвідченим із гантелями й петлею, 3 дні, без обмежень — з тижня 5 спліт Д1–Д3 (як у програмі з гантелями) */
-    var split = !novice && perWeek === 3 && has.db && has.band && !has.gym && !lim.length && (a.goal === 'muscle' || a.goal === 'loss') && !older;
+    var split = !novice && perWeek === 3 && has.db && has.band && !has.gym && !has.mach && !lim.length && (a.goal === 'muscle' || a.goal === 'loss') && !older;
     if (split) ['D1', 'D2', 'D3'].forEach(function (w) {
       var Pw = PROGRAMS.him.workouts[w];
       workouts[w] = { title: Pw.title, items: Pw.items.filter(function (it) { return ex[it.ex]; }).map(function (it) {
@@ -211,12 +246,12 @@ var GEN = (function () {
       id: 'me', custom: true, ver: VER, title: 'Моя програма', sub: goalTxt + ' · ' + dayTxt + (place === 'gym' ? ' · зал' : place === 'both' ? ' · дім і зал' : ''), backCare: back,
       cap: has.db ? 20 : 0, ex: ex, coachFrom: coachFrom, perWeek: perWeek, deload: [8, 12],
       /* workouts — основне місце (удома, а без дому — зал); gymWorkouts — друге місце для «і вдома, і в залі» */
-      workouts: home ? workouts : gymWorkouts, gymWorkouts: home && has.gym ? gymWorkouts : null, place: place,
+      workouts: home ? workouts : gymWorkouts, gymWorkouts: home && has.gym ? gymWorkouts : null, place: place, homeMach: homeMach,
       days: (a.days || []).slice(), sex: sex, askReady: back,
       ready: { swap: back ? { rdl: 'bridge' } : {} },
       myoFrom: (heart || older) ? 0 : 5,
       tests: older || a.goal === 'posture',
-      warm: (has.db || has.gym) ? PROGRAMS.him.warm : PROGRAMS.her.warm, heavy: Number(a.weight) >= 100,
+      warm: (has.db || has.gym || has.mach) ? PROGRAMS.him.warm : PROGRAMS.her.warm, heavy: Number(a.weight) >= 100,
       week: function (wk) {
         if (split && wk >= 5) return ['D1', 'D2', 'D3'];
         if (perWeek === 2) return ['A', 'B'];
@@ -312,8 +347,8 @@ var GEN = (function () {
     '#Заминка · 5 хв', '5 хв повільної ходьби та легка розтяжка грудей, задньої поверхні стегна, литок — по 20–30 с.'];
   var GYM_SAFETY = ['Тренажер: перед підходом підлаштуйте сидіння й упори під свій зріст; фіксатор ваги — у блок до кінця.', 'Вагу не кидайте: опускайте плавно до кінця руху.'];
   var GYM_GEAR = ['#Налаштування', 'Сидіння, валики й упори — під свій зріст, перш ніж брати вагу. Вісь обертання тренажера — навпроти суглоба, що працює.',
-    'Фіксатор ваги — у блок до кінця. Трос і ручка цілі — тоді працюйте.', '#Вага', 'Застосунок пропонує вагу кроком: на тренажерах — 5 кг, на блоках — 2,5 кг. Інший крок у вашому залі — вводьте свою вагу цифрами: застосунок підхопить крок цього тренажера з ваших ваг і далі пропонуватиме вагу на ньому.',
-    '#Тренажер зайнятий', '«⋯ Ще» → «Замінити»: застосунок запропонує іншу вправу залу на ті самі мʼязи.'];
+    'Фіксатор ваги — у блок до кінця. Трос і ручка цілі — тоді працюйте.', '#Вага', 'Застосунок пропонує вагу кроком: на тренажерах — 5 кг, на блоках — 2,5 кг. Інший крок на вашому тренажері — вводьте свою вагу цифрами: застосунок підхопить крок цього тренажера з ваших ваг і далі пропонуватиме вагу на ньому. Удома й у залі вага рахується окремо: це різні тренажери.',
+    '#Тренажер зайнятий чи його немає', '«⋯ Ще» → «Замінити»: застосунок запропонує іншу вправу на ті самі мʼязи з того, що є під рукою.'];
   var GYM_PROG = {
     /* ключі — тексти після neutral(): pick() уже прибрав «+2,5 кг на гантель» і «гриф + 20» на нейтральні */
     'Спершу повторення. Коли в усіх підходах вийшла верхня межа із запасом 1–2 — наступного разу вага на крок більша. Крок залежить від найменших дисків, яких у вас хоча б 4: по 1,25 кг — крок 2,5 кг на гантель, по 2,5 кг — 5 кг, лише по 5 кг — 10 кг.':
@@ -345,32 +380,34 @@ var GEN = (function () {
       return { id: g.id, title: neutral(g.title, sex), items: items };
     };
     var pick = function (p, id) { return clean(PROGRAMS[p].guide.filter(function (g) { return g.id === id; })[0]); };
-    var out = [], gymOnly = has.gym && !home, loadWarm = has.db || has.gym;
+    /* noKit — без гантелей і петлі: лише тренажери (у залі чи вдома) — ріст навантаження як у залі */
+    var out = [], gymOnly = has.gym && !home, loadWarm = has.db || has.gym || has.mach, noKit = !has.db && !has.band;
     /* безпека: у залі без порад про крісло, гайки гантелей, підлогу й двері */
-    var safe = pick(has.db || gymOnly ? 'him' : 'her', 'safety');
-    if (gymOnly) safe = { id: 'safety', title: safe.title, items: safe.items.filter(function (x) { return /^(Лікар\.|Дихання:|Стоп-сигнали:|Грижі хребта)/.test(x); }).concat(GYM_SAFETY) };
-    /* і вдома, і в залі: домашні пункти + пункти залу (перед стоп-сигналами) */
-    else if (has.gym) { var stop = safe.items.filter(function (x) { return /^Стоп-сигнали:/.test(x); }); safe = { id: 'safety', title: safe.title, items: safe.items.filter(function (x) { return stop.indexOf(x) < 0; }).concat(GYM_SAFETY, stop) }; }
+    /* лише тренажери (зал чи вдома без гантелей і петлі): лікар, дихання, грижі, стоп-сигнали (+ підлога вдома) і пункти тренажерів */
+    var safe = pick(has.db || noKit ? 'him' : 'her', 'safety');
+    if (noKit) safe = { id: 'safety', title: safe.title, items: safe.items.filter(function (x) { return (home ? /^(Лікар\.|Дихання:|Стоп-сигнали:|Грижі хребта|Підлога)/ : /^(Лікар\.|Дихання:|Стоп-сигнали:|Грижі хребта)/).test(x); }).concat(GYM_SAFETY) };
+    /* і вдома, і в залі, або тренажери вдома: домашні пункти + пункти тренажерів (перед стоп-сигналами) */
+    else if (has.gym || has.mach) { var stop = safe.items.filter(function (x) { return /^Стоп-сигнали:/.test(x); }); safe = { id: 'safety', title: safe.title, items: safe.items.filter(function (x) { return stop.indexOf(x) < 0; }).concat(GYM_SAFETY, stop) }; }
     out.push(safe);
     /* розминка — та, що відповідає розминковому підходу програми (гантелі чи тренажери — 1 × 12; лише петля — підходу немає) */
     var warm = gymOnly ? { id: 'warm', title: 'Розминка й заминка', items: GYM_WARM.slice() } : pick(loadWarm ? 'him' : 'her', 'warm');
     warm = { id: warm.id, title: warm.title, items: warm.items.map(function (x) {
       if (!/^Перед першою/.test(x)) return x;
       if (!loadWarm) return null;                                            // лише петля: розминковий підхід застосунок не додає
-      return has.gym && !has.db ? 'У залі п' + x.slice(1) : x;                // удома з петлею — лише в залі
+      return has.gym && !has.db && !has.mach ? 'У залі п' + x.slice(1) : x;   // удома з петлею — лише в залі
     }).filter(function (x) { return x !== null; }) };
     out.push(warm);
     if (back) out.push(backGuide(ex, lists));
     if (has.db) out.push(pick('him', 'gear'));
     if (has.band) { var g = pick('her', 'gear'); if (g && !has.db) out.push(g); else if (g) out.push({ id: 'gear2', title: g.title, items: g.items }); }
-    if (has.gym) out.push({ id: 'gymgear', title: 'Тренажери й блоки', items: GYM_GEAR.slice() });
+    if (has.gym || has.mach) out.push({ id: 'gymgear', title: 'Тренажери й блоки', items: GYM_GEAR.slice() });
     if (goal === 'posture') out.push(pick('her', 'posture'));
-    var pr = pick(has.db || gymOnly ? 'him' : 'her', 'prog');
-    if (gymOnly) pr = { id: 'prog', title: pr.title, items: pr.items.map(function (x) { return Object.prototype.hasOwnProperty.call(GYM_PROG, x) ? GYM_PROG[x] : x; }).filter(function (x) { return x !== null; }) };
+    var pr = pick(has.db || noKit ? 'him' : 'her', 'prog');
+    if (noKit) pr = { id: 'prog', title: pr.title, items: pr.items.map(function (x) { return Object.prototype.hasOwnProperty.call(GYM_PROG, x) ? GYM_PROG[x] : x; }).filter(function (x) { return x !== null; }) };
     out.push(pr);
     return out.filter(Boolean);
   }
 
-  return { VER: VER, GOALS: GOALS, EQUIP: EQUIP, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM };
+  return { VER: VER, GOALS: GOALS, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM };
 })();
 if (typeof module !== 'undefined') module.exports = GEN;

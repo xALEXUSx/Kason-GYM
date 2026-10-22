@@ -46,7 +46,7 @@ var ENGINE = (function () {
     var out = [];
     (profile.sessions || []).forEach(function (s) {
       var sets = (s.sets || []).filter(function (x) { return x.ex === exId && x.reps > 0 && (kind === 'all' ? x.type !== 'W' : isWork(x)); });
-      if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, sets: sets });
+      if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, place: s.place, sets: sets });  // place — де було (дім / зал)
     });
     return out;
   }
@@ -204,6 +204,8 @@ var ENGINE = (function () {
         var ex = prog.ex[id]; if (!ex || !ex.main) return;
         var cur = bestOf(ex, s.sets.filter(function (x) { return x.ex === id; }), handle);
         for (var j = idx - 1; j >= 0; j--) {
+          /* тренажер — порівнюємо з тим самим місцем: удома й у залі це різні тренажери (100 кг у залі й 60 удома — не спад) */
+          if (ex.gym && s.place && ss[j].place && ss[j].place !== s.place) continue;
           var p = ss[j].sets.filter(function (x) { return x.ex === id && x.reps > 0; });
           if (p.length) { if (cur < bestOf(ex, p, handle)) cnt++; break; }
         }
@@ -497,7 +499,8 @@ var ENGINE = (function () {
       Object.keys(prog.ex).forEach(function (id) {
         var e = prog.ex[id];
         if (id === exId || e.retired || (noSpine && e.spine) || (present && present.indexOf(id) >= 0)) return;
-        if (place && kit(e) !== 'any' && kit(e) !== place) return;  // заміна — з того самого місця: у залі тренажер, удома — гантелі чи петля
+        /* заміна — з того самого місця: у залі тренажер, удома — гантелі, петля чи тренажер, що є вдома (prog.homeMach) */
+        if (place && kit(e) !== 'any' && kit(e) !== place && !(place === 'home' && e.gym && prog.homeMach && prog.homeMach[id])) return;
         if (sameGroup ? e.group !== ex.group : (e.group === ex.group || e.m.p.indexOf(main) < 0)) return;
         var score = (e.m.p.indexOf(main) >= 0 ? 3 : 0)
           + e.m.p.filter(function (m) { return m !== main && ex.m.p.indexOf(m) >= 0; }).length * 2

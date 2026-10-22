@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.9.4';
+  const VERSION = '3.10.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -246,13 +246,16 @@ window.APP_START = () => {
     else if (step === 'goal') body = `<h1>Ваша мета</h1><div class="pick">${[['loss', 'Схуднути', 'менше жиру, більше сил'], ['muscle', 'Набрати мʼязи', 'більше обʼєму й сили'], ['health', 'Сила й здоровʼя', 'міцне тіло без крайнощів'], ['posture', 'Спина й осанка', 'рівна спина, менше болю від сидіння']].map(([v, l, d]) => opt('qGoal', v, l, d, a.goal === v)).join('')}</div>${err('goal')}`;
     else if (step === 'level') body = `<h1>Досвід тренувань</h1><div class="pick">${opt('qLevel', 'new', 'Новачок', 'або перерва понад пів року', a.level === 'new')}${opt('qLevel', 'exp', 'Тренуюсь регулярно', 'пів року й більше без перерв', a.level === 'exp')}</div>${err('level')}`;
     else if (step === 'equip') {
-      const db = a.equip.indexOf('db') >= 0;
-      body = `<h1>Що є вдома</h1><p class="muted small">Можна обрати обидва. Без жодного з них програма не складається: для тяг потрібні гантелі або петля.</p>
+      const db = a.equip.indexOf('db') >= 0, mk = Object.keys(GEN.MACH), allM = mk.every((k) => a.equip.indexOf(k) >= 0);
+      body = `<h1>Що є вдома</h1><p class="muted small">Можна обрати кілька. Для тяг (спина) потрібні гантелі, петля або блок.</p>
       <div class="pick">${opt('qEquip', 'db', 'Гантелі з дисками', 'розбірні: гриф + диски', db)}${opt('qEquip', 'band', 'Петля-еспандер', 'резинка з кріпленням до дверей', a.equip.indexOf('band') >= 0)}</div>${err('equip')}
       ${db ? `<div class="card"><b>Ваші гантелі</b>${numIn('qHandle', 'Вага одного грифа без дисків, кг', a.handle, 'decimal')}${err('handle')}
-        <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>${numIn('qI5', '5 кг', a.inv['5'])}</div><div>${numIn('qI25', '2,5 кг', a.inv['2.5'])}</div><div>${numIn('qI125', '1,25 кг', a.inv['1.25'])}</div></div>${err('inv')}</div>` : ''}`;
+        <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>${numIn('qI5', '5 кг', a.inv['5'])}</div><div>${numIn('qI25', '2,5 кг', a.inv['2.5'])}</div><div>${numIn('qI125', '1,25 кг', a.inv['1.25'])}</div></div>${err('inv')}</div>` : ''}
+      <h2>Тренажери вдома</h2><p class="muted small">Ті самі вправи, що в залі: історія й рекорди спільні, вагу застосунок рахує окремо для дому й залу. Додати чи прибрати можна будь-коли: «Більше» → «Обладнання вдома».</p>
+      <button type="button" class="wide${allM ? ' pri' : ''}" data-act="qEquipAll" aria-pressed="${allM}">${allM ? '✓ ' : ''}Усе, як у залі</button><p></p>
+      <div class="grid2">${mk.map((k) => opt('qEquip', k, GEN.MACH[k][0], GEN.MACH[k][1], a.equip.indexOf(k) >= 0)).join('')}</div>`;
     } else if (step === 'place') body = `<h1>Де тренуєтесь?</h1><p class="muted small">Програма підбере вправи під місце. «І вдома, і в залі» — перед кожним тренуванням застосунок спитає, де ви сьогодні.</p>
-      <div class="pick">${[['home', 'Вдома', 'гантелі з дисками або петля-еспандер'], ['gym', 'У тренажерному залі', 'тренажери й блоки'], ['both', 'І вдома, і в залі', 'програма для обох місць']].map(([v, l, d]) => opt('qPlace', v, l, d, a.place === v)).join('')}</div>${err('place')}`;
+      <div class="pick">${[['home', 'Вдома', 'гантелі, петля або тренажери'], ['gym', 'У тренажерному залі', 'тренажери й блоки'], ['both', 'І вдома, і в залі', 'програма для обох місць']].map(([v, l, d]) => opt('qPlace', v, l, d, a.place === v)).join('')}</div>${err('place')}`;
     else if (step === 'limits') body = `<h1>Здоровʼя</h1><p class="muted small">Позначте все, що у вас є. Програма прибере або полегшить вправи, які можуть зашкодити.</p>
       <div class="pick">${[['back', 'Грижа або біль у спині', 'грижа, протрузія, часто болить поперек'], ['knees', 'Коліна', 'біль або травма коліна'], ['shoulders', 'Плечі', 'біль або травма плеча'], ['heart', 'Тиск або серце', 'гіпертонія, хвороби серця'], ['pregnant', 'Вагітність', ''], ['none', 'Нічого з цього', '']].filter(([v]) => v !== 'pregnant' || a.sex !== 'm').map(([v, l, d]) => opt('qLimit', v, l, d, a.limits.indexOf(v) >= 0)).join('')}</div>${err('limits')}`;
     else if (step === 'days') body = `<h1>Дні тренувань</h1><p class="muted small">Оберіть від 2 до 4 днів. Краще з днем відпочинку між ними.</p>
@@ -261,7 +264,7 @@ window.APP_START = () => {
       const blk = GEN.check(a).block, lim = a.limits.filter((x) => x !== 'none');
       body = `<h1>Майже готово</h1><div class="card"><ul class="list">
         <li><span>Імʼя</span><b>${esc(a.name)}</b></li><li><span>Вік · зріст · вага</span><b>${fmt(a.age)} · ${fmt(a.height)} см · ${fmt(a.weight)} кг</b></li>
-        <li><span>Мета</span><b>${esc(GEN.GOALS[a.goal] || '')}</b></li><li><span>Де</span><b>${esc((GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `<li><span>Обладнання вдома</span><b>${a.equip.map((x) => ({ db: 'гантелі', band: 'петля' }[x])).join(', ')}</b></li>`}
+        <li><span>Мета</span><b>${esc(GEN.GOALS[a.goal] || '')}</b></li><li><span>Де</span><b>${esc((GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `<li><span>Обладнання вдома</span><b>${esc(kitText(a.equip))}</b></li>`}
         <li><span>Здоровʼя</span><b>${lim.length ? lim.map((x) => ({ back: 'спина', knees: 'коліна', shoulders: 'плечі', heart: 'тиск/серце', pregnant: 'вагітність' }[x])).join(', ') : 'без обмежень'}</b></li>
         <li><span>Дні</span><b>${GEN.DAYS.filter(([d]) => a.days.indexOf(d) >= 0).map(([, l]) => l).join(', ')}</b></li></ul></div>
         ${blk ? `<div class="note b small">${esc(blk)}</div>` : ''}
@@ -277,6 +280,8 @@ window.APP_START = () => {
       ${q.step || q.edit ? '' : '<p></p><label class="btn ghost" style="display:block;text-align:center">Є резервна копія? Відновити<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label>'}`;
     const ri = document.getElementById('restoreIn'); if (ri) ri.onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
   }
+  /* усі тренажери разом: усі є — зняти всі, інакше — додати відсутні */
+  function allMach(list) { const mk = Object.keys(GEN.MACH), all = mk.every((k) => list.indexOf(k) >= 0); mk.forEach((k) => { const i = list.indexOf(k); if (all && i >= 0) list.splice(i, 1); else if (!all && i < 0) list.push(k); }); }
   function qToggle(list, v, max) { const k = list.indexOf(v); if (k >= 0) list.splice(k, 1); else { if (max && list.length >= max) return false; list.push(v); } return true; }
   /* завершення анкети: програма, профіль, імʼя акаунта */
   function qFinish() {
@@ -307,10 +312,26 @@ window.APP_START = () => {
   const isLoad = (ex) => ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'band' || ex.type === 'mach' || (ex.type === 'time' && ex.load);
   /* тренажер чи блок: вага в кг на тренажері, свій крок, без грифа й дисків */
   const isMach = (ex) => ex.type === 'mach';
+  /* підказка ваги, крок і «минулого» для тренажера — з разів на тому самому місці: удома й у залі це різні тренажери
+     (інші плити й важелі); рекорди й історія — спільні. На цьому місці ще не було — з будь-якого (з чого почати) */
+  function histAt(id, place) {
+    const all = ENGINE.history(P(), id), ex = G().ex[id];
+    if (!ex || !ex.gym || (place !== 'home' && place !== 'gym')) return all;
+    const at = all.filter((h) => h.place === place);
+    return at.length ? at : all;
+  }
+  /* домашнє обладнання словами; short — коротко (тренажерів — числом) */
+  const kitText = (eq, short) => {
+    const mk = Object.keys(GEN.MACH).filter((k) => eq.indexOf(k) >= 0), parts = [eq.indexOf('db') >= 0 ? 'гантелі з дисками' : '', eq.indexOf('band') >= 0 ? 'петля' : ''];
+    if (mk.length === Object.keys(GEN.MACH).length) parts.push('усі тренажери, як у залі');
+    else if (mk.length) parts.push(short ? plural(mk.length, 'тренажер', 'тренажери', 'тренажерів') : mk.map((k) => GEN.MACH[k][0].toLowerCase()).join(', '));
+    return parts.filter(Boolean).join(', ');
+  };
   /* підказка-хмарка до числа ваги: на тренажері й еспандері — своя (загальна в tips.js — про диски на гантель) */
   const loadTip = (ex, what) => (isMach(ex) ? ` data-tip="Вага на тренажері чи блоці, кг${what}"` : ex.type === 'band' ? ` data-tip="Рівень еспандера: номер джгута або сума, якщо кілька разом${what}"` : '');
   /* крок ваги: тренажер — з ваг людини на ньому (ENGINE.machStep: її зал може мати 2,5 чи 4,5 замість 5), еспандер — рівень, гантелі — диски */
-  const loadStep = (ex, id) => (isMach(ex) ? ENGINE.machStep(ex, ENGINE.history(P(), id)) : ex.type === 'band' ? 1 : ENGINE.stepFor(P().inv));
+  /* place — де тренування (поки воно складається, чернетки ще немає — місце передають явно) */
+  const loadStep = (ex, id, place) => (isMach(ex) ? ENGINE.machStep(ex, histAt(id, place || (P().draft || {}).place)) : ex.type === 'band' ? 1 : ENGINE.stepFor(P().inv));
   const loadCap = (ex) => (isMach(ex) ? ex.cap || 300 : hasKg(ex) ? G().cap : 99);
   const hasKg = (ex) => ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load);
   function loadText(ex, v) {
@@ -346,14 +367,14 @@ window.APP_START = () => {
   }
   function makeItem(it, ss, plan, step, o) {
     const prog = G(), p = P(), ex = prog.ex[it.ex];
-    const nS = prog.setsFor(it, plan.week), hist = ENGINE.history(p, it.ex);
+    const nS = prog.setsFor(it, plan.week), hist = histAt(it.ex, o.where);
     const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step);
     const last = hist.length ? hist[hist.length - 1].sets : [];
     const sets = sug.sets.map((s, j) => { const pv = last[j] || last[last.length - 1] || null; return { type: 'N', load: s.load, reps: s.reps, rir: null, done: false, pr: [], prev: pv ? { load: pv.load, reps: pv.reps } : null, touched: false }; });
     let note = sug.note, skipped = !!it.optional;
     if (o.ra && o.ra.act === 'skip') { skipped = true; note = 'Сьогодні без цієї вправи — бережемо поперек.'; }
     if (o.ra && o.ra.act === 'light') {
-      const st = isMach(ex) ? loadStep(ex, it.ex) : step;
+      const st = isMach(ex) ? loadStep(ex, it.ex, o.where) : step;
       let less = false; sets.forEach((s) => { if (typeof s.load === 'number' && s.load > 0) { s.load = Math.max(0, Math.round((s.load - st) * 100) / 100); less = true; } });
       note = (less ? 'Спина ниє: вага на крок нижча, запас 3. ' : 'Спина ниє: запас 3, рух повільний і плавний. ') + note;
     }
@@ -376,12 +397,12 @@ window.APP_START = () => {
       const ra = ENGINE.readyAction(prog, o.it.ex, ready, present);
       const it = Object.assign({}, o.it); let from = null;
       if (ra && ra.act === 'swap') { from = it.ex; it.ex = ra.to; }
-      return makeItem(it, o.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from, myo });
+      return makeItem(it, o.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from, myo, where });
     });
     /* розминковий підхід — перед першою базовою вправою з вагою */
     for (const st of ENGINE.stepOrder(list)) {
       const it = list[st.i], ex = prog.ex[it.ex], fw = it.sets.find((s) => s.type !== 'W');
-      const ws = ENGINE.warmups(ex, fw ? fw.load : null, step, prog.warm, isMach(ex) ? loadStep(ex, it.ex) : 0);
+      const ws = ENGINE.warmups(ex, fw ? fw.load : null, step, prog.warm, isMach(ex) ? loadStep(ex, it.ex, where) : 0);
       if (ws.length) { it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); break; }
     }
     return { n, week: plan.week, cycle: plan.cycle, workout: wid, place: where, deload: plan.deload, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
@@ -451,7 +472,7 @@ window.APP_START = () => {
   }
   function placeSheet(wid) {
     /* удома — саме те обладнання, що вказане в анкеті */
-    const eq = (DB.custom && DB.custom.answers && DB.custom.answers.equip) || [], kit = [eq.indexOf('db') >= 0 ? 'гантелі з дисками' : '', eq.indexOf('band') >= 0 ? 'петля' : ''].filter(Boolean).join(', ');
+    const eq = (DB.custom && DB.custom.answers && DB.custom.answers.equip) || [], kit = kitText(eq, true);
     openSheet(`<b>Де тренуєтесь сьогодні?</b><p class="small muted">Від цього залежать вправи тренування.</p>
       <div class="pick">${[['home', 'Вдома', kit], ['gym', 'У залі', 'тренажери й блоки']].map(([v, l, d]) => `<button type="button" data-act="place" data-v="${v}" data-w="${wid || ''}"><b>${l}</b><span class="small muted">${d}</span></button>`).join('')}</div>`);
   }
@@ -659,11 +680,11 @@ window.APP_START = () => {
     const kgOn = hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '';
     const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? 'рівень еспандера' : isMach(ex) ? 'вага, кг' : 'диски на гантель, кг'}</span>
       <button type="button" class="cval" data-act="kp" data-f="load" ${ij}${loadTip(ex, '. Торкніться, щоб ввести інше число.')}>${esc(loadText(ex, s.load))}</button>${pm('load')}
-      <span class="tiny muted"${isMach(ex) ? ' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. У вашому залі інший — введіть свою вагу цифрами: застосунок підхопить крок."' : ex.type === 'band' ? ' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."' : ''}>${kgOn ? 'у руках ' + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + ' кг' : ex.type === 'band' ? 'сума номерів джгутів' : isMach(ex) ? 'на тренажері · крок ' + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
+      <span class="tiny muted"${isMach(ex) ? ' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. На вашому тренажері інший — введіть свою вагу цифрами: застосунок підхопить крок."' : ex.type === 'band' ? ' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."' : ''}>${kgOn ? 'у руках ' + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + ' кг' : ex.type === 'band' ? 'сума номерів джгутів' : isMach(ex) ? 'на тренажері · крок ' + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
     const boxR = `<div class="cbox"><span class="cl2">${ex.type === 'time' ? 'секунди' : 'повторення'}${ex.side ? ' · на бік' : ''}</span>
       <button type="button" class="cval" data-act="kp" data-f="reps" ${ij}>${s.reps === null || s.reps === undefined ? '—' : s.reps}</button>${pm('reps')}
       <span class="tiny muted">ціль: ${esc(tgt)}</span></div>`;
-    const plat = ENGINE.plateau(ex, ENGINE.history(P(), it.ex), P().handle) ? '<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>' : '';
+    const plat = ENGINE.plateau(ex, histAt(it.ex, (P().draft || {}).place), P().handle) ? '<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>' : '';
     const userNote = P().notes[it.ex] ? `<div class="hint">📝 ${esc(P().notes[it.ex])}</div>` : '';
     const rir = (s.type === 'W' || ex.type === 'amrap') ? '' : `<div class="crir"><span class="small muted">Скільки ще могли б зробити? ${q('rir')}</span>
       <div class="seg">${[[0, '0'], [1, '1'], [2, '2'], [3, '3+']].map(([x, l]) => `<button type="button" class="${s.rir === x || (x === 3 && s.rir > 3) ? 'on' : ''}" data-act="crir" data-v="${x}" ${ij}>${l}</button>`).join('')}</div></div>`;
@@ -751,7 +772,7 @@ window.APP_START = () => {
       return `<div class="exc skip"><div class="exh"><div>${ssb}<h3 style="display:inline">${esc(ex.name)}</h3><div class="mus">${workCount(it)} × ${range}${it.optional ? ' · за бажанням' : ''}</div>${it.note && !it.optional ? `<div class="hint">${esc(it.note)}</div>` : ''}</div>
         <button type="button" class="sm" data-act="unskip" data-i="${i}">${it.optional ? 'Додати' : 'Повернути'}</button></div></div>`;
     }
-    const plat = ENGINE.plateau(ex, ENGINE.history(P(), it.ex), P().handle) ? '<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>' : '';
+    const plat = ENGINE.plateau(ex, histAt(it.ex, (P().draft || {}).place), P().handle) ? '<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>' : '';
     let note = it.note || '';
     if (it.ex === 'goblet' && it.variant === 'g1' && /максимальна/.test(note)) note += ' Час переходити на «2 гантелі на плечах».';
     const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
@@ -998,6 +1019,7 @@ window.APP_START = () => {
       <ul class="list">
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
+        <li style="display:block"><b>🏠 Тренажери вдома</b><div class="small muted">У «Що є вдома» — ті самі тренажери, що в залі (або «Усе, як у залі»): удома програма бере їх першими; історія й рекорди спільні з залом, вага — окремо для дому й залу. Додати чи прибрати — будь-коли: «Більше» → «Обладнання вдома»; історія й рекорди лишаються.</div></li>
         <li style="display:block"><b>⚙️ Одне джерело</b><div class="small muted">Дні тренувань, гриф і диски («Більше»), зріст і вік («Харчування») одразу йдуть у програму й в анкету; поточний тиждень зберігається.</div></li>
         <li style="display:block"><b>🍽 Норма одразу</b><div class="small muted">Норма калорій і білка — одразу за вагою з анкети; після зважувань у «Замірах» — за ними.</div></li>
         <li style="display:block"><b>🔒 Вхід через Face ID</b><div class="small muted">«Більше» → «Захистити Face ID»: PIN і Face ID, щоб ніхто інший на телефоні не відкрив ваш журнал.</div></li>
@@ -1376,8 +1398,18 @@ window.APP_START = () => {
       ? `<label class="f">Програма</label><select id="progSel">${own.map((k) => `<option value="${k}"${k === DB.active ? ' selected' : ''}>${esc(PROGRAMS[k].title)}</option>`).join('')}</select>`
       : `<div><b>${esc(g.title)}</b>${g.sub ? `<div class="small muted">${esc(g.sub)}</div>` : ''}</div>`;
   }
+  /* обладнання вдома — будь-коли додати чи прибрати; програма перебудовується, історія й рекорди лишаються */
+  function eqCard(p) {
+    const a = DB.custom && DB.custom.answers; if (!a || a.place === 'gym') return '';
+    const eq = a.equip || [], mk = Object.keys(GEN.MACH), allM = mk.every((k) => eq.indexOf(k) >= 0), dis = p.draft ? ' disabled' : '';
+    const btn = (k, l) => `<button type="button" class="sm${eq.indexOf(k) >= 0 ? ' pri' : ''}" data-act="homeEq" data-v="${k}" aria-pressed="${eq.indexOf(k) >= 0}"${dis}>${esc(l)}</button>`;
+    return `<h2>Обладнання вдома</h2><div class="card"><p class="small muted">Додали чи прибрали — програма перебудується під те, що є; історія й рекорди лишаються.</p>
+      <div class="row">${btn('db', 'Гантелі')}${btn('band', 'Петля')}</div>
+      <label class="f">Тренажери (ті самі, що в залі)</label><button type="button" class="sm wide${allM ? ' pri' : ''}" data-act="homeEqAll" aria-pressed="${allM}"${dis}>${allM ? '✓ ' : ''}Усе, як у залі</button>
+      <div class="row" style="margin-top:8px">${mk.map((k) => btn(k, GEN.MACH[k][0])).join('')}</div>${p.draft ? '<p class="tiny muted">Обладнання — після завершення тренування.</p>' : ''}</div>`;
+  }
   function rMore() {
-    const p = P(), prog = G(), V = S().voice, hasDb = Object.values(prog.ex).some((ex) => GEN.needs(ex) === 'db');
+    const p = P(), prog = G(), V = S().voice, hasDb = Object.values(prog.ex).some((ex) => !ex.retired && GEN.needs(ex) === 'db');  // вибулі (з історії) — не рахуються
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     /* після 12 тижнів — цикли з тижнів 5–12 (як у «Плані»): вибір тижня — у поточному циклі */
     const cp = ENGINE.planFor(prog, nextN()), curWeek = cp.week, wks = cp.cycle === 1 ? Array.from({ length: 12 }, (_, k) => k + 1) : Array.from({ length: 8 }, (_, k) => k + 5);
@@ -1406,6 +1438,7 @@ window.APP_START = () => {
         <button type="button" class="wide" style="margin-top:10px" data-act="qEdit"${p.draft ? ' disabled' : ''}>${DB.custom ? 'Змінити анкету й оновити програму' : 'Скласти програму за анкетою'}</button>
         <label class="f">Наступне тренування — тиждень</label><select id="weekSel"${p.draft ? ' disabled' : ''}>${wks.map((w) => `<option value="${w}"${w === curWeek ? ' selected' : ''}>${w}${cp.cycle > 1 ? ' · цикл ' + cp.cycle : ''}</option>`).join('')}</select>
         <label class="f">Дні тренувань</label><div class="row">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${p.draft ? '<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>' : ''}</div>
+      ${eqCard(p)}
       ${hasDb ? `<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="${fmt(p.handle)}">
         <label class="f">Диски на обидві гантелі: 5 · 2,5 · 1,25 кг (штук)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="${p.inv[5]}"><input inputmode="numeric" data-inv="2.5" value="${p.inv[2.5]}"><input inputmode="numeric" data-inv="1.25" value="${p.inv[1.25]}"></div>
         <p class="tiny muted">Крок ваги зараз: ${fmt(ENGINE.stepFor(p.inv))} кг на гантель.</p></div>` : ''}
@@ -1445,10 +1478,10 @@ window.APP_START = () => {
     if (ok) { DB.lastBackup = today(); save(); toast('Резервну копію створено'); rMore(); }
   }
   function csv() {
-    const prog = G(), h = P().handle, rows = [['дата', 'тиждень', 'тренування', 'спина', 'вправа', 'варіант', 'тип', 'підхід', 'вага_кг', 'разом_кг', 'повторення_або_с', 'запас', 'міні_підходи']];
+    const prog = G(), h = P().handle, rows = [['дата', 'тиждень', 'тренування', 'місце', 'спина', 'вправа', 'варіант', 'тип', 'підхід', 'вага_кг', 'разом_кг', 'повторення_або_с', 'запас', 'міні_підходи']];
     P().sessions.forEach((s) => { const cnt = {}; s.sets.forEach((x) => { const ex = prog.ex[x.ex] || { name: x.ex }; cnt[x.ex] = (cnt[x.ex] || 0) + 1;
       const tot = (x.load === null || x.load === undefined || ex.type === 'band') ? '' : String(ENGINE.totalLoad(ex, x.load, h, x.variant));
-      rows.push([s.date, s.week, s.workout, s.ready || '', ex.name, x.variant || '', x.type || 'N', cnt[x.ex], x.load === null || x.load === undefined ? '' : x.load, tot, x.reps, x.rir === null || x.rir === undefined ? '' : x.rir, (x.mini || []).join('+')]); }); });
+      rows.push([s.date, s.week, s.workout, s.place === 'gym' ? 'зал' : s.place === 'home' ? 'дім' : '', s.ready || '', ex.name, x.variant || '', x.type || 'N', cnt[x.ex], x.load === null || x.load === undefined ? '' : x.load, tot, x.reps, x.rir === null || x.rir === undefined ? '' : x.rir, (x.mini || []).join('+')]); }); });
     const text = String.fromCharCode(65279) + rows.map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';')).join('\n');
     shareFile('trenuvannia-' + today() + '.csv', new Blob([text], { type: 'text/csv' }), 'text/csv');
   }
@@ -1504,7 +1537,7 @@ window.APP_START = () => {
     const p = P(), d = p.draft, old = d.items[i], prog = G(), plan = ENGINE.planFor(prog, d.n);
     const base = { ex: to, sets: workCount(old), min: old.min, max: old.max, rest: old.rest };
     const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload;
-    const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: old.from || old.ex, myo });
+    const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: old.from || old.ex, myo, where: d.place });
     nw.skipped = false; d.items[i] = nw; save(); closeSheet(); rWorkout();
     talk('Заміна. ' + prog.ex[to].name + '.');
   }
@@ -1573,6 +1606,16 @@ window.APP_START = () => {
       haptic(); return rOnboard();
     }
     if (act === 'qEquip') { qRead(); qToggle(qState().a.equip, b.dataset.v); haptic(); return rOnboard(); }
+    if (act === 'qEquipAll') { qRead(); allMach(qState().a.equip); haptic(); return rOnboard(); }
+    /* обладнання вдома — будь-коли: програма перебудовується, історія й рекорди лишаються (вибулі вправи) */
+    if (act === 'homeEq' || act === 'homeEqAll') {
+      if (!DB.custom || (P() && P().draft)) return;  // під час тренування — ні (як дні й анкета)
+      const a0 = DB.custom.answers, eq = (a0.equip || []).slice();
+      if (act === 'homeEqAll') allMach(eq); else qToggle(eq, b.dataset.v);
+      const c = GEN.check(Object.assign({}, a0, { equip: eq }));
+      if (c.errors.equip) { toast(c.errors.equip); return; }
+      syncAnswers({ equip: eq }); save(); toast('Програму оновлено під обладнання — історія й рекорди лишаються'); return rMore();
+    }
     if (act === 'qLimit') {
       qRead(); const L = qState().a.limits, v = b.dataset.v;
       if (v === 'none') { const had = L.indexOf('none') >= 0; L.length = 0; if (!had) L.push('none'); }
