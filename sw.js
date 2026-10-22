@@ -1,7 +1,7 @@
 /* Робота без інтернету. Файли застосунку — спершу з мережі (щоб одразу бачити оновлення), без мережі — з кешу.
    Голоси тренера — в окремому кеші й не стираються з оновленням. */
-const CACHE = 'trening-3.4.0', VCACHE = 'trening-voices';
-const FILES = ['./', 'index.html', 'program.js', 'engine.js', 'voice.js', 'coach.js', 'radio.js', 'voicepack.js', 'tips.js', 'charts.js', 'store.js', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+const CACHE = 'trening-3.5.1', VCACHE = 'trening-voices';
+const FILES = ['./', 'index.html', 'program.js', 'engine.js', 'voice.js', 'coach.js', 'radio.js', 'voicepack.js', 'tips.js', 'charts.js', 'store.js', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'fonts/manrope-cyrillic.woff2', 'fonts/manrope-latin.woff2'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).catch(() => {}).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== VCACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));

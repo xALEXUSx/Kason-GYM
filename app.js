@@ -1,7 +1,9 @@
 /* Журнал тренувань 3.0 — інтерфейс: режим «Тренер» з голосом, список, план, прогрес, тіло. Дані лише в цьому телефоні + резервна копія файлом. */
 (() => {
   'use strict';
-  const VERSION = '3.4.0';
+  const VERSION = '3.5.1';
+  /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
+  const MARK = '<svg class="mark" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" style="fill:var(--mark-tile)"/><g fill="#fff"><rect x="88" y="240" width="336" height="32"/><rect x="110" y="196" width="28" height="120"/><rect x="146" y="160" width="40" height="192"/><rect x="326" y="160" width="40" height="192"/><rect x="374" y="196" width="28" height="120"/></g><rect x="186" y="240" width="140" height="32" fill="#c8a96a"/></svg>';
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = fixProfiles(STORE.load());
@@ -126,7 +128,7 @@
   /* ---------- знайомство ---------- */
   function rOnboard() {
     if (ui.ob === 1) {
-      app.innerHTML = `<h1>Журнал тренувань</h1><p class="muted">Ваші програми, підказки ваги за правилами прогресії, рекорди, графіки, карта мʼязів і фото — усе в телефоні, без реєстрації й підписок.</p>
+      app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><h1>Журнал тренувань</h1><p class="muted">Ваші програми, підказки ваги за правилами прогресії, рекорди, графіки, карта мʼязів і фото — усе в телефоні, без реєстрації й підписок.</p>
         <h2>Чия це програма?</h2><div class="pick">${Object.values(PROGRAMS).map((p) => `<button type="button" data-act="obProg" data-id="${p.id}"><b>${esc(p.title)}</b><span class="muted small">${esc(p.sub)}</span></button>`).join('')}</div>`;
       return;
     }
@@ -706,18 +708,20 @@
   function shareSummary() {
     const p = P(), prog = G(), s = p.sessions.find((x) => x.id === ui.summary); if (!s) return;
     const c = document.createElement('canvas'); c.width = 1080; c.height = 1350; const g = c.getContext('2d');
-    const gr = g.createLinearGradient(0, 0, 1080, 1350); gr.addColorStop(0, '#d2541f'); gr.addColorStop(1, '#ff7a3d'); g.fillStyle = gr; g.fillRect(0, 0, 1080, 1350);
-    g.fillStyle = '#fff'; g.font = '700 64px -apple-system, Arial'; g.fillText('Тренування завершено', 80, 170);
-    g.font = '400 40px -apple-system, Arial'; g.globalAlpha = 0.9; g.fillText(prog.workouts[s.workout].title + ' · ' + dm(s.date), 80, 240); g.globalAlpha = 1;
+    const F = (w, px) => w + ' ' + px + 'px Manrope, -apple-system, Arial';
+    g.fillStyle = '#14514f'; g.fillRect(0, 0, 1080, 1350);
+    g.fillStyle = '#c8a96a'; g.fillRect(80, 200, 140, 6);
+    g.fillStyle = '#fff'; g.font = F(700, 64); g.fillText('Тренування завершено', 80, 170);
+    g.font = F(400, 40); g.globalAlpha = 0.9; g.fillText(prog.workouts[s.workout].title + ' · ' + dm(s.date), 80, 240); g.globalAlpha = 1;
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
     [[s.mins + ' хв', 'тривалість'], [String(s.sets.filter((x) => x.type !== 'W').length), 'підходів'], [vol ? Math.round(vol) + ' кг' : '—', 'обсяг'], [String(s.prs || 0), 'рекордів']].forEach((x, k) => {
       const X = 80 + (k % 2) * 480, Y = 380 + Math.floor(k / 2) * 240;
-      g.fillStyle = 'rgba(255,255,255,.18)'; g.beginPath(); if (g.roundRect) g.roundRect(X, Y, 440, 200, 32); else g.rect(X, Y, 440, 200); g.fill();
-      g.fillStyle = '#fff'; g.font = '800 84px -apple-system, Arial'; g.fillText(x[0], X + 36, Y + 110); g.font = '400 34px -apple-system, Arial'; g.fillText(x[1], X + 36, Y + 165);
+      g.fillStyle = '#0d3937'; g.fillRect(X, Y, 440, 200); g.fillStyle = '#1c4b49'; g.fillRect(X, Y, 6, 200);
+      g.fillStyle = '#fff'; g.font = F(700, 84); g.fillText(x[0], X + 36, Y + 110); g.fillStyle = '#e8f0ef'; g.font = F(400, 34); g.fillText(x[1], X + 36, Y + 165); g.fillStyle = '#fff';
     });
-    g.font = '600 40px -apple-system, Arial'; let y = 920;
+    g.font = F(500, 40); let y = 920;
     (s.prList || []).slice(0, 5).forEach((x) => { g.fillText('🏆 ' + prog.ex[x.ex].name, 80, y); y += 64; });
-    g.font = '400 32px -apple-system, Arial'; g.globalAlpha = 0.85; g.fillText('Журнал тренувань', 80, 1280);
+    g.font = F(700, 32); g.globalAlpha = 0.85; g.fillText('Тренування', 80, 1280);
     c.toBlob((b) => { if (b) shareFile('trenuvannia-' + s.date + '.png', b, 'image/png'); }, 'image/png');
   }
 
@@ -785,6 +789,7 @@
         <li style="display:block"><b>🟢🟡🔴 Питання про спину</b><div class="small muted">Перед тренуванням. Від відповіді застосунок сам полегшує або прибирає вправи на поперек.</div></li>
         <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети з першого тижня, міо-підходи в ізоляції з тижня 5 — менше часу, та сама робота.</div></li>
         <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
+        <li style="display:block"><b>🎨 Новий вигляд</b><div class="small muted">Кольори й шрифт нашого бренду, як на сайті. Знак застосунку — штанга. Світла й темна тема — за налаштуванням телефона.</div></li>
         <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на пів секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`);
     S().tour.v3 = true; save();
@@ -890,7 +895,7 @@
     const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
     const warmMin = (warmList().title.match(/(\d+)\s*хв/) || [])[1];
     const nd = nextDayText(p.days);
-    app.innerHTML = `<p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div>
+    app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div>
       ${alerts()}
       ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(prog.workouts[d.workout].title)} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
       <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з 3</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
@@ -1050,7 +1055,7 @@
         <div class="card">${food.notes.map((x) => `<p class="small" style="margin:6px 0">• ${esc(x)}</p>`).join('')}</div>`;
     } else if (ui.bodyTab === 'f') {
       body = `<div class="seg">${[['front', 'Спереду'], ['side', 'Збоку'], ['back', 'Ззаду']].map(([k, l]) => `<button type="button" class="${ui.photoPose === k ? 'on' : ''}" data-act="pose" data-v="${k}">${l}</button>`).join('')}</div>
-        <label class="btn pri" style="display:block;text-align:center;color:#fff;border:0;background:linear-gradient(135deg,var(--accent),var(--accent2));font-weight:700">Додати фото<input type="file" id="photoIn" accept="image/*" style="display:none"></label>
+        <label class="btn pri" style="display:block;text-align:center;color:var(--accent-ink);border:1px solid var(--accent);background:var(--accent);font-weight:500">Додати фото<input type="file" id="photoIn" accept="image/*" style="display:none"></label>
         <div id="cmpBox"></div><h2>Усі фото</h2><div class="ph" id="phGrid"><div class="empty" style="grid-column:1/-1">Завантаження…</div></div>
         <p class="tiny muted">Фото зберігаються лише в цьому телефоні (стиснені до 1080 px). Тижні 1, 4, 8, 12 — однакове світло й місце.</p>`;
     } else {
@@ -1076,7 +1081,7 @@
     STORE.listPhotos(DB.active).then((all) => {
       const grid = document.getElementById('phGrid'); if (!grid) return;
       const mine = all.filter((x) => x.pose === ui.photoPose);
-      grid.innerHTML = mine.length ? mine.slice().reverse().map((x) => { const u = URL.createObjectURL(x.blob); photoUrls.push(u); return `<div data-act="photo" data-id="${x.id}" style="position:relative"><img src="${u}" alt="фото ${dm(x.date)}"><span class="tiny" style="position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:1px 6px">${dm(x.date)}</span></div>`; }).join('') : '<div class="empty" style="grid-column:1/-1">Ще немає фото в цьому ракурсі</div>';
+      grid.innerHTML = mine.length ? mine.slice().reverse().map((x) => { const u = URL.createObjectURL(x.blob); photoUrls.push(u); return `<div data-act="photo" data-id="${x.id}" style="position:relative"><img src="${u}" alt="фото ${dm(x.date)}"><span class="tiny" style="position:absolute;left:6px;bottom:6px;background:rgba(8,32,31,.7);color:#fff;padding:1px 6px">${dm(x.date)}</span></div>`; }).join('') : '<div class="empty" style="grid-column:1/-1">Ще немає фото в цьому ракурсі</div>';
       const box = document.getElementById('cmpBox');
       if (box && mine.length >= 2) {
         const a = URL.createObjectURL(mine[0].blob), b = URL.createObjectURL(mine[mine.length - 1].blob); photoUrls.push(a, b);
@@ -1365,7 +1370,7 @@
     }
     if (act === 'photo') {
       const id = Number(b.dataset.id); const img = b.querySelector('img');
-      openSheet(`<img src="${img ? img.src : ''}" style="width:100%;border-radius:16px" alt="фото"><p></p><button type="button" class="ghost wide" style="color:var(--bad)" data-act="photoDel" data-id="${id}">Видалити фото</button>`); return;
+      openSheet(`<img src="${img ? img.src : ''}" style="width:100%" alt="фото"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="${id}">Видалити фото</button>`); return;
     }
     if (act === 'photoDel') { if (!confirm('Видалити фото?')) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
     if (act === 'meSave') {
