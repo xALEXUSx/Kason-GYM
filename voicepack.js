@@ -81,7 +81,8 @@ var VOICEPACK = (function () {
   var el = null, SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
   function media() { if (!el && typeof Audio !== 'undefined') { el = new Audio(); el.preload = 'auto'; el.setAttribute('playsinline', ''); } return el; }
   function unlock() {
-    var m = media(); if (!m || m.dataset.ok) return;
+    /* поки грає запис (фраза чи відповідь тренера) — не чіпати: дотик до екрана (прокрутка) інакше підміняв звук тишею й обривав голос */
+    var m = media(); if (!m || m.dataset.ok || playing || !m.paused) return;
     try { m.src = SILENT; m.dataset.ok = '1'; var p = m.play(); if (p && p.catch) p.catch(function () { delete m.dataset.ok; }); } catch (e) { /* немає */ }
   }
   async function playMedia(id, segs, my) {

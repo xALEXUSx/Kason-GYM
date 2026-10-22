@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.12.0';
+  const VERSION = '3.12.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -66,6 +66,10 @@ window.APP_START = () => {
   let view = DB.active ? 'home' : 'onboard';
   const ui = { ob: 1, obProg: null, progTab: 'ex', progEx: null, metric: 'e1rm', range: 'all', musDays: 7, repMonth: null, bodyTab: 'm', planTab: 'w', calMonth: null, summary: null, photoPose: 'front', cmp: 50 };
   let audio = null, wakeLock = null, kp = null;
+  /* голосовий тренер-співрозмовник: розмова, запис, сеанс Gemini Live, потоковий звук; gen — номер дії: нова дія глушить усі попередні */
+  const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1, gen: 0, help: false, warn: false };
+  const LIVE = { ws: null, ready: null, turn: null, prog: '' };
+  const PLAY = { t: 0, srcs: [] };
 
   /* ---------- утиліти ---------- */
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -104,7 +108,9 @@ window.APP_START = () => {
     if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(12);
   }
   /* iOS: звук Web Audio за замовчуванням вимикається перемикачем беззвучного режиму; тип «playback» — грає й тоді. */
-  function audioMode() { try { if ('audioSession' in navigator) navigator.audioSession.type = S().voice.silent === false ? 'auto' : 'playback'; } catch (e) { /* немає */ } }
+  /* iOS (Safari 17+): «playback» — тренер говорить і в беззвучному режимі; але з ним WebKit одразу відмовляє мікрофону (навіть без віконця дозволу),
+     тож поки тренер-співрозмовник слухає — «play-and-record» */
+  function audioMode() { try { if ('audioSession' in navigator) navigator.audioSession.type = ASK.rec || ASK.mic ? 'play-and-record' : S().voice.silent === false ? 'auto' : 'playback'; } catch (e) { /* немає */ } }
   function ensureAudio() { audioMode(); if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; } } if (audio && audio.state === 'suspended') audio.resume(); }
   function beep() {
     if (!S().sound || !audio) return;
@@ -418,7 +424,7 @@ window.APP_START = () => {
   const voiceInfo = { mode: '', why: '' };
   function sysSay(text, why) { voiceInfo.mode = 'system'; voiceInfo.why = why; return VOICE.say(text); }
   function talk(t) {
-    if (!S().voice.on) return false;
+    if (!S().voice.on || ASK.st === 'talk' || ASK.rec) return false;  // говорить тренер-співрозмовник або людина — фразу тренування пропускаємо
     const text = sp(t), id = packId();
     if (!id) return sysSay(text, VPACKS.length ? 'у налаштуваннях обрано системний голос' : 'записані голоси ще не завантажились');
     /* опис голосу ще не завантажився (перші секунди після запуску) — дочекатися, а не перемикатися на системний */
@@ -1072,12 +1078,14 @@ window.APP_START = () => {
   }
 
   /* ---------- радіо ---------- */
-  /* ---------- Голосовий тренер: питання голосом чи текстом → сервер (server/, Cloudflare) → відповідь текстом і голосом тренера ----------
-     На сервер іде текст питання (голос розпізнає Whisper на Cloudflare — у Google він не потрапляє) і зріз програми (coachctx.js):
-     без імені, віку, ваги тіла, здоровʼя, замірів і фото. Відповідає Gemini за нашою програмою й документами (server/src/kb.js).
+  /* ---------- Голосовий тренер-співрозмовник (з 3.12.0; швидкий голос — 3.12.1) ----------
+     Питання голосом чи текстом → відповідь тренера голосом потоком (Gemini Live, перший звук ≈ 1 с) і текстом.
+     Голос людини розпізнає Whisper на нашому сервері (server/, Cloudflare) — у Google він не потрапляє; Gemini отримує лише текст питання
+     і зріз програми (coachctx.js) — без імені, віку, ваги тіла, здоровʼя, замірів і фото. Ключ Gemini — лише на сервері: застосунок
+     бере одноразовий токен (/live), у якому вже закріплено модель, голос і базу знань. Немає звуку за 5 с — запасний шлях (/ask).
+     Будь-яка нова дія (питання, мікрофон, «Прослухати», «Нова розмова») глушить усі попередні (ASK.gen) — двох голосів одночасно не буває.
      Розмова живе до закриття застосунку. ⏭ Захист доступу до сервера — окрема сесія (CLAUDE.md §11). */
   const COACH_URL = 'https://kason-gym-coach.kason-tech.workers.dev';
-  const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1 };
   const ASK_EX = ['Яку вагу брати сьогодні?', 'Як правильно робити першу вправу?', 'Що таке міо-підхід?', 'Навіщо легкий тиждень?'];
   /* що тренер знає про програму: триває тренування — його стан; ні — наступне тренування з підказками ваги */
   function coachProgram() {
@@ -1091,23 +1099,34 @@ window.APP_START = () => {
     const pv = buildDraft(null, 'g', place);
     return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, nextN()), items: pv.items, workout: pv.workout, place: pv.place, inProgress: false });
   }
+  const coachIds = () => Object.keys(G().ex).filter((id) => !G().ex[id].retired);
   function askStateText() {
+    if (ASK.st === 'mic') return '<b>Зараз iPhone спитає дозвіл на мікрофон — натисніть «Дозволити».</b>';
     if (ASK.st === 'rec') { const s = Math.floor((Date.now() - ASK.t0) / 1000); return `<b>Слухаю… 0:${pad(s)}</b> · торкніться, щоб надіслати`; }
     if (ASK.st === 'think') return '<b>Думаю…</b>';
     if (ASK.st === 'talk') return '<b>Говорю…</b> · торкніться, щоб зупинити';
     if (ASK.st === 'err') return `<span class="bad">${esc(ASK.msg)}</span>`;
     return ASK.chat.length ? 'Торкніться, щоб уточнити.' : 'Торкніться й запитайте: програма, вага, техніка, застосунок.';
   }
+  /* мікрофон заборонено — прості кроки, як дозволити (віконце iPhone більше не зʼявиться само) */
+  const MIC_HELP = '<div class="note w" id="askHelp"><b>Дозвольте мікрофон — один раз</b><ol class="small" style="margin:6px 0 4px;padding-left:20px">' +
+    '<li>Відкрийте «Параметри» iPhone.</li><li>«Програми» → «Safari» → «Мікрофон» → «Запитувати» (на старіших iOS — одразу «Safari» → «Мікрофон»).</li>' +
+    '<li>Повністю закрийте цей застосунок і відкрийте знову, торкніться 🎙 — iPhone спитає дозвіл, натисніть «Дозволити».</li></ol>' +
+    '<div class="small muted">Поки що можна написати питання нижче.</div><button type="button" class="sm" data-act="askMic">Спробувати ще раз</button></div>';
   function askChatHtml() {
-    if (!ASK.chat.length) return `<div class="askex">${ASK_EX.map((q) => `<button type="button" class="chip" data-act="askEx" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
-    return ASK.chat.map((t, k) => `<div class="bub q">${esc(t.q)}</div><div class="bub a">${esc(t.a)}<div><button type="button" class="sm ghost" data-act="askSay" data-i="${k}" aria-label="прослухати відповідь">▶ Прослухати</button></div></div>`).join('');
+    const help = ASK.help ? MIC_HELP : '';
+    if (!ASK.chat.length) return help + `<div class="askex">${ASK_EX.map((q) => `<button type="button" class="chip" data-act="askEx" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
+    const last = ASK.chat.length - 1;
+    return ASK.chat.map((t, k) => `<div class="bub q">${esc(t.q)}</div>` + (t.a
+      ? `<div class="bub a">${esc(t.a)}${t.done ? `<div><button type="button" class="sm ghost" data-act="askSay" data-i="${k}" aria-label="прослухати відповідь">▶ Прослухати</button></div>` : ''}</div>`
+      : k === last && (ASK.st === 'think' || ASK.st === 'talk') ? '<div class="bub a muted">…</div>' : '')).join('') + help;
   }
   function askDraw() {
     const ch = document.getElementById('askChat'), stEl = document.getElementById('askState'), mic = document.getElementById('askMic');
     if (!ch) return;
     ch.innerHTML = askChatHtml(); ch.scrollTop = ch.scrollHeight;
     stEl.innerHTML = askStateText();
-    mic.className = 'mic' + (ASK.st === 'rec' ? ' rec' : ASK.st === 'think' ? ' busy' : '');
+    mic.className = 'mic' + (ASK.st === 'rec' ? ' rec' : ASK.st === 'think' || ASK.st === 'mic' ? ' busy' : '');
     mic.setAttribute('aria-label', ASK.st === 'rec' ? 'надіслати питання' : ASK.st === 'talk' ? 'зупинити відповідь' : 'говорити');
     const nw = document.getElementById('askNew'); if (nw) nw.hidden = !ASK.chat.length;
   }
@@ -1121,43 +1140,69 @@ window.APP_START = () => {
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); askSend({ text: inp.value }); } });
     askDraw();
   }
+  /* тиша: зупинити все, що говорить чи грає (і все, що ще в дорозі, — через новий номер дії) */
+  function askHush() {
+    ASK.gen++;
+    PLAY.srcs.forEach((s) => { try { s.stop(); } catch (e) { /* уже */ } }); PLAY.srcs = []; PLAY.t = 0;
+    RADIO.duck(false); VOICEPACK.stop(); VOICE.stop();
+    if (ASK.st === 'talk') ASK.st = 'idle';
+  }
   async function askMic() {
     if (ASK.st === 'rec') return askStop();
-    if (ASK.st === 'think') return;
-    if (ASK.st === 'talk') { VOICEPACK.stop(); VOICE.stop(); ASK.st = 'idle'; return askDraw(); }
+    if (ASK.st === 'think' || ASK.st === 'mic') return;
+    if (ASK.st === 'talk') { askHush(); return askDraw(); }
+    askHush();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') { ASK.st = 'err'; ASK.msg = 'Тут не вдається записати голос — напишіть питання.'; return askDraw(); }
-    ensureAudio(); VOICEPACK.unlock(); VOICEPACK.stop(); VOICE.stop();
+    ensureAudio(); VOICEPACK.unlock();
+    /* стан дозволу — лише щоб підказати «натисніть «Дозволити»»; сам запит мікрофона — завжди (лише він показує віконце iPhone),
+       прості кроки «як дозволити» — тільки після справжньої відмови */
+    let perm = '';
+    try { if (navigator.permissions && navigator.permissions.query) perm = (await navigator.permissions.query({ name: 'microphone' })).state; } catch (e) { perm = ''; }
+    ASK.mic = true; audioMode();  // iOS: «запис і відтворення» ДО запиту мікрофона — інакше відмова без віконця
+    if (perm !== 'granted') { ASK.st = 'mic'; askDraw(); }
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
-    catch (e) { ASK.st = 'err'; ASK.msg = 'Немає доступу до мікрофона: дозвольте його для застосунку або напишіть питання.'; return askDraw(); }
+    catch (e) {
+      ASK.mic = false; audioMode();
+      const n = e && e.name;
+      if (n === 'NotAllowedError' || n === 'SecurityError') { ASK.help = true; ASK.st = 'err'; ASK.msg = 'Немає дозволу на мікрофон.'; }
+      else { ASK.st = 'err'; ASK.msg = n === 'NotReadableError' || n === 'AbortError' ? 'Мікрофон зайнятий (дзвінок чи інша програма) — спробуйте ще раз.' : n === 'NotFoundError' ? 'Мікрофон не знайдено — напишіть питання.' : 'Не вдалося увімкнути мікрофон — спробуйте ще раз або напишіть питання.'; }
+      return askDraw();
+    }
+    ASK.help = false;
     const type = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
     let mr;
-    try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); } catch (e) { stream.getTracks().forEach((t) => t.stop()); ASK.st = 'err'; ASK.msg = 'Тут не вдається записати голос — напишіть питання.'; return askDraw(); }
+    try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); } catch (e) { stream.getTracks().forEach((t) => t.stop()); ASK.mic = false; audioMode(); ASK.st = 'err'; ASK.msg = 'Тут не вдається записати голос — напишіть питання.'; return askDraw(); }
     const chunks = [];
     mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     ASK.rec = { mr, stream, chunks, type: mr.mimeType || type };
     RADIO.hush(true);
     mr.start(); ASK.st = 'rec'; ASK.msg = ''; ASK.t0 = Date.now();
     ASK.tick = setInterval(() => { if (Date.now() - ASK.t0 >= 30000) askStop(); else askDraw(); }, 500);
+    liveOpen().catch(() => {});  // поки людина говорить — розмова з Gemini Live уже налаштовується (≈ 1,5 с)
     askDraw();
   }
-  /* зупинити запис; send — надіслати (інакше — просто викинути) */
+  /* зупинити запис; send — повернути запис (інакше — просто викинути) */
   async function askEnd(send) {
     const r = ASK.rec; if (!r) return null; ASK.rec = null; clearInterval(ASK.tick);
     const done = new Promise((ok) => { r.mr.onstop = ok; setTimeout(ok, 1500); });
     try { if (r.mr.state !== 'inactive') r.mr.stop(); } catch (e) { /* уже */ }
-    await done; r.stream.getTracks().forEach((t) => t.stop()); RADIO.hush(false);
+    await done; r.stream.getTracks().forEach((t) => t.stop()); ASK.mic = false; audioMode(); RADIO.hush(false);
     return send ? new Blob(r.chunks, { type: r.type || 'audio/mp4' }) : null;
   }
   function askCancel() { askEnd(false); ASK.st = 'idle'; }
   async function askStop() {
+    const g = ASK.gen;
     ASK.st = 'think'; askDraw();
     const blob = await askEnd(true);
-    try {
-      const wav = blob && blob.size ? await toWav16k(await blob.arrayBuffer()) : null;
-      if (!wav) { ASK.st = 'err'; ASK.msg = 'Не почув — скажіть ще раз, ближче до телефона.'; return askDraw(); }
-      askSend({ audio: wav });
-    } catch (e) { ASK.st = 'err'; ASK.msg = 'Не вдалося обробити запис — скажіть ще раз або напишіть.'; askDraw(); }
+    let wav = null;
+    try { wav = blob && blob.size ? await toWav16k(await blob.arrayBuffer()) : null; } catch (e) { wav = null; }
+    if (g !== ASK.gen) return;
+    if (!wav) { ASK.st = 'err'; ASK.msg = 'Не почув — скажіть ще раз, ближче до телефона.'; return askDraw(); }
+    const j = await post('/hear', { audio: wav }, 8000);
+    if (g !== ASK.gen) return;
+    if (!j || !j.q) { ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
+    askTurn(j.q);
   }
   /* запис → WAV 16 кГц моно (так його найкраще чує розпізнавання), base64; тиша чи коротше 0,4 с — null */
   async function toWav16k(buf) {
@@ -1177,45 +1222,155 @@ window.APP_START = () => {
     for (let k = 0; k < u.length; k += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(k, k + 0x8000));
     return btoa(bin);
   }
-  async function askSend(o) {
-    const q = String(o.text || '').trim();
-    if (!o.audio && !q) return;
-    if (ASK.st === 'think' && !o.audio) return;
-    VOICEPACK.stop(); VOICE.stop();
-    ASK.st = 'think'; ASK.msg = ''; askDraw();
-    const prog = G(), body = { sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), program: coachProgram(), history: ASK.chat.slice(-6).map((t) => ({ q: t.q, a: t.a })) };
-    if (o.audio) body.audio = o.audio; else body.text = q;
-    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = ctl ? setTimeout(() => ctl.abort(), 60000) : 0;
-    let r = null, j = {};
-    try { r = await fetch(COACH_URL + '/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined }); j = await r.json(); }
-    catch (e) { /* мережа або не JSON */ }
-    clearTimeout(to);
-    if (!r || !r.ok || !j.a) {
-      ASK.st = 'err';
-      ASK.msg = !r ? (navigator.onLine === false ? 'Немає інтернету — тренер відповідає лише онлайн.' : 'Тренер не відповів — спробуйте ще раз.')
-        : ({ empty: 'Не почув питання — скажіть ще раз.', busy: 'Тренер зараз зайнятий — спробуйте за хвилину.', big: 'Запис задовгий — до 30 секунд.' })[j.error] || 'Тренер не відповів — спробуйте ще раз.';
-      return askDraw();
-    }
-    ASK.chat.push({ q: j.q, a: j.a }); ASK.st = 'idle';
-    const inp = document.getElementById('askText'); if (inp && !o.audio) inp.value = '';
-    askDraw();
-    askSpeak(ASK.chat.length - 1, false);
+  function askSend(o) {
+    const q = String(o.text || '').trim().slice(0, 600);
+    if (!q || ASK.st === 'think' || ASK.st === 'rec' || ASK.st === 'mic') return;
+    ensureAudio(); VOICEPACK.unlock();
+    const inp = document.getElementById('askText'); if (inp) inp.value = '';
+    askTurn(q);
   }
-  /* відповідь голосом тренера (той самий голос, що веде тренування); не вийшло — системним голосом; голос вимкнено — лише текст (▶ — завжди) */
+  async function post(path, body, ms) {
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = ctl ? setTimeout(() => ctl.abort(), ms) : 0;
+    try {
+      const r = await fetch(COACH_URL + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined });
+      return await r.json().catch(() => ({}));
+    } catch (e) { return null; } finally { clearTimeout(to); }
+  }
+  function askErr(j) {
+    if (!j) return navigator.onLine === false ? 'Немає інтернету — тренер відповідає лише онлайн.' : 'Тренер не відповів — спробуйте ще раз.';
+    return ({ empty: 'Не почув питання — скажіть ще раз.', busy: 'Тренер зараз зайнятий — спробуйте за хвилину.', big: 'Запис задовгий — до 30 секунд.' })[j.error] || 'Тренер не відповів — спробуйте ще раз.';
+  }
+  /* Одне питання. Головний шлях — Gemini Live: голос тренера йде потоком. Немає звуку за 5 с (слово Alexа 23.10: «має бути 5 сек») —
+     запасний шлях: текстова відповідь сервера (кожна модель — до 5 с) і голос телефона. */
+  async function askTurn(q) {
+    askHush();
+    /* попередня відповідь ще йшла — її обриваємо (текст лишається з «…» і кнопкою «Прослухати»), нова розмова з Live, щоб шматки не змішались */
+    if (LIVE.turn) { const pt = LIVE.turn.t; if (pt) { pt.a = String(pt.a).replace(/\s+/g, ' ').trim() + (pt.a ? ' …' : ''); pt.done = !!pt.a; } liveClose(); }
+    const g = ASK.gen, t = { q, a: '', pcm: [], done: false, heard: false };
+    ASK.chat.push(t); ASK.st = 'think'; ASK.msg = ''; ASK.help = false; askDraw();
+    let ok = false;
+    try { ok = await liveTurn(t, g); } catch (e) { ok = false; }
+    if (ok || g !== ASK.gen) return;
+    liveClose(); t.a = ''; t.pcm = [];
+    const prog = G();
+    const j = await post('/ask', { text: q, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: x.q, a: x.a })) }, 32000);
+    if (g !== ASK.gen) return;
+    if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
+    t.a = j.a; t.done = true; ASK.st = 'idle'; askDraw();
+    if (!S().voice.on) return;
+    ASK.st = 'talk'; ASK.i = ASK.chat.indexOf(t); askDraw();
+    sysSay(sp(t.a), 'відповідь тренера — системним голосом (запасний шлях)'); askWaitQuiet(ASK.i, g);
+  }
+  /* ---------- Gemini Live: одноразовий токен із сервера, голос — потоком ---------- */
+  function liveOpen() {
+    if (LIVE.ready) return LIVE.ready;
+    const p = (async () => {
+      const prog = G(), j = await post('/live', { sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds() }, 5000);
+      if (!j || !j.token) throw new Error('немає токена');
+      return new Promise((ok, no) => {
+        const ws = new WebSocket('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(j.token));
+        const to = setTimeout(() => { no(new Error('налаштування')); try { ws.close(); } catch (e) { /* уже */ } }, 8000);
+        LIVE.ws = ws; LIVE.prog = '';
+        ws.onopen = () => ws.send(JSON.stringify({ setup: { model: 'models/' + j.model } }));
+        ws.onmessage = async (ev) => {
+          let m; try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : await ev.data.text()); } catch (e) { return; }
+          if (m.setupComplete) { clearTimeout(to); return ok(ws); }
+          const sc = m.serverContent, tr = LIVE.turn; if (!sc || !tr || LIVE.ws !== ws) return;
+          ((sc.modelTurn || {}).parts || []).forEach((x) => { if (x.inlineData && x.inlineData.data) tr.audio(x.inlineData.data); });
+          if (sc.outputTranscription && sc.outputTranscription.text) tr.text(sc.outputTranscription.text);
+          if (sc.turnComplete) tr.done();
+        };
+        ws.onclose = () => {
+          clearTimeout(to); no(new Error('закрито'));
+          if (LIVE.ws === ws) { const tr = LIVE.turn; LIVE.ws = null; LIVE.ready = null; LIVE.turn = null; if (tr) tr.fail(); }
+        };
+      });
+    })();
+    LIVE.ready = p;
+    p.catch(() => { if (LIVE.ready === p) { LIVE.ready = null; LIVE.ws = null; } });
+    return p;
+  }
+  function liveClose() { const ws = LIVE.ws; LIVE.ws = null; LIVE.ready = null; LIVE.turn = null; if (ws) try { ws.close(); } catch (e) { /* уже */ } }
+  /* true — тренер заговорив (звук прийшов за 5 с); false — ні: тоді запасний шлях */
+  function liveTurn(t, g) {
+    return new Promise((resolve) => {
+      let settled = false, got = false;
+      const fin = (v) => { if (!settled) { settled = true; resolve(v); } };
+      const wait = setTimeout(() => { if (!got) { if (LIVE.turn && LIVE.turn.t === t) LIVE.turn = null; fin(false); } }, 5000);
+      Promise.race([liveOpen(), new Promise((no, bad) => setTimeout(() => bad(new Error('5 с')), 5000))]).then((ws) => {
+        if (settled || g !== ASK.gen) return fin(false);
+        const turns = [], prog = coachProgram();
+        /* програма — у першому питанні розмови й щоразу, як змінилась (зроблені підходи, інший тиждень) */
+        if (prog !== LIVE.prog) {
+          turns.push({ role: 'user', parts: [{ text: 'МОЯ ПРОГРАМА ЗАРАЗ (найвищий пріоритет):\n' + prog }] }, { role: 'model', parts: [{ text: 'Бачу твою програму. Відповідаю за нею.' }] });
+          if (!LIVE.prog) ASK.chat.slice(0, -1).slice(-6).forEach((x) => { if (x.a) turns.push({ role: 'user', parts: [{ text: x.q }] }, { role: 'model', parts: [{ text: x.a }] }); });
+          LIVE.prog = prog;
+        }
+        turns.push({ role: 'user', parts: [{ text: t.q }] });
+        const k = () => ASK.chat.indexOf(t);
+        LIVE.turn = {
+          t,
+          audio(b64) {
+            t.pcm.push(b64);
+            if (!got) { got = true; clearTimeout(wait); if (g === ASK.gen) { ASK.st = 'talk'; ASK.i = k(); askDraw(); } fin(true); }
+            if (g === ASK.gen && livePlay(b64)) t.heard = true;
+          },
+          text(s) { t.a += s; if (g === ASK.gen) askDraw(); },
+          done() { clearTimeout(wait); LIVE.turn = null; t.a = String(t.a).replace(/\s+/g, ' ').trim(); t.done = true; askDraw(); if (got) liveEnded(k(), g); else fin(false); },
+          fail() { clearTimeout(wait); LIVE.turn = null; t.done = !!t.a; askDraw(); if (got) liveEnded(k(), g); else fin(false); }
+        };
+        try { ws.send(JSON.stringify({ clientContent: { turns, turnComplete: true } })); } catch (e) { LIVE.turn.fail(); }
+      }, () => { clearTimeout(wait); fin(false); });
+    });
+  }
+  /* потоковий звук: шматки PCM 24 кГц стають у чергу Web Audio один за одним; true — шматок поставлено */
+  function livePlay(b64) {
+    if (!S().voice.on || !audio || audio.state !== 'running') return false;
+    const bin = atob(b64), n = bin.length >> 1; if (!n) return false;
+    const buf = audio.createBuffer(1, n, 24000), d = buf.getChannelData(0);
+    for (let k = 0; k < n; k++) { const v = bin.charCodeAt(2 * k) | (bin.charCodeAt(2 * k + 1) << 8); d[k] = (v > 32767 ? v - 65536 : v) / 32768; }
+    const s = audio.createBufferSource(); s.buffer = buf; s.connect(audio.destination);
+    const now = audio.currentTime; if (PLAY.t < now + 0.03) PLAY.t = now + 0.06;
+    s.start(PLAY.t); PLAY.t += buf.duration; PLAY.srcs.push(s);
+    s.onended = () => { PLAY.srcs = PLAY.srcs.filter((x) => x !== s); };
+    RADIO.duck(true);
+    return true;
+  }
+  /* відповідь прийшла вся: дочекатися, доки дограє; не грало зовсім (Web Audio приспано) — програти цілим записом. Лише якщо це досі поточна дія. */
+  function liveEnded(k, g) {
+    if (g !== ASK.gen) return;
+    const t = ASK.chat[k];
+    if (t && S().voice.on && !t.heard) return askSpeak(k, true);
+    const w = setInterval(() => {
+      if (g !== ASK.gen) return clearInterval(w);
+      if (!PLAY.srcs.length || !audio || audio.currentTime >= PLAY.t - 0.02) { clearInterval(w); PLAY.t = 0; RADIO.duck(false); ASK.st = 'idle'; askDraw(); }
+    }, 250);
+  }
+  function askWaitQuiet(k, g) { const w = setInterval(() => { if (g !== ASK.gen || ASK.st !== 'talk') return clearInterval(w); if (!speaking()) { clearInterval(w); ASK.st = 'idle'; askDraw(); } }, 300); }
+  function pcmWav(chunks) {
+    const parts = chunks.map((b) => { const s = atob(b), u = new Uint8Array(s.length); for (let k = 0; k < s.length; k++) u[k] = s.charCodeAt(k); return u; });
+    const n = parts.reduce((a, u) => a + u.length, 0), out = new Uint8Array(44 + n), dv = new DataView(out.buffer), w = (o, x) => { for (let k = 0; k < x.length; k++) dv.setUint8(o + k, x.charCodeAt(k)); };
+    w(0, 'RIFF'); dv.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, 24000, true); dv.setUint32(28, 48000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n, true);
+    let o = 44; parts.forEach((u) => { out.set(u, o); o += u.length; });
+    return out.buffer;
+  }
+  /* «▶ Прослухати»: голос цієї ж відповіді; відповідь запасного шляху — голосом тренера з сервера, не вийшло — голосом телефона */
   async function askSpeak(k, force) {
-    const t = ASK.chat[k]; if (!t || (!force && !S().voice.on)) return;
-    const text = sp(t.a), id = packId();
-    VOICEPACK.stop(); VOICE.stop(); ensureAudio();
+    const t = ASK.chat[k]; if (!t || !t.a || (!force && !S().voice.on)) return;
+    askHush(); ensureAudio();
+    const g = ASK.gen;
     ASK.st = 'talk'; ASK.i = k; askDraw();
-    const mine = () => ASK.st === 'talk' && ASK.i === k;
-    const end = () => { const w = setInterval(() => { if (!mine()) return clearInterval(w); if (!speaking()) { clearInterval(w); ASK.st = 'idle'; askDraw(); } }, 300); };
-    if (id && t.wav === undefined) {
-      try { const r = await fetch(COACH_URL + '/say', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, pack: id }) }); t.wav = r.ok ? await r.arrayBuffer() : null; }
-      catch (e) { t.wav = null; }
+    if (!t.wav && t.pcm && t.pcm.length) t.wav = pcmWav(t.pcm);
+    if (!t.wav && packId()) {
+      const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = ctl ? setTimeout(() => ctl.abort(), 12000) : 0;
+      try { const r = await fetch(COACH_URL + '/say', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: sp(t.a), pack: packId() }), signal: ctl ? ctl.signal : undefined }); if (r.ok) t.wav = await r.arrayBuffer(); } catch (e) { /* голос телефона */ }
+      clearTimeout(to);
     }
-    if (!mine()) return;
-    if (t.wav && (await VOICEPACK.playData(t.wav, 'audio/wav', audio))) return end();
-    sysSay(text, 'відповідь тренера — системним голосом'); end();
+    if (g !== ASK.gen) return;  // поки чекали — людина зробила іншу дію: мовчимо
+    if (t.wav && (await VOICEPACK.playData(t.wav, 'audio/wav', audio))) return askWaitQuiet(k, g);
+    if (g !== ASK.gen) return;
+    sysSay(sp(t.a), 'відповідь тренера — системним голосом'); askWaitQuiet(k, g);
   }
   function radioSheet() {
     const cur = RADIO.cur, st = RADIO.state, R = S().radio;
@@ -1715,7 +1870,7 @@ window.APP_START = () => {
     if (act === 'askSend') { const inp = document.getElementById('askText'); return askSend({ text: inp ? inp.value : '' }); }
     if (act === 'askEx') return askSend({ text: b.dataset.v || '' });
     if (act === 'askSay') return askSpeak(Number(b.dataset.i), true);
-    if (act === 'askNew') { VOICEPACK.stop(); VOICE.stop(); ASK.chat = []; ASK.st = 'idle'; ASK.msg = ''; return askDraw(); }
+    if (act === 'askNew') { askHush(); liveClose(); ASK.chat = []; ASK.st = 'idle'; ASK.msg = ''; ASK.help = false; return askDraw(); }
     if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
     if (act === 'rpause') { RADIO.pause(); return; }
     if (act === 'rresume') { ensureAudio(); RADIO.resume(); return; }
@@ -1931,5 +2086,5 @@ window.APP_START = () => {
   if (DB.active) ENGINE.migrate(DB);
   render();
   initPacks();
-  window.__app = { askFake: (q, a) => { ASK.chat.push({ q, a, wav: null }); ASK.st = 'idle'; askDraw(); }, get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
+  window.__app = { askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 };
