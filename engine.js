@@ -216,6 +216,9 @@ var ENGINE = (function () {
   }
 
   /* Тиждень за датою (понеділок, YYYY-MM-DD). */
+  /* Привітання за годиною на годиннику телефона (місцевий час): ніч 23:00–4:59, ранок 5:00–11:59, день 12:00–17:59, вечір 18:00–22:59.
+     До 3.12.2 ночі не було — о 2-й ночі писало «Доброго ранку». */
+  function greeting(h) { return h >= 23 || h < 5 ? 'Доброї ночі' : h < 12 ? 'Доброго ранку' : h < 18 ? 'Доброго дня' : 'Доброго вечора'; }
   function weekKey(dateStr) {
     var d = new Date(dateStr + 'T12:00:00');
     var day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day);
@@ -542,6 +545,6 @@ var ENGINE = (function () {
 
   return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
-           suggest: suggest, machStep: machStep, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
+           suggest: suggest, machStep: machStep, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
 if (typeof module !== 'undefined') module.exports = ENGINE;

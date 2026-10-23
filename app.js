@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.12.1';
+  const VERSION = '3.12.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -281,7 +281,9 @@ window.APP_START = () => {
     app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div>
       <div class="qprog" aria-hidden="true"><i style="width:${Math.round((q.step + 1) / QS.length * 100)}%"></i></div><p class="tiny muted">Крок ${q.step + 1} з ${QS.length}${q.edit ? ' · зміна анкети' : ''}</p>
       ${body}
-      <div class="qnav">${q.step ? '<button type="button" class="ghost" data-act="qBack">Назад</button>' : (q.edit ? '<button type="button" class="ghost" data-act="qCancel">Скасувати</button>' : '<span></span>')}
+      ${(() => { const left = q.step ? '<button type="button" class="ghost" data-act="qBack">Назад</button>' : q.edit ? '<button type="button" class="ghost" data-act="qCancel">Скасувати</button>' : '';
+        /* без «Назад» (перший крок) — «Далі» на всю ширину, як «Відновити» під нею (до 3.12.2 стояла праворуч несиметрично) */
+        return `<div class="qnav${left ? '' : ' one'}">${left}`; })()}
       <button type="button" class="pri big" data-act="qNext">${last ? (q.edit ? 'Оновити програму' : 'Скласти програму') : 'Далі'}</button></div>
       ${q.step || q.edit ? '' : '<p></p><label class="btn ghost" style="display:block;text-align:center">Є резервна копія? Відновити<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label>'}`;
     const ri = document.getElementById('restoreIn'); if (ri) ri.onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
@@ -1449,7 +1451,7 @@ window.APP_START = () => {
   }
   function rHome() {
     const p = P(), prog = G(), d = p.draft, plan = ENGINE.planFor(prog, nextN()), wo = prog.workouts[plan.workout];
-    const h = new Date().getHours(), greet = h < 12 ? 'Доброго ранку' : h < 18 ? 'Доброго дня' : 'Доброго вечора';
+    const greet = ENGINE.greeting(new Date().getHours());  // година — з годинника телефона
     const wkKey = ENGINE.weekKey(today()), thisWeek = p.sessions.filter((s) => ENGINE.weekKey(s.date) === wkKey).length;
     const streak = ENGINE.streakWeeks(p.sessions, today());
     const ym = today().slice(0, 7), mprs = p.sessions.filter((s) => s.date.slice(0, 7) === ym).reduce((a, s) => a + (s.prs || 0), 0);
