@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.19.1';
+  const VERSION = '3.20.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -123,7 +123,6 @@ window.APP_START = () => {
   const GRIP_ERR = () => LL('Вага грифа — у грамах: 0 або від 50 до 10 000 (0,5 кг — це 500)', 'Handle weight is in grams: 0 or 50 to 10,000 (0.5 kg is 500)');
   const QINV = (lb) => (lb ? ['qIL0', 'qIL1', 'qIL2'] : ['qI5', 'qI25', 'qI125']);  // поля дисків анкети: у кг — колишні id (їхні підказки в tips.js)
   /* поле зросту в «Харчуванні» у фунтах: підпис і підказка — дюйми (у кг — як було, підказка з tips.js) */
-  const lbH = (t) => (isLb() ? t.replace(/Зріст, см|Height, cm/, LL('Зріст, дюймів', 'Height, in')).replace('id="meH"', `id="meH" data-tip="${esc(LL('Ваш зріст у дюймах — потрібен для розрахунку калорій.', 'Your height in inches — needed to calculate calories.'))}"`) : t);
   /* підказка поля диска у фунтах (у кг — з tips.js): найменший — ще й про крок */
   const invTip = (k, i) => (i < 2 ? LL(`Скільки у вас дисків по ${fmt(k)} lb — на обидві гантелі разом.`, `How many ${k} lb plates you have — for both dumbbells combined.`)
     : LL(`Скільки дисків по ${fmt(k)} lb. Від 4 штук вага росте кроком 5 lb, інакше — 10 lb.`, `How many ${k} lb plates. With 4 or more, the weight goes up in 5 lb steps; otherwise in 10 lb steps.`));
@@ -193,6 +192,8 @@ window.APP_START = () => {
 
   /* ---------- шторка ---------- */
   function openSheet(html) { sheetEl.style.transform = ''; sheetEl.style.transition = ''; sheetEl.innerHTML = '<div class="grab"></div>' + html; document.body.classList.add('sheet'); }
+  sheetEl.addEventListener('input', (e) => { const t = e.target; if (t && t.dataset && t.dataset.kin) kInput(t); });  // кухня: пошук і числа без перемальовування шторки
+  sheetEl.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'kPhIn') { const f = t.files && t.files[0]; t.value = ''; if (f) kPhotoLoad(f); } });  // кухня: фото тарілки
   function closeSheet() { document.body.classList.remove('sheet'); kp = null; if (ASK.rec) askCancel(); }
   sheetBg.addEventListener('click', closeSheet);
   /* жест iPhone: потягнути шторку вниз — закрити (слово Alexа 23.10: «не згортаються вікна, коли я сильно тягну пальцем вниз»).
@@ -279,7 +280,7 @@ window.APP_START = () => {
   /* ---------- навігація ---------- */
   document.getElementById('tabs').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-tab]'); if (!b) return;
-    const go = () => { view = b.dataset.tab; render(); window.scrollTo(0, 0); };
+    const go = () => { view = b.dataset.tab; if (view === 'kitchen') ui.kDate = null; render(); window.scrollTo(0, 0); };  // «Кухня» з панелі — завжди сьогодні (інший день — стрілками)
     /* та сама вкладка — як і раніше: оновити й нагору, без переходу */
     if (b.dataset.tab === view) return go();
     /* плавний перехід між вкладками (iOS 18+); «Зменшити рух» чи старіший iPhone — одразу, як раніше */
@@ -300,7 +301,7 @@ window.APP_START = () => {
     if (view !== 'workout') keepAwake(false);
     if (!I18N.chosen) { nav.style.display = 'none'; return rLang(); }  // перший запуск — спершу мова
     if (VOICE.setUnits) VOICE.setUnits(isLb() ? 'lb' : 'kg');  // голос: кілограми чи фунти
-    ({ onboard: rOnboard, home: rHome, workout: rWorkout, summary: rSummary, plan: rPlan, progress: rProgress, body: rBody, more: rMore }[view] || rHome)();
+    ({ onboard: rOnboard, home: rHome, workout: rWorkout, summary: rSummary, plan: rPlan, kitchen: rKitchen, progress: rProgress, body: rBody, more: rMore }[view] || rHome)();
     updateRadio();
   }
 
@@ -803,6 +804,9 @@ window.APP_START = () => {
   /* ---------- екран тренування ---------- */
   function rWorkout() { if (!P() || !P().draft) { view = 'home'; return render(); } document.body.classList.toggle('coachv', S().mode !== 'list'); return S().mode === 'list' ? rList() : rCoach(); }
   const ICON = {
+    themeAuto: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" style="fill:currentColor"/></svg>',
+    themeLight: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    themeDark: '<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
     list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
     coach: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
     radio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
@@ -1264,11 +1268,15 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`${LL(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>🍴 Кухня</b><div class="small muted">Нова вкладка: норма калорій і білка за вашою метою; їжа — точно (грами, база USDA), швидко (штука, ложка, чашка) чи руками (долоня, кулак); свої продукти з етикетки й страви за рецептом; «Зберегти прийом» — одним дотиком наступного разу; фото тарілки підказує продукти, а кількість вказуєте ви; «Чим добрати білок» — спершу з того, що ви вже їсте; вода з нагадуваннями.</div></li>
+        <li style="display:block"><b>🌓 Тема</b><div class="small muted">Кнопка вгорі праворуч на головній: як у телефоні → світла → темна.</div></li>
         <li style="display:block"><b>🎯 Кілька цілей</b><div class="small muted">В анкеті можна позначити кілька: «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів (невеликий дефіцит, більше білка); «Спина й осанка» — з будь-якою. «Сила й здоровʼя» — окремо від схуднення й набору мʼязів: несумісна мета стає неактивною. Обмеження здоровʼя діють завжди, хоч які цілі обрано.</div></li>
         <li style="display:block"><b>⚖️ Кілограми або фунти</b><div class="small muted">В анкеті й у «Більше» → «Одиниці»: кг і см або фунти й дюйми. Набір дисків у фунтах — 10 · 5 · 2,5 lb. Перемкнули — вага тренувань переводиться й округлюється до ваших дисків; вага тіла й заміри просто показуються в нових одиницях.</div></li>
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">`, `<div class="sp"><b>What the app can do</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
       <ul class="list">
+        <li style="display:block"><b>🍴 Kitchen</b><div class="small muted">A new tab: calorie and protein targets for your goal; log food exactly (grams, USDA database), quickly (piece, spoon, cup), or by hand (palm, fist); your own foods from labels and recipes; “Save meal” — one tap next time; a photo of your plate suggests the foods, and you enter the amounts; “How to reach your protein” starts with what you already eat; water with reminders.</div></li>
+        <li style="display:block"><b>🌓 Theme</b><div class="small muted">The button at the top right of Home: same as your phone → light → dark.</div></li>
         <li style="display:block"><b>🎯 Several goals</b><div class="small muted">In the questionnaire you can check more than one: “Lose weight” and “Build muscle” together means less fat and more muscle (a small deficit, more protein); “Back and posture” goes with any goal. “Strength and health” stays separate from losing weight and building muscle: a goal that clashes is grayed out. Health limits always apply, whatever goals you choose.</div></li>
         <li style="display:block"><b>⚖️ Kilograms or pounds</b><div class="small muted">In the questionnaire and in “More” → “Units”: kg and cm, or pounds and inches. Plates in pounds — 10 · 5 · 2.5 lb. When you switch, workout weights are converted and rounded to your plates; body weight and measurements simply display in the new units.</div></li>
         <li style="display:block"><b>↩ Coming back after a break</b><div class="small muted">Haven’t trained for 2 weeks or more? The app lowers your weights automatically: after a break of up to a month, the first week is ≈ 20% lighter; after a longer one (or 2+ weeks if you’re 60 or older), the first week is a third of your previous weight, then more each week, back to your previous weight in half the length of the break. No failure, myo-reps, or drop sets.</div></li>
@@ -1279,7 +1287,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
         <li style="display:block"><b>⬇ Дроп-сет і розминка за станом</b><div class="small muted">У фазі 3 (тижні 9–11) — «⋯ Ще» → «Дроп-сет»: одразу після останнього підходу, без відпочинку, легше (на тренажері — фіксатор на 1–2 кроки нижче). Розминка: без обмежень, до 55 років і до 100 кг — 3 хв (тіло розігріває перший легкий підхід), інакше — повні 10 хв.</div></li>
         <li style="display:block"><b>🏠 Тренажери вдома</b><div class="small muted">У «Що є вдома» — ті самі тренажери, що в залі (або «Усе, як у залі»): удома програма бере їх першими; історія й рекорди спільні з залом, вага — окремо для дому й залу. Додати чи прибрати — будь-коли: «Більше» → «Обладнання вдома»; історія й рекорди лишаються.</div></li>
-        <li style="display:block"><b>⚙️ Одне джерело</b><div class="small muted">Дні тренувань, гриф і диски («Більше»), зріст і вік («Харчування») одразу йдуть у програму й в анкету; поточний тиждень зберігається.</div></li>
+        <li style="display:block"><b>⚙️ Одне джерело</b><div class="small muted">Дні тренувань, гриф і диски («Більше»), зріст і вік («Кухня» → «Налаштування кухні») одразу йдуть у програму й в анкету; поточний тиждень зберігається.</div></li>
         <li style="display:block"><b>🍽 Норма одразу</b><div class="small muted">Норма калорій і білка — одразу за вагою з анкети; після зважувань у «Замірах» — за ними.</div></li>
         <li style="display:block"><b>🔓 Без коду й Face ID</b><div class="small muted">Застосунок відкривається одразу: дані лише в цьому телефоні, а телефон захищений своїм Face ID чи кодом.</div></li>
         <li style="display:block"><b>🎙 Тренер голосом</b><div class="small muted">Веде тренування крок за кроком: навіщо вправа, як робити, чого не робити, вага й диски, відпочинок, «Час!», рекорди. Характер — жорсткий з гумором. Природний записаний голос: чоловічий і жіночий («Більше» → «Голосовий тренер»).</div></li>
@@ -1296,7 +1304,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🏋️ At home and at the gym</b><div class="small muted">In the questionnaire, choose where you train. At the gym, you get the same workouts on machines and cables; with “Both home and gym,” the app asks where you are before each workout. Machine taken? “More” → “Swap.” If your gym uses a different weight step (2.5 or 4.5 kg), the app picks it up from the weights you enter.</div></li>
         <li style="display:block"><b>⬇ Drop sets and a warm-up that fits you</b><div class="small muted">In phase 3 (weeks 9–11): “⋯ More” → “Drop set” — right after the last set, with no rest, lighter (on a machine, move the pin 1–2 steps down). Warm-up: with no limitations, under 55, and under 100 kg — 3 min (the first light set warms up your body); otherwise, a full 10 min.</div></li>
         <li style="display:block"><b>🏠 Machines at home</b><div class="small muted">In “What you have at home,” pick the same machines as at the gym (or “Full gym setup”): at home, the program uses them first; history and PRs are shared with the gym, while weights are tracked separately for home and gym. Add or remove anytime: “More” → “Home equipment”; your history and PRs stay.</div></li>
-        <li style="display:block"><b>⚙️ One source of truth</b><div class="small muted">Workout days, handle, and plates (“More”), plus height and age (“Nutrition”), go straight into your program and questionnaire; your current week is kept.</div></li>
+        <li style="display:block"><b>⚙️ One source of truth</b><div class="small muted">Workout days, handle, and plates (“More”), plus height and age (“Kitchen” → “Kitchen settings”), go straight into your program and questionnaire; your current week is kept.</div></li>
         <li style="display:block"><b>🍽 Targets right away</b><div class="small muted">Calorie and protein targets are based on your questionnaire weight right away; once you weigh in under “Measurements,” they use those numbers.</div></li>
         <li style="display:block"><b>🔓 No passcode or Face ID</b><div class="small muted">The app opens right away: your data stays only on this phone, and the phone is protected by its own Face ID or passcode.</div></li>
         <li style="display:block"><b>🎙 Voice coach</b><div class="small muted">Guides your workout step by step: why the exercise matters, how to do it, what to avoid, weights and plates, rest, “Time!”, PRs. Personality: tough, with a sense of humor. Natural recorded voice, male or female (“More” → “Voice coach”).</div></li>
@@ -1342,12 +1350,12 @@ window.APP_START = () => {
     const p = P(), prog = G(), d = p.draft;
     if (d) {
       const st = draftStats(d), cs = curStep(d);
-      return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, d.n), items: d.items, workout: d.workout, place: d.place, inProgress: true, cur: cs ? { i: cs.i, j: cs.j } : null, done: st.done, total: st.total, back: backText(d.back) });
+      return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, d.n), items: d.items, workout: d.workout, place: d.place, inProgress: true, cur: cs ? { i: cs.i, j: cs.j } : null, done: st.done, total: st.total, back: backText(d.back), kitchen: kitchenCtx() });
     }
     const last = p.sessions[p.sessions.length - 1];
     const place = prog.gymWorkouts ? (last && last.place) || 'home' : (prog.place === 'gym' ? 'gym' : 'home');
     const pv = buildDraft(null, 'g', place);
-    return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, nextN()), items: pv.items, workout: pv.workout, place: pv.place, inProgress: false, back: backText(pv.back) });
+    return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, nextN()), items: pv.items, workout: pv.workout, place: pv.place, inProgress: false, back: backText(pv.back), kitchen: kitchenCtx() });
   }
   const coachIds = () => Object.keys(G().ex).filter((id) => !G().ex[id].retired);
   function askStateText() {
@@ -1405,7 +1413,8 @@ window.APP_START = () => {
      JPEG — Gemini бачить тренажер, табличку чи вправу, а запит легкий для мобільного інтернету. Фото живе лише в цій розмові (памʼять
      застосунку): ні в телефоні, ні на сервері не зберігається; йде разом із питанням до Gemini. */
   const PHOTO_Q = LL('Що на фото і як це стосується моєї програми?', "What’s in this photo, and how does it relate to my program?");
-  async function askPhotoLoad(file) {
+  /* фото → JPEG до 1024 px (за потреби 768) і до 900 тис. знаків base64 — для тренера й для «фото тарілки» */
+  async function jpegOf(file) {
     const url = URL.createObjectURL(file);
     try {
       const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
@@ -1420,10 +1429,14 @@ window.APP_START = () => {
         side = 768;
       }
       if (!/^\/9j\//.test(b64)) throw new Error(LL('не JPEG', "not a JPEG"));
-      ASK.photo = { b64, src };
+      return { b64, src };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function askPhotoLoad(file) {
+    try {
+      ASK.photo = await jpegOf(file);
       if (ASK.st === 'err') { ASK.st = 'idle'; ASK.msg = ''; }
     } catch (e) { ASK.photo = null; ASK.st = 'err'; ASK.msg = LL('Не вдалося відкрити фото — спробуйте інше.', "Couldn’t open the photo — try another one."); }
-    finally { URL.revokeObjectURL(url); }
     askDraw();
   }
   /* тиша: зупинити все, що говорить чи грає (і все, що ще в дорозі, — через новий номер дії) */
@@ -1690,7 +1703,8 @@ window.APP_START = () => {
   }
   /* надіслати серверу підписку й розклад (дні, час, часовий пояс, наступне тренування, чи вже тренувались) */
   async function remindSync(test) {
-    const r = S().remind; if (!r || !r.on || !pushOk() || Notification.permission !== 'granted') return false;
+    const r = S().remind || {}, kw = P() ? kit().set : {};
+    if (!(r.on || kw.water) || !pushOk() || Notification.permission !== 'granted') return false;  // з 3.20.0 — ще й вода
     try {
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
@@ -1698,6 +1712,10 @@ window.APP_START = () => {
       const p = P(), prog = G(), plan = ENGINE.planFor(prog, nextN()), wo = prog.workouts[plan.workout];
       const body = { sub: sub.toJSON(), on: true, lang: I18N.lang, days: trainDays(), time: r.time || '18:00', tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Kyiv',
         next: wo ? wo.title + ' · ' + plural(wo.items.length, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises")) : '', done: trainedToday() ? today() : '', test: !!test };
+      body.on = !!r.on;
+      /* вода (з 3.20.0): розклад на день тренування й на звичайний, склянка, випите сьогодні — сервер пропускає склянки, які вже відмічено */
+      const sx = ksex(), mk = (tr) => KITCHEN.waterTimes(kw.wake, kw.bed, KITCHEN.waterTarget(sx, tr), kw.glass, tr && r.on ? (r.time || '18:00') : null);
+      body.water = kw.water ? { on: true, glass: kw.glass, rest: mk(false), train: mk(true), done: { date: kWaterDay(), ml: kday(kWaterDay()).water || 0 }, wake: kw.wake, cross: kWaterCross() } : { on: false };  // день води — від підйому (нічна зміна)
       const res = await fetch(COACH_URL + '/push/sub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       return res.ok;
     } catch (e) { return false; }
@@ -1716,6 +1734,8 @@ window.APP_START = () => {
   }
   async function remindOff() {
     S().remind = Object.assign({}, S().remind, { on: false }); save(); badgeSync();  // без нагадувань — без значка
+    /* вода ще нагадує (з 3.20.0) — підписку лишаємо, сервер лише вимикає тренування; до виправлення 23.10 вода тихо замовкала */
+    if (P() && kit().set.water) { await remindSync(false); try { if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {}); } catch (e) { /* немає */ } toast(LL('Нагадування про тренування вимкнено (про воду — лишились)', 'Workout reminders off (water reminders stay on)')); return rMore(); }
     try {
       const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
       if (sub) { await fetch(COACH_URL + '/push/unsub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
@@ -1793,6 +1813,18 @@ window.APP_START = () => {
     for (let k = 0; k < 8; k++) { const d = new Date(now); d.setDate(now.getDate() + k); if (days.indexOf(d.getDay()) >= 0) return k === 0 ? LL('сьогодні', "today") : k === 1 ? LL('завтра', "tomorrow") : LL('у ', "on ") + DAYS_FULL[d.getDay()]; }
     return '';
   }
+  /* головна: кухня сьогодні й вода з наступним нагадуванням (слово Alexа 23.10: «на головній було нагадування про воду») */
+  function kHomeCard() {
+    const k = kit(), day = kday(today()), sx = ksex(), N = kNorm(), t = KITCHEN.dayTotals(day, sx, kctx()), wd = kWaterDay(), wday = kday(wd);
+    const wT = KITCHEN.waterTarget(sx, kTrain(wd)), now = pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
+    const rel = (t) => { const [h, m] = t.split(':').map(Number), [wh, wm] = k.set.wake.split(':').map(Number); return (h * 60 + m - wh * 60 - wm + 1440) % 1440; };  // від підйому — і для нічної зміни
+    const next = k.set.water ? kWaterTimes(wd).find((x) => rel(x.t) > rel(now)) : null, left = Math.max(0, wT - (wday.water || 0));
+    return `<div class="card"><div class="sp"><b>${LL('Кухня сьогодні', 'Kitchen today')}</b><button type="button" class="sm" data-act="goKitchen">${LL('Відкрити', 'Open')}</button></div>
+      <div class="grid2"><div class="stat"><b>${t.kcal}</b><span>${N.nu ? LL('ккал з ', 'kcal of ') + N.nu.kLo + '–' + N.nu.kHi : LL('ккал', 'kcal')}</span></div><div class="stat"><b>${fmt(t.p)}</b><span>${N.nu ? LL('г білка з ', 'g protein of ') + N.nu.pLo : LL('г білка', 'g protein')}</span></div></div>
+      <div class="sp" style="margin-top:10px"><span class="small">${LL('Вода: ', 'Water: ')}<b>${fmt((wday.water || 0) / 1000)}</b>${LL(' з ', ' of ')}${fmt(wT / 1000)}${LL(' л', ' L')}${left > 0 && next ? LL(' · наступна склянка о ', ' · next glass at ') + next.t : ''}</span>
+        <button type="button" class="sm pri" data-act="kWaterHome">+ ${k.set.glass}${LL(' мл', ' ml')}</button></div>
+      ${k.set.water || !pushOk() ? '' : `<button type="button" class="sm ghost wide" data-act="kWaterRemind">${LL('Нагадувати пити воду', 'Remind me to drink water')}</button>`}</div>`;
+  }
   function dailyCard() {
     const p = P(), prog = G(), t = today(), rec = p.daily[t] || {};
     const wk = ENGINE.planFor(prog, Math.max(0, nextN() - 1)).week;
@@ -1824,6 +1856,23 @@ window.APP_START = () => {
     if (!standalone && !p.sessions.length) out.push(installNote(LL('Спершу встановіть', "Install it first")));
     return out.join('');
   }
+  /* тема (з 3.20.0, слово Alexа 23.10: «кнопку перемикання теми … на головній в правому верхньому куті маленькою кнопкою з іконкою»):
+     три стани — авто (як у телефоні; за замовчуванням: Apple радить не ламати системний вибір), світла, темна (Android радить саме ці три).
+     Зберігається на телефоні (як мова) — для всіх акаунтів; ставиться ще до першого малювання (скрипт у index.html). */
+  const themeNow = () => { try { const t = localStorage.getItem('trening-theme'); return t === 'light' || t === 'dark' ? t : 'auto'; } catch (e) { return 'auto'; } };
+  function themeApply(t) {
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+    /* рядок стану: за вибором — один колір; авто — як у системі */
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { if (!m.dataset.orig) m.dataset.orig = m.content; m.content = t === 'light' ? '#f4f6f5' : t === 'dark' ? '#08201f' : m.dataset.orig; });
+  }
+  function themeNext() {
+    const t = { auto: 'light', light: 'dark', dark: 'auto' }[themeNow()];
+    try { if (t === 'auto') localStorage.removeItem('trening-theme'); else localStorage.setItem('trening-theme', t); } catch (e) { /* немає сховища — лише до перезапуску */ }
+    themeApply(t); haptic();
+    toast({ auto: LL('Тема: як у телефоні', 'Theme: same as your phone'), light: LL('Тема: світла', 'Theme: light'), dark: LL('Тема: темна', 'Theme: dark') }[t]);
+    if (view === 'home') rHome();
+  }
+  const themeBtn = () => { const t = themeNow(); return `<button type="button" class="ic thm" data-act="theme" aria-label="${{ auto: LL('тема: як у телефоні', 'theme: same as phone'), light: LL('тема: світла', 'theme: light'), dark: LL('тема: темна', 'theme: dark') }[t]}">${{ auto: ICON.themeAuto, light: ICON.themeLight, dark: ICON.themeDark }[t]}</button>`; };
   function rHome() {
     const p = P(), prog = G(), d = p.draft, plan = ENGINE.planFor(prog, nextN()), wo = prog.workouts[plan.workout];
     const greet = ENGINE.greeting(new Date().getHours());  // година — з годинника телефона
@@ -1833,7 +1882,7 @@ window.APP_START = () => {
     const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
     const warmMin = (warmList().title.match(/(\d+)\s*(?:хв|min)/) || [])[1];
     const nd = nextDayText(p.days);
-    app.innerHTML = `<div class="brand">${MARK}${LL(`<b>Тренування</b></div><p class="muted small" style="margin-top:4px">`, `<b>Workouts</b></div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
+    app.innerHTML = `<div class="brand">${MARK}${LL(`<b>Тренування</b>`, `<b>Workouts</b>`)}${themeBtn()}${LL(`</div><p class="muted small" style="margin-top:4px">`, `</div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
       ${alerts()}
       ${d ? `${LL(`<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">`, `<div class="card"><div class="sp"><div><b>Workout in progress</b><div class="small muted">`)}${esc(woTitle(d.workout))} · ${draftStats(d).done}/${draftStats(d).total}${LL(` підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>`, ` sets</div></div><button type="button" class="pri" data-act="resume">Resume</button></div></div>`)}` : ''}${LL(`
       <div class="card hero"><div class="row"><span class="chip">Тиждень `, `
@@ -1846,7 +1895,7 @@ window.APP_START = () => {
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"))}</div>
         <div class="stat"><b>${streak}${LL(`</b><span>тижнів поспіль</span></div><div class="stat"><b>`, `</b><span>weeks in a row</span></div><div class="stat"><b>`)}${mprs}${LL(`</b><span>рекордів за місяць</span></div></div>
       `, `</b><span>PRs this month</span></div></div>
-      `)}${dailyCard()}`;
+      `)}${kHomeCard()}${dailyCard()}`;
     tourMaybe('home');
     badgeSync();
   }
@@ -1975,9 +2024,508 @@ window.APP_START = () => {
   const TESTS = [['chair', LL('Вставання з крісла за 30 с', "30-second chair stand"), LL('разів', "reps")], ['balL', LL('Стійка на одній нозі — ліва', "Single-leg stand — left"), LL('с', "sec")], ['balR', LL('Стійка на одній нозі — права', "Single-leg stand — right"), LL('с', "sec")],
     ['spL', LL('Бічна планка — ліворуч', "Side plank — left"), LL('с', "sec")], ['spR', LL('Бічна планка — праворуч', "Side plank — right"), LL('с', "sec")], ['push', LL('Віджимання', "Push-ups"), LL('разів', "reps")], ['carL', LL('Валізна прогулянка — ліва рука', "Suitcase carry — left hand"), LL('с', "sec")], ['carR', LL('Валізна прогулянка — права рука', "Suitcase carry — right hand"), LL('с', "sec")]];
   let photoUrls = [];
+  /* ---------- Кухня (з 3.20.0, слово Alexа 23.10: «щоб це була моя кухня всередині додатку»; «не брехала та не заводила в оману») ----------
+     Розрахунки — KITCHEN (app/kitchen.js), склад — лише база USDA (app/food_db.js, звірка tools/food_check.py) або етикетка людини.
+     Три способи запису: точно (грами), швидко (мірка USDA), руками (Precision Nutrition — орієнтир); біля кожного запису — точність.
+     Дані — у профілі: p.kitchen = { days: { дата: { items: [запис + m (прийом) + at (час)], water: мл } }, products, dishes, recent, set }. */
+  const KQ = () => ({ exact: LL('зважено', 'weighed'), label: LL('етикетка', 'label'), measure: LL('мірка', 'measure'), hand: LL('орієнтир', 'estimate') });
+  const KSTATE = () => ({ raw: LL('сирий', 'raw'), cooked: LL('готовий', 'cooked'), dry: LL('сухий', 'dry'), '': '' });
+  /* стан у назві продукту — без узгодження з родом («Гречка, у готовому вигляді», а не «Гречка, готовий»; роду в базі немає) */
+  const KSTATE_IN = () => ({ raw: LL('у сирому вигляді', 'raw'), cooked: LL('у готовому вигляді', 'cooked'), dry: LL('у сухому вигляді', 'dry'), '': '' });
+  function kit() {
+    const p = P();
+    if (!p.kitchen) p.kitchen = {};
+    const k = p.kitchen;
+    k.days = k.days || {}; k.products = k.products || {}; k.dishes = k.dishes || {}; k.recent = k.recent || []; k.combos = k.combos || {};
+    k.set = Object.assign({ meals: 4, glass: 350, wake: '07:00', bed: '23:00', water: false }, k.set || {});
+    return k;
+  }
+  const kday = (d) => kit().days[d] || { items: [], water: 0 };
+  const kdayW = (d) => { const k = kit(); if (!k.days[d]) k.days[d] = { items: [], water: 0 }; return k.days[d]; };
+  const kctx = () => { const k = kit(); return { products: k.products, dishes: k.dishes, recent: k.recent }; };
+  const ksex = () => (G().sex === 'f' ? 'f' : 'm');
+  /* «Тиск або серце» в анкеті: скільки пити — з лікарем (при серцевій недостатності рідину можуть обмежувати — рекомендації ESC 2021) */
+  const kHeart = () => ((((DB.custom || {}).answers || {}).limits) || []).indexOf('heart') >= 0;
+  const kHeartNote = () => (kHeart() ? `<p class="tiny" style="color:var(--bad)">${LL('Тиск або серце: скільки пити — узгодьте з лікарем (при серцевій недостатності рідину можуть обмежувати).', 'Blood pressure or heart condition: check with your doctor how much to drink (with heart failure, fluids may be limited).')}</p>` : '');
+  const kTrain = (d) => trainDays().indexOf(new Date(d + 'T12:00:00').getDay()) >= 0;
+  const kMeals = () => { const n = kit().set.meals; return n === 3 ? [LL('Сніданок', 'Breakfast'), LL('Обід', 'Lunch'), LL('Вечеря', 'Dinner')]
+    : n === 5 ? [LL('Сніданок', 'Breakfast'), LL('Перекус', 'Snack'), LL('Обід', 'Lunch'), LL('Перекус 2', 'Snack 2'), LL('Вечеря', 'Dinner')]
+      : [LL('Сніданок', 'Breakfast'), LL('Обід', 'Lunch'), LL('Перекус', 'Snack'), LL('Вечеря', 'Dinner')]; };
+  /* прийом за годиною телефона: до 11 — сніданок, до 16 — обід, далі — перекус (якщо є), з 19 — вечеря */
+  const kMealNow = () => { const h = new Date().getHours(), n = kMeals().length; return h < 11 ? 0 : h < 16 ? (n === 5 ? 2 : 1) : h < 19 && n >= 4 ? (n === 5 ? 3 : 2) : n - 1; };
+  /* норма на сьогодні: як було в «Тіло → Харчування» — вага з «Замірів» (середня за 7 днів), без зважувань — з анкети */
+  function kNorm() {
+    const p = P(), prog = G(), food = prog.food, me = Object.assign({ sex: prog.sex }, p.me || {});
+    const wts = (p.body.weight || []), avg = ENGINE.rolling7(wts), wMeas = avg.length ? avg[avg.length - 1].v : null;
+    const wAns = Number(((DB.custom || {}).answers || {}).weight) || null, wNow = wMeas || wAns;
+    return { food, me, wts, wMeas, wAns, wNow, nu: ENGINE.nutrition(food, me, wNow), tr: ENGINE.weightTrend(wts) };
+  }
+  /* мета харчування й розрахунок норми з числами (до 3.20.0 — у «Тіло → Харчування»; тексти без змін) */
+  /* дефіцит — справжній, після меж безпеки (nu.def, engine.nutrition); межа спрацювала — пояснення (kGuardTxt) */
+  const kGoalTxt = (food, nu) => { const dp = Math.round((nu && nu.def !== undefined ? nu.def : food.deficit) * 100); if (nu && (nu.guard === 'under' || nu.guard === 'floor0')) return LL('калорії на рівні підтримки, без дефіциту', 'maintenance calories, no deficit');
+    return food.goal === 'loss' ? LL('мета — менше жиру, мʼязи зберегти: дефіцит ≈ ', "goal — lose fat, keep your muscle: deficit ≈ ") + dp + LL(' % від витрат', " % of TDEE")
+        : food.goal === 'recomp' ? LL('мета — менше жиру й більше мʼязів одночасно: невеликий дефіцит ≈ ', "goal — lose fat and build muscle at the same time: a small deficit of ≈ ") + dp + LL(' % від витрат', " % of TDEE")
+        : food.goal === 'gain' ? LL('мета — набрати мʼязи: надлишок ≈ ', "goal — build muscle: a surplus of ≈ ") + Math.round(-food.deficit * 100) + LL(' % від витрат', " % of TDEE") : LL('мета — без схуднення й набору мʼязів: калорії на рівні підтримки, без дієт', "goal — no weight loss or muscle gain: maintenance calories, no dieting"); };
+  const kGuardTxt = (nu) => !nu || !nu.guard ? '' : nu.guard === 'under' ? LL('ІМТ нижче 18,5 (недостатня вага за ВООЗ) — схуднення не радимо: калорії на рівні підтримки. Порадьтеся з лікарем.', 'BMI below 18.5 (underweight per the WHO) — we don’t recommend losing weight: maintenance calories. Talk to your doctor.')
+    : nu.guard === 'floor0' ? (nu.floor === 1200 ? LL('Будь-який дефіцит опустив би калорії нижче 1200 на день — так худнуть лише під наглядом лікаря (Harvard Health). Тому калорії — на рівні підтримки; худнути — рухом і кроками.', 'Any deficit would take you below 1,200 calories a day — that’s only done under a doctor’s supervision (Harvard Health). So: maintenance calories; lose weight through activity and steps.') : LL('Будь-який дефіцит опустив би калорії нижче 1500 на день — так худнуть лише під наглядом лікаря (Harvard Health). Тому калорії — на рівні підтримки; худнути — рухом і кроками.', 'Any deficit would take you below 1,500 calories a day — that’s only done under a doctor’s supervision (Harvard Health). So: maintenance calories; lose weight through activity and steps.'))
+    : (nu.floor === 1200 ? LL('Дефіцит менший за звичайний: без нагляду лікаря калорії — не нижче 1200 на день (Harvard Health).', 'A smaller deficit than usual: without a doctor’s supervision, calories stay at 1,200 a day or more (Harvard Health).') : LL('Дефіцит менший за звичайний: без нагляду лікаря калорії — не нижче 1500 на день (Harvard Health).', 'A smaller deficit than usual: without a doctor’s supervision, calories stay at 1,500 a day or more (Harvard Health).'));
+  function kCalcTxt(N) {
+    const nu = N.nu, food = N.food; if (!nu) return '';
+    const pk = (v) => fmt(isLb() ? Math.round(v / ENGINE.LB * 100) / 100 : v);
+    return kGoalTxt(food, nu) + LL('. Розрахунок: формула Міффліна — Сан Жеора × 1,45 (основний обмін ≈ ', '. Calculation: Mifflin–St Jeor formula × 1.45 (BMR ≈ ') + fmt(nu.bmr) + LL(', витрати ≈ ', ', TDEE ≈ ') + fmt(nu.tdee)
+      + LL(' ккал); білок — ', ' kcal); protein — ') + pk(food.protein[0]) + '–' + pk(food.protein[1]) + KG(LL(' г на кг ', ' g per kg of '))
+      + (nu.target ? LL('цільової ваги ', 'target weight ') + fmt(BW(nu.target)) + KG(LL(' кг', ' kg')) : nu.capped ? LL('ваги для ІМТ 30 (', 'the weight for BMI 30 (') + fmt(BW(nu.base)) + KG(LL(' кг)', ' kg)')) : LL('поточної ваги', 'current weight')) + '.';
+  }
+  /* назва й кількість запису для списку */
+  function kName(e) {
+    const k = kit();
+    if (e.t === 'food') { const it = KITCHEN.item(e.id); if (!it) return '?'; const st = KITCHEN.needsState(e.id) ? KSTATE_IN()[e.s] : ''; return (I18N.lang === 'en' ? it.en : it.uk) + (st ? ', ' + st : ''); }
+    if (e.t === 'my') return (k.products[e.pid] || {}).name || e.nm || '?';  // продукт видалили — назва зі знімка в записі
+    if (e.t === 'dish') return (k.dishes[e.did] || {}).name || e.nm || '?';
+    if (e.t === 'quick') return e.name || LL('Цифрами з етикетки', 'From a label');
+    if (e.t === 'hand') return LL('Руками', 'By hand');
+    return '?';
+  }
+  function kAmount(e) {
+    if (e.t === 'hand') return KITCHEN.HAND_KEYS.filter((h) => e[h] > 0).map((h) => fmt(e[h]) + ' ' + kHandName(h, e[h])).join(', ');
+    if (e.t === 'quick') return '';
+    if (e.how === 'm' && e.ml) {
+      /* підпис мірки — з бази поточною мовою, якщо мірка та сама (грами збігаються); інакше — збережений текст */
+      const m = e.id && e.mi !== undefined ? kMeasOf(e.id, e.s)[e.mi] : null;
+      const lab = m && e.mq > 0 && Math.round(m.g * e.mq * 10) / 10 === e.g ? fmt(e.mq) + ' × ' + m.l : e.ml;
+      return lab + ' (' + fmt(e.g) + LL(' г)', ' g)');
+    }
+    return fmt(e.g) + LL(' г', ' g');
+  }
+  const kHandName = (h, n) => { const one = n === 1, few = n > 1 && n < 5 && n === Math.round(n);
+    return { palm: one ? LL('долоня', 'palm') : few ? LL('долоні', 'palms') : LL('долонь', 'palms'), fist: one ? LL('кулак', 'fist') : few ? LL('кулаки', 'fists') : LL('кулаків', 'fists'),
+      cup: one ? LL('жменя', 'cupped hand') : few ? LL('жмені', 'cupped hands') : LL('жмень', 'cupped hands'), thumb: one ? LL('палець', 'thumb') : few ? LL('пальці', 'thumbs') : LL('пальців', 'thumbs') }[h]; };
+  const kHandWhat = () => ({ palm: LL('білок: мʼясо, риба, яйця, сир', 'protein: meat, fish, eggs, cheese'), fist: LL('овочі', 'vegetables'),
+    cup: LL('вуглеводи: каша, картопля, хліб, фрукти', 'carbs: grains, potatoes, bread, fruit'), thumb: LL('жири: олія, горіхи, масло', 'fats: oil, nuts, butter') });
+
+  function rKitchen() {
+    const p = P(), k = kit(), d = ui.kDate || today(), day = kday(d), isToday = d === today();
+    const N = kNorm(), nu = N.nu, sx = ksex(), tot = KITCHEN.dayTotals(day, sx, kctx()), meals = kMeals(), train = kTrain(d);
+    const wd = isToday ? kWaterDay() : d, wday = kday(wd), wTrain = kTrain(wd);  // вода — за днем води (нічна зміна)
+    const wTarget = KITCHEN.waterTarget(sx, wTrain), glass = k.set.glass, nGlass = Math.ceil(wTarget / glass), gDone = Math.floor((wday.water || 0) / glass + 1e-9);
+    const kMid = nu ? (nu.kLo + nu.kHi) / 2 : 0;
+    const head = `<div class="sp"><h1>${LL('Кухня', 'Kitchen')}</h1><div class="row" style="gap:4px"><button type="button" class="sm ghost" data-act="kDay" data-v="-1" aria-label="${LL('попередній день', 'previous day')}">‹</button>
+      <span class="small" style="min-width:74px;text-align:center">${isToday ? LL('сьогодні', 'today') : dm(d)}</span><button type="button" class="sm ghost" data-act="kDay" data-v="1"${isToday ? ' disabled' : ''} aria-label="${LL('наступний день', 'next day')}">›</button></div></div>`;
+    const setup = !nu ? `<div class="note w">${!N.wNow ? LL('Додайте вагу нижче — і зʼявиться норма калорій і білка.', 'Add your weight below and your calorie and protein targets will appear.') : LL('Вкажіть зріст і вік у «Налаштування кухні» — і зʼявиться норма.', 'Enter your height and age in “Kitchen settings” and your targets will appear.')}</div>` : '';
+    const sum = `<div class="card"><div class="row" style="gap:14px;align-items:center">
+        <div style="flex:0 0 96px">${CHARTS.ring(tot.kcal, kMid || 1, String(tot.kcal), nu ? LL('з ', 'of ') + nu.kLo + '–' + nu.kHi : LL('ккал', 'kcal'))}</div>
+        <div style="flex:1;min-width:0">${kBar(LL('Білок', 'Protein'), tot.p, nu ? nu.pLo : 0, nu ? nu.pHi : 0, LL(' г', ' g'))}
+          <div class="tiny muted" style="margin-top:6px">${LL('Жири ', 'Fat ')}${fmt(tot.f)}${LL(' г · вуглеводи ', ' g · carbs ')}${fmt(tot.c)}${LL(' г · клітковина ', ' g · fiber ')}${fmt(tot.fib)}${LL(' г', ' g')}</div>
+          ${tot.n ? `<div class="tiny muted" style="margin-top:4px">${LL('Точно записано (зважено чи з етикетки): ', 'Recorded exactly (weighed or from a label): ')}<b>${tot.sure}%</b></div>` : ''}</div></div>
+        ${nu ? `<p class="tiny muted" style="margin:8px 0 0">${esc(kGoalTxt(N.food, nu).replace(/^./, (c) => c.toUpperCase()))}.</p>${nu.guard ? `<div class="note w" style="margin-top:8px">${esc(kGuardTxt(nu))}</div>` : ''}` : ''}</div>`;
+    const tday = train ? `<div class="note">${LL('День тренування: прийом з білком за 1–2 год до тренування і після нього.', 'Training day: have a protein-rich meal 1–2 hours before your workout and one after it.')}</div>` : '';
+    const pl = nu ? KITCHEN.plate(nu, sx, meals.length) : null;
+    const plate = pl ? `<div class="card"><div class="sp"><b>${LL('Ваша тарілка на прийом', 'Your plate per meal')}</b><span class="tiny muted">≈ ${pl.kMeal}${LL(' ккал', ' kcal')}</span></div>
+      <div class="grid4 plate">${KITCHEN.HAND_KEYS.map((h) => `<div class="stat"><b>${fmt(pl[h])}</b><span>${kHandName(h, pl[h])}</span></div>`).join('')}</div>
+      <p class="tiny muted">${LL('Білок — ', 'Protein — ')}${pl.pMeal}${(isLb() ? LL(' г на прийом (0,18 г на lb ваги, щонайменше ', ' g per meal (0.18 g per lb of body weight, at least ') : LL(' г на прийом (0,4 г/кг, щонайменше ', ' g per meal (0.4 g/kg, at least '))}${meals.length}${LL(' прийоми). Порції руками — орієнтир Precision Nutrition.', ' meals). Hand portions are a Precision Nutrition estimate.')}</p></div>` : '';
+    const list = meals.map((name, mi) => {
+      const its = day.items.map((e, i) => ({ e, i })).filter((x) => Math.min(x.e.m || 0, meals.length - 1) === mi);
+      const mt = KITCHEN.dayTotals({ items: its.map((x) => x.e) }, sx, kctx());
+      return `<div class="sp" style="margin-top:6px"><b>${esc(name)}</b><span class="small muted">${its.length ? mt.kcal + LL(' ккал · білок ', ' kcal · protein ') + fmt(mt.p) + LL(' г', ' g') : ''}</span></div>
+        ${its.map((x) => { const m = KITCHEN.macros(x.e, sx, kctx()); return `<div class="krow" data-act="kEdit" data-i="${x.i}"><div style="flex:1;min-width:0"><div class="small">${esc(kName(x.e))}</div><div class="tiny muted">${esc(kAmount(x.e))}${kAmount(x.e) ? ' · ' : ''}<span class="kq ${m ? m.q : ''}">${m ? KQ()[m.q] : ''}</span></div></div>
+          <div class="small" style="text-align:right">${m ? m.kcal : '—'}<div class="tiny muted">${m ? LL('б ', 'p ') + fmt(m.p) : ''}</div></div></div>`; }).join('')}
+        <div class="row" style="gap:6px"><button type="button" class="sm ghost" style="flex:1" data-act="kAdd" data-m="${mi}">+ ${LL('Додати', 'Add')}</button>${its.length >= 2 ? `<button type="button" class="sm ghost" data-act="kCombo" data-m="${mi}">${LL('Зберегти прийом', 'Save meal')}</button>` : ''}</div>`;
+    }).join('');
+    const yd = iso(new Date(tms(d) - 864e5)), yday = kday(yd);
+    const copy = yday.items.length && !day.items.length ? `<button type="button" class="wide" data-act="kCopy">${LL('Як учора', 'Same as yesterday')} (${KITCHEN.dayTotals(yday, sx, kctx()).kcal}${LL(' ккал)', ' kcal)')}</button>` : '';
+    const gap = nu && isToday && day.items.length ? KITCHEN.proteinGap(tot, nu.pLo, kctx(), 3) : null;
+    const gapCard = gap && gap.need > 0 ? `<div class="card"><b>${LL('Чим добрати білок', 'How to reach your protein')}</b><p class="small muted">${LL('Бракує ', 'You need ')}${gap.need}${LL(' г до норми. Одне з:', ' g more. One of:')}</p>
+      ${gap.list.map((x, j) => `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(kName(x.e))}</div><div class="tiny muted">${x.mine ? `<span class="kq exact">${LL('з ваших', 'yours')}</span> · ` : ''}${fmt(x.e.g)}${LL(' г · ', ' g · ')}${x.kcal}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(x.p)}${LL(' г', ' g')}</div></div>
+        <button type="button" class="sm" data-act="kGapAdd" data-j="${j}">+</button></div>`).join('')}<p class="tiny muted">${LL('Спершу — те, що ви вже їсте. Склад — з бази USDA чи ваших етикеток.', 'What you already eat comes first. Composition comes from the USDA database or your own labels.')}</p></div>` : '';
+    const water = `<div class="card"><div class="sp"><b>${LL('Вода', 'Water')}</b><span class="small muted">${fmt((wday.water || 0) / 1000)} ${LL('з', 'of')} ${fmt(wTarget / 1000)}${LL(' л', ' L')}</span></div>
+      <div class="glasses">${Array.from({ length: nGlass }, (_, j) => `<i class="${j < gDone ? 'on' : ''}"></i>`).join('')}</div>
+      <div class="row"><button type="button" class="pri" style="flex:1" data-act="kWater" data-v="1">+ ${LL('склянка', 'glass')} ${glass}${LL(' мл', ' ml')}</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="-1" aria-label="${LL('прибрати склянку', 'remove a glass')}">−</button></div>
+      <p class="tiny muted">${wTrain ? LL('День тренування — верхня межа норми.', 'Training day — the upper end of your target.') : LL('Норма програми: ', 'Your program’s target: ') + (sx === 'f' ? LL('2–2,5 л', '2–2.5 L') : LL('2,5–3 л', '2.5–3 L')) + LL(' на день, у дні тренувань — більше.', ' a day, more on training days.')}</p>
+      ${wd !== d ? `<p class="tiny muted">${LL('Нічна зміна: вода рахується від підйому о ', 'Night shift: water counts from your wake-up at ')}${k.set.wake}.</p>` : ''}${kHeartNote()}${kWaterRemindHtml()}</div>`;
+    const wNow = N.wts.find((x) => x.d === d);
+    const weight = `<div class="card"><div class="sp"><b>${LL('Вага', 'Weight')}${isToday ? LL(' сьогодні', ' today') : ''}</b>${N.wMeas ? `<span class="small muted">${LL('середня ', 'average ')}${fmt(BW(N.wMeas))} ${MU('weight')}</span>` : ''}</div>
+      <div class="row"><input inputmode="decimal" id="kW" placeholder="${MU('weight')}" value="${wNow ? fmt(MV('weight', wNow.v)) : ''}" style="flex:1"><button type="button" data-act="kWSave">${LL('Зберегти', 'Save')}</button></div>
+      ${!N.wMeas && N.wAns ? `<p class="tiny muted">${LL('Поки зважувань немає — норма за вагою з анкети (', 'No weigh-ins yet — your targets use the weight from your questionnaire (')}${fmt(BW(N.wAns))} ${MU('weight')}${LL('). Зважтеся — норма стане точнішою.', '). Weigh yourself and your targets will get more accurate.')}</p>` : ''}
+      ${N.tr && N.tr.rate !== null ? (() => { const tr = N.tr, g = nu && nu.guard;
+        let adv = ENGINE.foodAdvice(g === 'under' || g === 'floor0' ? Object.assign({}, N.food, { goal: 'maintain' }) : N.food, tr);  // межа безпеки — порада як для підтримки
+        if (g === 'floor' && adv.k === 'less') adv = { k: 'w', text: LL('Калорії вже на межі без нагляду лікаря — не зменшуйте їжу: додайте кроки й рух.', 'Your calories are already at the limit without a doctor’s supervision — don’t eat less: add steps and activity.') }; return `<div class="note ${adv.k === 'ok' ? 'ok' : adv.k === 'wait' ? '' : 'w'}" style="margin-top:8px">${LL('<b>За вашою вагою:</b> ', '<b>Based on your weight:</b> ')}${esc(LBT(adv.text))} <span class="tiny muted">(${LL('темп ', 'rate ')}${tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : ''}${fmt(Math.abs(BW(tr.rate)))}${KG(LL(' кг на тиждень', ' kg per week'))})</span></div>`; })() : `<p class="tiny muted">${LL('Зважуйтесь зранку натщесерце. Порада за темпом — після 2 тижнів зважувань.', 'Weigh yourself in the morning before eating. Advice on your rate comes after 2 weeks of weigh-ins.')}</p>`}</div>`;
+    const wk = kWeek(d, N);
+    app.innerHTML = `${head}${setup}${sum}${tday}${plate}<div class="card">${list}${copy}</div>${gapCard}${water}${weight}${wk}
+      <div class="quick"><button type="button" class="sm" data-act="kMine">${LL('Мої продукти й страви', 'My foods and dishes')}</button><button type="button" class="sm" data-act="kSet">${LL('Налаштування кухні', 'Kitchen settings')}</button><button type="button" class="sm" data-act="kAbout">${LL('Як рахує кухня', 'How the kitchen counts')}</button></div>`;
+    tourMaybe('kitchen');
+  }
+  function kBar(label, v, lo, hi, unit) {
+    const f = hi ? Math.min(1, v / hi) : 0, ok = lo && v >= lo;
+    return `<div class="sp small"><span>${label}</span><span class="muted">${fmt(v)}${lo ? LL(' з ', ' of ') + lo + '–' + hi : ''}${unit}</span></div><div class="kbar"><i style="width:${Math.round(f * 100)}%"${ok ? ' class="ok"' : ''}></i></div>`;
+  }
+  /* тиждень: дні з записами, середні калорії й білок на ці дні — проти норми */
+  function kWeek(d, N) {
+    const days = Array.from({ length: 7 }, (_, j) => iso(new Date(tms(d) - j * 864e5))).filter((x) => kday(x).items.length);
+    if (days.length < 2 || !N.nu) return '';
+    const sx = ksex(), t = days.map((x) => KITCHEN.dayTotals(kday(x), sx, kctx()));
+    const ak = Math.round(t.reduce((a, x) => a + x.kcal, 0) / t.length), ap = Math.round(t.reduce((a, x) => a + x.p, 0) / t.length);
+    return `<div class="card"><div class="sp"><b>${LL('Тиждень', 'This week')}</b><span class="small muted">${LL('записано днів: ', 'days logged: ')}${days.length}${LL(' з 7', ' of 7')}</span></div>
+      <p class="small">${LL('У середньому ', 'Average ')}${ak}${LL(' ккал (норма ', ' kcal (target ')}${N.nu.kLo}–${N.nu.kHi}${LL('), білок ', '), protein ')}${ap}${LL(' г (норма ', ' g (target ')}${N.nu.pLo}–${N.nu.pHi}${LL(').', ').')}</p>
+      <p class="tiny muted">${LL('Середні — лише за дні з записами. Записуйте якомога більше днів: так і порада за вагою точніша.', 'Averages use only the days you logged. Log as many days as you can — the weight-based advice gets more accurate too.')}</p></div>`;
+  }
+  function kWaterRemindHtml() {
+    const k = kit(), on = !!k.set.water;
+    if (!pushOk()) return `<p class="tiny muted">${LL('Нагадування про воду — у встановленому застосунку (з іконки на екрані).', 'Water reminders work in the installed app (from the home screen icon).')}</p>`;
+    const tt = kWaterTimes(kWaterDay());
+    return `<div class="sp" style="margin-top:8px"><span class="small">${LL('Нагадування про воду', 'Water reminders')}</span><button type="button" class="sm${on ? ' done' : ' pri'}" data-act="kWaterRemind">${on ? LL('Увімкнено', 'On') : LL('Увімкнути', 'Turn on')}</button></div>
+      ${on ? `<p class="tiny muted">${LL('Сьогодні о ', 'Today at ')}${tt.map((x) => x.t).join(', ')}. ${LL('Зранку — склянка після сну, тепла чи кімнатна, як приємніше. Відмічені склянки — без зайвих нагадувань.', 'In the morning — a glass after you wake up, warm or room temperature, whatever you like. Glasses you’ve logged skip extra reminders.')}</p>` : ''}`;
+  }
+  /* день води (з 3.20.0, 💡 слово Alexа «Спершу зроби 💡 «день води від підйому» для нічної зміни»): якщо сон закінчується пізніше
+     за годинником, ніж підйом (нічна зміна — розклад переходить через північ), день води триває від підйому до наступного підйому: після
+     опівночі й до підйому — ще вчорашній. Звичайний розклад — календарний день, як було. Той самий день рахує сервер (push.js waterDay). */
+  const kHM = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const kWaterCross = () => { const k = kit(); return kHM(k.set.bed) <= kHM(k.set.wake); };
+  const kWaterDay = () => { const n = new Date(); return kWaterCross() && n.getHours() * 60 + n.getMinutes() < kHM(kit().set.wake) ? iso(new Date(tms(today()) - 864e5)) : today(); };
+  /* розклад води на день: норма програми, склянка, підйом і сон з налаштувань; у день тренування — ще за 1,5 год до нього (час нагадування про тренування) */
+  function kWaterTimes(d) {
+    const k = kit(), train = kTrain(d), r = S().remind || {};
+    return KITCHEN.waterTimes(k.set.wake, k.set.bed, KITCHEN.waterTarget(ksex(), train), k.set.glass, train && r.on ? (r.time || '18:00') : null);
+  }
+
+  /* ---- додати запис: шторка з чотирма способами ---- */
+  function kAddOpen(m, edit) {
+    ui.kAdd = edit !== undefined ? Object.assign({ mode: 'edit', i: edit }, JSON.parse(JSON.stringify(kday(ui.kDate || today()).items[edit]))) : { mode: 'new', m: m === undefined ? kMealNow() : m, tab: 'food', q: '' };
+    if (ui.kAdd.mode === 'edit') ui.kAdd.tab = { food: 'food', my: 'my', dish: 'my', hand: 'hand', quick: 'num' }[ui.kAdd.t] || 'food';
+    kAddDraw();
+  }
+  function kAddDraw() {
+    const a = ui.kAdd, meals = kMeals(), k = kit();
+    const tabs = [['food', LL('Продукт', 'Food')], ['hand', LL('Руками', 'By hand')], ['num', LL('Цифрами', 'Numbers')], ['my', LL('Мої', 'Mine')]];
+    let body = '';
+    if (a.tab === 'food' && !a.id) {
+      body = `${kPhotoHtml()}<input id="kQ" data-kin="q" placeholder="${LL('Пошук: курка, гречка, банан…', 'Search: chicken, rice, banana…')}" value="${esc(a.q)}" autocomplete="off"><div id="kRes">${kResHtml()}</div>`;
+    } else if (a.tab === 'food' || a.tab === 'my') {
+      body = kAmountForm();
+    } else if (a.tab === 'hand') {
+      const W = kHandWhat();
+      body = `${KITCHEN.HAND_KEYS.map((h) => `<div class="krow"><div style="flex:1"><div class="small">${kHandName(h, 1)[0].toUpperCase() + kHandName(h, 1).slice(1)}</div><div class="tiny muted">${W[h]}</div></div>
+        <div class="row" style="gap:6px"><button type="button" class="sm" data-act="kHand" data-h="${h}" data-v="-0.5" aria-label="${LL('менше', 'less')}">−</button><b style="min-width:28px;text-align:center">${fmt(a[h] || 0)}</b><button type="button" class="sm" data-act="kHand" data-h="${h}" data-v="0.5" aria-label="${LL('більше', 'more')}">+</button></div></div>`).join('')}
+        <p class="tiny muted">${LL('Долоня — завтовшки й завширшки як ваша долоня; кулак; жменя — скільки вміщує долоня човником; палець — великий палець. Це орієнтир (Precision Nutrition), не точний підрахунок.', 'Palm — as thick and wide as your palm; fist; cupped hand — what fits in your cupped palm; thumb — your whole thumb. This is an estimate (Precision Nutrition), not an exact count.')}</p>`;
+    } else if (a.tab === 'num') {
+      body = `<label class="f">${LL('Назва (необовʼязково)', 'Name (optional)')}</label><input id="kNName" data-kin="name" value="${esc(a.name || '')}">
+        <div class="grid2"><div><label class="f">${LL('Калорії, ккал', 'Calories, kcal')}</label><input inputmode="decimal" data-kin="kcal" value="${a.kcal === undefined ? '' : esc(a.kcal)}"></div><div><label class="f">${LL('Білок, г', 'Protein, g')}</label><input inputmode="decimal" data-kin="p" value="${a.p === undefined ? '' : esc(a.p)}"></div>
+        <div><label class="f">${LL('Жири, г', 'Fat, g')}</label><input inputmode="decimal" data-kin="f" value="${a.f === undefined ? '' : esc(a.f)}"></div><div><label class="f">${LL('Вуглеводи, г', 'Carbs, g')}</label><input inputmode="decimal" data-kin="c" value="${a.c === undefined ? '' : esc(a.c)}"></div></div>
+        <p class="tiny muted">${LL('Числа з етикетки на з’їдену порцію.', 'Numbers from the label for the portion you ate.')}</p>`;
+    }
+    if (a.tab === 'my' && !a.pid && !a.did) {
+      const P2 = Object.keys(k.products).map((id) => ['pid', id, k.products[id].name]), D2 = Object.keys(k.dishes).map((id) => ['did', id, k.dishes[id].name]);
+      body = `${a.mode === 'new' ? kComboList() : ''}${P2.concat(D2).length ? `<div class="klist">${P2.concat(D2).map(([t, id, n]) => `<button type="button" class="krow" data-act="kPickMy" data-t="${t}" data-id="${id}"><span style="flex:1;text-align:left">${esc(n)}</span><span class="tiny muted">${t === 'did' ? LL('страва', 'dish') : LL('етикетка', 'label')}</span></button>`).join('')}</div>` : Object.keys(k.combos).length ? '' : `<p class="small muted">${LL('Тут будуть ваші продукти з етикеток і страви за рецептом.', 'Your foods from labels and your recipes will appear here.')}</p>`}
+        <div class="row"><button type="button" style="flex:1" data-act="kNewProd">${LL('+ Продукт з етикетки', '+ Food from a label')}</button><button type="button" style="flex:1" data-act="kNewDish">${LL('+ Страва за рецептом', '+ Recipe')}</button></div>`;
+    }
+    const pv = kPreview();
+    openSheet(`<div class="sp"><b>${a.mode === 'edit' ? LL('Змінити запис', 'Edit entry') : LL('Додати', 'Add')}</b><select data-kin="m" aria-label="${LL('прийом їжі', 'meal')}">${meals.map((n, mi) => `<option value="${mi}"${Math.min(a.m || 0, meals.length - 1) === mi ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
+      ${a.mode === 'edit' ? '' : `<div class="seg" style="margin:8px 0">${tabs.map(([t, l]) => `<button type="button" class="${a.tab === t ? 'on' : ''}" data-act="kTab" data-v="${t}">${l}</button>`).join('')}</div>`}
+      <div id="kBody">${body}</div><div id="kPv">${pv}</div>
+      ${(a.tab === 'food' && a.id) || ((a.tab === 'my') && (a.pid || a.did)) || a.tab === 'hand' || a.tab === 'num' ? `<div class="row" style="margin-top:10px">${a.mode === 'edit' ? `<button type="button" class="ghost" data-act="kDel">${LL('Видалити', 'Delete')}</button>` : `<button type="button" class="ghost" data-act="kBack">${LL('Назад', 'Back')}</button>`}<button type="button" class="pri" style="flex:1" data-act="kSave">${a.mode === 'edit' ? LL('Зберегти', 'Save') : LL('Додати', 'Add')}</button></div>` : ''}`);
+    const q = document.getElementById('kQ'); if (q && a.tab === 'food' && !a.id && !(a.ph && a.ph.st)) setTimeout(() => { try { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } catch (e) { /* немає */ } }, 60);
+  }
+  /* результати пошуку (оновлюються без перемальовування шторки — клавіатура на iPhone не злітає); калорії — на 100 г кожного стану */
+  function kResHtml() {
+    const a = ui.kAdd, res = a.q ? KITCHEN.search(a.q, I18N.lang).slice(0, 30) : kRecentFoods();
+    const kc = (it) => it.v.map((v) => (it.v.length > 1 ? KSTATE()[v.s] + ' ' : '') + v.kcal).join(' · ');  // 💡2: калорії кожного стану — з назвою стану
+    return `${a.q ? '' : `<div class="tiny muted" style="margin:8px 0 4px">${res.length ? LL('Нещодавні', 'Recent') : LL('Почніть вводити назву', 'Start typing a name')}</div>`}
+      <div class="klist">${res.map((it) => `<button type="button" class="krow" data-act="kPick" data-id="${it.id}"><span style="flex:1;text-align:left">${esc(I18N.lang === 'en' ? it.en : it.uk)}</span><span class="tiny muted">${kc(it)}${LL(' ккал/100 г', ' kcal/100 g')}</span></button>`).join('')}</div>
+      ${a.q && !res.length ? `<p class="small muted">${LL('Немає в базі. Додайте як «Мій продукт» з етикетки.', 'Not in the database. Add it as “My food” from the label.')}</p><button type="button" class="wide" data-act="kNewProd">${LL('+ Мій продукт з етикетки', '+ My food from a label')}</button>` : ''}`;
+  }
+  /* фото тарілки (з 3.20.0): сервер лише впізнає продукти бази (без ваги й калорій); кожен людина відкриває звичайною формою —
+     стан і кількість вказує сама, склад — з бази USDA. Фото не зберігається ні в телефоні, ні на сервері застосунку. */
+  function kPhotoHtml() {
+    const a = ui.kAdd, ph = a.ph;
+    if (a.mode !== 'new') return '';
+    const btn = (t) => `<button type="button" class="wide kph" data-act="kPhoto">${ICON.cam}${t}</button><input id="kPhIn" type="file" accept="image/*" hidden>`;
+    if (!ph) return btn(LL('Продукти з фото тарілки', 'Foods from a photo of your plate'));
+    if (ph.st === 'wait') return `<p class="small muted" data-kph aria-live="polite">${LL('Шукаю на фото продукти з бази… (до пів хвилини)', 'Looking for database foods in the photo… (up to 30 seconds)')}</p>`;
+    if (ph.st === 'err') return `<div class="note w">${esc(ph.msg)}</div>${btn(LL('Інше фото', 'Another photo'))}`;
+    return `<div class="card"><b>${LL('На фото', 'In the photo')}</b><p class="tiny muted">${LL('Торкніться продукту й вкажіть стан і кількість. Фото лише підказує, що на тарілці; склад — з бази USDA.', 'Tap a food and enter its state and amount. The photo only suggests what’s on the plate; composition comes from the USDA database.')}</p>
+      ${ph.items.length ? `<div class="klist">${ph.items.map((x, j) => `<button type="button" class="krow" data-act="kPhPick" data-j="${j}"><span style="flex:1;text-align:left">${x.done ? '✓ ' : ''}${esc(kName({ t: 'food', id: x.id }))}</span><span class="tiny muted">${x.done ? LL('додано', 'added') : x.sure === 'low' ? LL('можливо', 'maybe') : ''}</span></button>`).join('')}</div>`
+        : `<p class="small muted">${LL('Продуктів з бази на фото не знайшов — знайдіть пошуком нижче.', 'No database foods found in the photo — search below.')}</p>`}
+      <p class="tiny muted">${LL('Фото надсилається лише для розпізнавання (Gemini) і не зберігається ні в телефоні, ні на сервері застосунку.', 'The photo is sent only for recognition (Gemini) and isn’t stored on your phone or on the app’s server.')}</p></div>${btn(LL('Інше фото', 'Another photo'))}`;
+  }
+  async function kPhotoLoad(file) {
+    const a = ui.kAdd; if (!a) return;
+    const ph = a.ph = { st: 'wait' }; kAddDraw();
+    const live = () => ui.kAdd === a && a.ph === ph && document.body.classList.contains('sheet') && sheetEl.querySelector('[data-kph]');
+    let img = null; try { img = await jpegOf(file); } catch (e) { img = null; }
+    const j = img ? await post('/food', { image: img.b64, lang: I18N.lang }, 40000) : null;  // сервер: до 3 моделей × 8 с + передача фото (живий замір 23.10 — 26,7 с у пік)
+    if (!live()) return;  // шторку закрили чи відкрили іншу — нічого не малюємо
+    a.ph = kPhotoResult(img, j);
+    kAddDraw();
+  }
+  /* відповідь сервера → список: лише продукти бази застосунку; помилка — пояснення й пошук */
+  function kPhotoResult(img, j) {
+    if (!img) return { st: 'err', msg: LL('Не вдалося відкрити фото — спробуйте інше.', 'Couldn’t open the photo — try another one.') };
+    if (j && Array.isArray(j.items)) return { st: 'ok', items: j.items.filter((x) => x && KITCHEN.item(x.id)).map((x) => ({ id: x.id, sure: x.sure === 'high' ? 'high' : 'low' })).sort((x, y) => (x.sure === 'low') - (y.sure === 'low')) };  // «можливо» — унизу (💡, слово Alexа 23.10: «Приймаю»)
+    return { st: 'err', msg: !j && navigator.onLine === false ? LL('Немає інтернету — фото розпізнається лише онлайн. Знайдіть продукт пошуком.', 'No internet — photos are recognized online only. Search for the food instead.') : LL('Розпізнавання зараз недоступне — знайдіть продукт пошуком.', 'Recognition is unavailable right now — search for the food instead.') };
+  }
+  /* нещодавні продукти бази (останні 12 різних) */
+  function kRecentFoods() { const seen = {}; return kit().recent.filter((r) => r.t === 'food' && !seen[r.id] && (seen[r.id] = 1)).slice(0, 12).map((r) => KITCHEN.item(r.id)).filter(Boolean); }
+  /* кількість: стан (💡2 — суха чи варена, з калоріями на 100 г кожного), грами (точно) або мірка (швидко) */
+  function kAmountForm() {
+    const a = ui.kAdd, k = kit();
+    let st = '', ms = [], name = '', per = null;
+    if (a.t === 'food' || (a.tab === 'food' && a.id)) {
+      const it = KITCHEN.item(a.id); name = I18N.lang === 'en' ? it.en : it.uk;
+      if (it.v.length > 1) {
+        st = `<div class="tiny muted" style="margin:8px 0 4px">${LL('Як важите — так і обирайте: суху крупу чи сире мʼясо — «сухий» / «сирий», уже приготоване — «готовий».', 'Pick how you weigh it: dry grains or raw meat — “dry” / “raw”; already cooked — “cooked”.')}</div>
+          <div class="seg">${it.v.map((v) => `<button type="button" class="${a.s === v.s ? 'on' : ''}" data-act="kState" data-v="${v.s}">${KSTATE()[v.s]}<span class="tiny" style="display:block;opacity:.8">${v.kcal}${LL(' ккал/100 г', ' kcal/100 g')}</span></button>`).join('')}</div>`;
+      }
+      per = a.s !== undefined || it.v.length === 1 ? KITCHEN.variant(a.id, a.s) : null; ms = per ? kMeasList() : [];
+      if (!per) return `<div class="small" style="margin-top:4px"><b>${esc(name)}</b></div>${st}`;
+    } else if (a.pid) { const pr = k.products[a.pid]; name = pr ? pr.name : a.nm || '?'; per = a.mode === 'edit' && a.x ? a.x : pr ? pr.per100 : null; }  // запис дня — зі своїм знімком складу
+    else if (a.did) { const dd = k.dishes[a.did]; name = dd ? dd.name : a.nm || '?'; per = a.mode === 'edit' && a.x ? a.x : dd ? dd.per100 : null; }
+    if (!per) return '';
+    const how = a.how || 'g';
+    return `<div class="small" style="margin-top:4px"><b>${esc(name)}</b> <span class="tiny muted">${LL('на 100 г: ', 'per 100 g: ')}${Math.round(per.kcal)}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(per.p)}${LL(' г', ' g')}</span></div>${st}
+      ${ms.length ? `<div class="seg" style="margin:8px 0"><button type="button" class="${how === 'g' ? 'on' : ''}" data-act="kHow" data-v="g">${LL('Точно, г', 'Exact, g')}</button><button type="button" class="${how === 'm' ? 'on' : ''}" data-act="kHow" data-v="m">${LL('Швидко: мірка', 'Quick: measure')}</button></div>` : ''}
+      ${how === 'm' && ms.length ? `<div class="pick">${ms.map((m, j) => `<button type="button" class="qopt${a.mi === j ? ' on' : ''}" data-act="kMeas" data-j="${j}"><b>${esc(m.l)}</b><span class="small muted">${fmt(m.g)}${LL(' г', ' g')}</span></button>`).join('')}</div>
+        <div class="row" style="margin-top:8px"><span class="small" style="flex:1">${LL('Скільки', 'How many')}</span><button type="button" class="sm" data-act="kMq" data-v="-0.5" aria-label="${LL('менше', 'less')}">−</button><b style="min-width:30px;text-align:center">${fmt(a.mq || 1)}</b><button type="button" class="sm" data-act="kMq" data-v="0.5" aria-label="${LL('більше', 'more')}">+</button></div>`
+        : `<label class="f">${LL('Вага, г', 'Weight, g')}</label><input inputmode="decimal" id="kG" data-kin="g" value="${a.g ? fmt(a.g) : ''}" placeholder="${LL('напр. 150', 'e.g. 150')}">`}`;
+  }
+  /* запис з поточного стану шторки (або null, якщо даних замало) */
+  function kEntry() {
+    const a = ui.kAdd, k = kit(); let e = null;
+    if (a.tab === 'hand') { e = { t: 'hand' }; KITCHEN.HAND_KEYS.forEach((h) => { if (a[h] > 0) e[h] = a[h]; }); if (Object.keys(e).length === 1) return null; }
+    else if (a.tab === 'num') { const kc = num(a.kcal), pp = num(a.p); if (kc === null || kc < 0 || kc > 5000) return null; e = { t: 'quick', kcal: kc, p: pp === null ? 0 : pp, f: num(a.f) || 0, c: num(a.c) || 0 }; if (a.name) e.name = String(a.name).slice(0, 60); if (e.p < 0 || e.p > 300 || e.f < 0 || e.f > 300 || e.c < 0 || e.c > 1000) return null;
+      if (kQuickOver(e)) return null; }
+    else {
+      if (a.id && KITCHEN.needsState(a.id) && a.s === undefined) return null;  // 💡2: «сирий / готовий / сухий» — лише свідомим вибором
+      const base = a.id ? { t: 'food', id: a.id, s: a.s } : a.pid ? { t: 'my', pid: a.pid } : a.did ? { t: 'dish', did: a.did } : null;
+      if (!base) return null;
+      if ((a.how || 'g') === 'm') {
+        const ms = kMeasList(); const m = ms[a.mi]; if (!m) return null;
+        const q = a.mq || 1; e = Object.assign(base, { how: 'm', g: Math.round(m.g * q * 10) / 10, ml: fmt(q) + ' × ' + m.l, mi: a.mi, mq: q });
+      } else { const g = num(a.g); if (g === null || !(g > 0) || g > 3000) return null; e = Object.assign(base, { how: 'g', g }); }
+      if (e.t === 'my' && !k.products[e.pid] && !(a.mode === 'edit' && a.x)) return null;
+      if (e.t === 'dish' && !k.dishes[e.did] && !(a.mode === 'edit' && a.x)) return null;
+      if (a.mode === 'edit' && a.x && (e.t === 'my' || e.t === 'dish')) { e.x = a.x; if (a.dq) e.dq = a.dq; }  // правка ваги — склад запису той самий, що був
+    }
+    e.m = Math.min(Number(a.m) || 0, kMeals().length - 1);
+    return e;
+  }
+  /* цифри з етикетки: білок, жири й вуглеводи не можуть дати більше калорій, ніж указано (4·Б + 4·В + 9·Ж, допуск 25 % і 20 ккал) */
+  const kQuickOver = (e) => 4 * e.p + 4 * e.c + 9 * e.f > e.kcal * 1.25 + 20;
+  function kMeasList() { const a = ui.kAdd; return a.id ? kMeasOf(a.id, a.s) : []; }
+  function kMeasOf(id, s) {
+    const v = KITCHEN.variant(id, s); if (!v) return [];
+    let ms = (v.m || []).map((m) => ({ l: I18N.lang === 'en' ? m[1] : m[0], g: m[2] }));
+    if (v.gml) ms = ms.concat([100, 250, 330, 500].map((ml) => ({ l: ml + LL(' мл', ' ml'), g: Math.round(ml * v.gml * 10) / 10 })));
+    return ms;
+  }
+  function kPreview() {
+    const e = kEntry(); if (!e) return '';
+    const m = KITCHEN.macros(e, ksex(), kctx()); if (!m) return '';
+    return `<div class="note" style="margin-top:10px"><b>${m.kcal}${LL(' ккал', ' kcal')}</b> · ${LL('білок ', 'protein ')}${fmt(m.p)}${LL(' г · жири ', ' g · fat ')}${fmt(m.f)}${LL(' г · вуглеводи ', ' g · carbs ')}${fmt(m.c)}${LL(' г', ' g')} <span class="kq ${m.q}">${KQ()[m.q]}</span></div>`;
+  }
+  function kSave() {
+    const a = ui.kAdd, e = kEntry();
+    if (!e) { const qn = a.tab === 'num' ? { kcal: num(a.kcal) || 0, p: num(a.p) || 0, f: num(a.f) || 0, c: num(a.c) || 0 } : null;
+      toast(qn && num(a.kcal) !== null && kQuickOver(qn) ? LL('Білок, жири й вуглеводи дають більше калорій, ніж указано, — перевірте числа', 'Protein, fat, and carbs add up to more calories than entered — check the numbers') : a.tab === 'num' ? LL('Вкажіть калорії (0–5000) і білок (0–300 г)', 'Enter calories (0–5000) and protein (0–300 g)') : a.id && KITCHEN.needsState(a.id) && a.s === undefined ? LL('Оберіть: сирий, готовий чи сухий', 'Choose: raw, cooked, or dry') : (a.how || 'g') === 'm' ? LL('Оберіть мірку', 'Choose a measure') : LL('Вкажіть вагу: від 1 г до 3 кг', 'Enter a weight: 1 g to 3 kg')); return; }
+    const d = ui.kDate || today(), day = kdayW(d), k = kit();
+    /* склад і назва — у запис: правка чи видалення етикетки або рецепта не міняє минулих днів; у правці запису — той самий знімок */
+    if (e.t === 'my') { if (!e.x) e.x = Object.assign({}, k.products[e.pid].per100); e.nm = k.products[e.pid] ? k.products[e.pid].name : a.nm; }
+    if (e.t === 'dish') { if (!e.x) { e.x = Object.assign({}, k.dishes[e.did].per100); e.dq = k.dishes[e.did].q; } e.nm = k.dishes[e.did] ? k.dishes[e.did].name : a.nm; }
+    e.at = a.mode === 'edit' ? (day.items[a.i] || {}).at || Date.now() : Date.now();
+    if (a.mode === 'edit') day.items[a.i] = e; else day.items.push(e);
+    if (e.t === 'food') { const k = kit(); k.recent = [{ t: 'food', id: e.id, s: e.s }].concat(k.recent.filter((r) => !(r.t === 'food' && r.id === e.id))).slice(0, 30); }
+    save(); haptic(); rKitchen();
+    if (a.mode === 'new' && a.ph && a.ph.st === 'ok') {
+      if (a.phj !== undefined && a.ph.items[a.phj]) a.ph.items[a.phj].done = true;
+      if (a.ph.items.some((x) => !x.done)) { ui.kAdd = { mode: 'new', m: a.m, tab: 'food', q: '', ph: a.ph }; toast(LL('Додано', 'Added')); return kAddDraw(); }
+    }
+    closeSheet();
+  }
+
+  /* мій продукт з етикетки: на 100 г; страва за рецептом (💡1): інгредієнти сирими/сухими + вага готової страви */
+  function kNewProd(edit) {
+    const pr = edit ? kit().products[edit] : null;
+    ui.kProd = { id: edit || null, back: !!sheetEl.querySelector('#kBody') };  // відкрито зі шторки «Додати» — після збереження туди й повертаємось
+    openSheet(`<b>${LL('Продукт з етикетки', 'Food from a label')}</b><p class="small muted">${LL('Перепишіть з упаковки значення «на 100 г».', 'Copy the “per 100 g” values from the package.')}</p>
+      <label class="f">${LL('Назва', 'Name')}</label><input id="kpN" value="${pr ? esc(pr.name) : ''}" placeholder="${LL('напр. Сир кисломолочний 5 %', 'e.g. Cottage cheese 5%')}">
+      <div class="grid2"><div><label class="f">${LL('Калорії, ккал', 'Calories, kcal')}</label><input inputmode="decimal" id="kpK" value="${pr ? fmt(pr.per100.kcal) : ''}"></div><div><label class="f">${LL('Білок, г', 'Protein, g')}</label><input inputmode="decimal" id="kpP" value="${pr ? fmt(pr.per100.p) : ''}"></div>
+      <div><label class="f">${LL('Жири, г', 'Fat, g')}</label><input inputmode="decimal" id="kpF" value="${pr ? fmt(pr.per100.f) : ''}"></div><div><label class="f">${LL('Вуглеводи, г', 'Carbs, g')}</label><input inputmode="decimal" id="kpC" value="${pr ? fmt(pr.per100.c) : ''}"></div></div>
+      <div class="row" style="margin-top:10px">${edit ? `<button type="button" class="ghost" data-act="kProdDel">${LL('Видалити', 'Delete')}</button>` : ''}<button type="button" class="pri" style="flex:1" data-act="kProdSave">${LL('Зберегти', 'Save')}</button></div>`);
+  }
+  function kProdSave() {
+    const g = (id) => num(document.getElementById(id).value), name = document.getElementById('kpN').value.trim().slice(0, 60);
+    const x = { kcal: g('kpK'), p: g('kpP'), f: g('kpF') || 0, c: g('kpC') || 0, fib: 0 };
+    /* перевірка етикетки: числа в межах, а білок, жири й вуглеводи не важать більше за 100 г, і калорії сходяться з ними (4·Б + 4·В + 9·Ж ± 25 %, але щонайменше ± 20 ккал) */
+    if (!name || x.kcal === null || x.p === null || x.kcal < 0 || x.kcal > 900 || x.p < 0 || x.f < 0 || x.c < 0 || x.p + x.f + x.c > 100.5) { toast(LL('Перевірте назву й числа на 100 г', 'Check the name and the per-100 g numbers')); return; }
+    const calc = 4 * x.p + 4 * x.c + 9 * x.f;
+    if ((x.f || x.c) && Math.abs(calc - x.kcal) > Math.max(20, x.kcal * 0.25) && !confirm(LL('Калорії не сходяться з білками, жирами й вуглеводами (≈ ', 'The calories don’t match protein, fat and carbs (≈ ') + Math.round(calc) + LL(' ккал). Все одно зберегти?', ' kcal). Save anyway?'))) return;
+    const k = kit(), id = ui.kProd.id || 'p' + Date.now().toString(36);
+    k.products[id] = { name, per100: x };
+    save(); closeSheet(); toast(LL('Збережено', 'Saved'));
+    if (ui.kProd.back && ui.kAdd && view === 'kitchen') { ui.kAdd = Object.assign(ui.kAdd, { tab: 'my', pid: id, did: null, how: 'g' }); return kAddDraw(); }
+    return rKitchen();
+  }
+  function kNewDish(edit) {
+    const dd = edit ? kit().dishes[edit] : null;
+    const back = !!sheetEl.querySelector('#kBody');  // відкрито зі шторки «Додати»
+    ui.kDish = dd ? { id: edit, name: dd.name, ings: JSON.parse(JSON.stringify(dd.ings)), cooked: dd.cooked, q: '', back } : { id: null, name: '', ings: [], cooked: null, q: '', back };
+    kDishDraw();
+  }
+  function kDishDraw() {
+    const D2 = ui.kDish, sx = ksex(), r = KITCHEN.recipe(D2.ings, D2.cooked, sx, kctx());
+    openSheet(`<b>${LL('Страва за рецептом', 'Recipe')}</b><p class="small muted">${LL('Зважте кожен інгредієнт сирим чи сухим, потім — усю готову страву. Склад на 100 г = склад інгредієнтів ÷ вага готової.', 'Weigh each ingredient raw or dry, then the whole finished dish. Per 100 g = ingredients ÷ cooked weight.')}</p>
+      <label class="f">${LL('Назва', 'Name')}</label><input id="kdN" data-kin="dname" value="${esc(D2.name)}" placeholder="${LL('напр. Борщ', 'e.g. Chili')}">
+      ${D2.ings.map((e, j) => { const m = KITCHEN.macros(e, sx, kctx()); return `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(kName(e))}</div><div class="tiny muted">${fmt(e.g)}${LL(' г · ', ' g · ')}${m ? m.kcal : '—'}${LL(' ккал', ' kcal')}</div></div><button type="button" class="sm ghost" data-act="kIngDel" data-j="${j}" aria-label="${LL('прибрати', 'remove')}">✕</button></div>`; }).join('')}
+      ${D2.pick ? `<div class="small" style="margin-top:6px"><b>${esc(kName(D2.pick))}</b></div><div class="row"><input inputmode="decimal" id="kdG" placeholder="${LL('грами (сирим чи сухим)', 'grams (raw or dry)')}" style="flex:1"><button type="button" data-act="kIngAdd">${LL('Додати', 'Add')}</button></div>`
+        : `<input id="kdQ" data-kin="dq" placeholder="${LL('+ інгредієнт: пошук', '+ ingredient: search')}" value="${esc(D2.q)}" autocomplete="off"><div id="kdRes">${kDishResHtml()}</div>`}
+      <label class="f">${LL('Вага готової страви, г', 'Cooked weight of the whole dish, g')}</label><input inputmode="decimal" data-kin="cooked" value="${D2.cooked ? fmt(D2.cooked) : ''}">
+      <div id="kdPv">${kDishPv(r)}</div>
+      <div class="row" style="margin-top:10px">${D2.id ? `<button type="button" class="ghost" data-act="kDishDel">${LL('Видалити', 'Delete')}</button>` : ''}<button type="button" class="pri" style="flex:1" data-act="kDishSave">${LL('Зберегти страву', 'Save recipe')}</button></div>`);
+  }
+  function kDishResHtml() {
+    const D2 = ui.kDish; if (!D2.q) return '';
+    const q = D2.q.toLowerCase(), mine = Object.keys(kit().products).filter((id) => kit().products[id].name.toLowerCase().indexOf(q) >= 0);
+    const res = KITCHEN.search(D2.q, I18N.lang).slice(0, 8);
+    return `<div class="klist">${mine.map((id) => `<button type="button" class="krow" data-act="kIngPick" data-pid="${id}"><span style="flex:1;text-align:left">${esc(kit().products[id].name)}</span><span class="tiny muted">${LL('етикетка', 'label')}</span></button>`).join('')}
+      ${res.map((it) => it.v.map((v) => `<button type="button" class="krow" data-act="kIngPick" data-id="${it.id}" data-s="${v.s}"><span style="flex:1;text-align:left">${esc(I18N.lang === 'en' ? it.en : it.uk)}${it.v.length > 1 ? ', ' + KSTATE_IN()[v.s] : ''}</span><span class="tiny muted">${v.kcal}${LL(' ккал/100 г', ' kcal/100 g')}</span></button>`).join('')).join('')}</div>`;
+  }
+  const kDishPv = (r) => (r ? `<div class="note">${LL('На 100 г: ', 'Per 100 g: ')}<b>${r.per100.kcal}${LL(' ккал', ' kcal')}</b> · ${LL('білок ', 'protein ')}${fmt(r.per100.p)}${LL(' г · жири ', ' g · fat ')}${fmt(r.per100.f)}${LL(' г · вуглеводи ', ' g · carbs ')}${fmt(r.per100.c)}${LL(' г', ' g')} <span class="kq ${r.q}">${KQ()[r.q]}</span></div>` : '');
+  /* поле шторки кухні змінилось — лише стан і потрібний шматок, без перемальовування (фокус і клавіатура лишаються) */
+  function kInput(el) {
+    const f = el.dataset.kin, v = el.value;
+    if (ui.kDish && document.getElementById('kdN')) {
+      if (f === 'dname') ui.kDish.name = v;
+      if (f === 'dq') { ui.kDish.q = v; const r = document.getElementById('kdRes'); if (r) r.innerHTML = kDishResHtml(); }
+      if (f === 'cooked') { ui.kDish.cooked = num(v); const pv = document.getElementById('kdPv'); if (pv) pv.innerHTML = kDishPv(KITCHEN.recipe(ui.kDish.ings, ui.kDish.cooked, ksex(), kctx())); }
+      return;
+    }
+    const a = ui.kAdd; if (!a) return;
+    if (f === 'q') { a.q = v; const r = document.getElementById('kRes'); if (r) r.innerHTML = kResHtml(); return; }
+    if (f === 'm') a.m = Number(v); else a[f] = v;
+    const pv = document.getElementById('kPv'); if (pv) pv.innerHTML = kPreview();
+  }
+  function kDishSave() {
+    const D2 = ui.kDish, r = KITCHEN.recipe(D2.ings, D2.cooked, ksex(), kctx());
+    if (!D2.name.trim() || !r) { toast(LL('Вкажіть назву, інгредієнти й вагу готової страви', 'Enter a name, ingredients, and the cooked weight')); return; }
+    if (D2.cooked < 10 || D2.cooked > 20000) { toast(LL('Вага готової страви — від 10 г до 20 кг', 'Cooked weight — 10 g to 20 kg')); return; }
+    const k = kit(), id = D2.id || 'd' + Date.now().toString(36);
+    k.dishes[id] = { name: D2.name.trim().slice(0, 60), ings: D2.ings, cooked: D2.cooked, per100: r.per100, q: r.q };
+    save(); closeSheet(); toast(LL('Збережено', 'Saved'));
+    if (D2.back && ui.kAdd && view === 'kitchen') { ui.kAdd = Object.assign(ui.kAdd, { tab: 'my', did: id, pid: null, how: 'g' }); return kAddDraw(); }
+    return rKitchen();
+  }
+  /* збережені прийоми (з 3.20.0, ідея Джарвіса, слово Alexа «зберегти прийом як страву»): набір записів одного прийому під назвою;
+     додається одним дотиком у вибраний прийом. Склад своїх продуктів і страв — знімком на час збереження (як у записі дня). */
+  const kComboTot = (c) => KITCHEN.dayTotals({ items: c.items }, ksex(), kctx());
+  function kComboList() {
+    const k = kit(), C = Object.keys(k.combos);
+    if (!C.length) return '';
+    return `<p class="tiny muted" style="margin:0 0 4px">${LL('Збережені прийоми — одним дотиком', 'Saved meals — one tap')}</p><div class="klist">${C.map((id) => { const c = k.combos[id], t = kComboTot(c);
+      return `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(c.name)}</div><div class="tiny muted">${plural(c.items.length, LL('продукт', 'item'), LL('продукти', 'items'), LL('продуктів', 'items'))} · ${t.kcal}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(t.p)}${LL(' г', ' g')}</div></div><button type="button" class="sm" data-act="kComboAdd" data-id="${id}" aria-label="${LL('додати прийом', 'add meal')}">+</button></div>`; }).join('')}</div>`;
+  }
+  function kCombo(mi) {
+    const d = ui.kDate || today(), meals = kMeals(), its = kday(d).items.filter((e) => Math.min(e.m || 0, meals.length - 1) === mi);
+    if (its.length < 2) return;
+    const k = kit(), items = its.map((e) => { const c = JSON.parse(JSON.stringify(e)); delete c.at; delete c.m;
+      if (c.t === 'my' && !c.x && k.products[c.pid]) c.x = Object.assign({}, k.products[c.pid].per100);
+      if (c.t === 'dish' && !c.x && k.dishes[c.did]) c.x = Object.assign({}, k.dishes[c.did].per100);
+      if ((c.t === 'my' || c.t === 'dish') && !c.nm) c.nm = kName(c);
+      return c; }).filter((c) => KITCHEN.macros(c, ksex(), kctx()));
+    /* назва за замовчуванням — лише назви продуктів (без стану й без «Руками» / «Цифрами з етикетки»); немає — назва прийому */
+    const base = (e) => { const it = e.t === 'food' ? KITCHEN.item(e.id) : null; return it ? (I18N.lang === 'en' ? it.en : it.uk) : e.t === 'my' || e.t === 'dish' ? kName(e) : e.t === 'quick' && e.name ? e.name : ''; };
+    const nm = [...new Set(items.map(base).filter(Boolean))].join(', ') || meals[mi];
+    ui.kCombo = { items };
+    const t = kComboTot({ items });
+    openSheet(`<b>${LL('Зберегти прийом', 'Save meal')}</b><p class="small muted">${plural(items.length, LL('продукт', 'item'), LL('продукти', 'items'), LL('продуктів', 'items'))}${LL(' · ', ' · ')}${t.kcal}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(t.p)}${LL(' г. Наступного разу — одним дотиком у «Мої».', ' g. Next time — one tap in Mine.')}</p>
+      <label class="f">${LL('Назва', 'Name')}</label><input id="kcN" maxlength="40" value="${esc(nm.length > 40 ? nm.slice(0, 39) + '…' : nm)}">
+      <div class="klist" style="margin-top:8px">${items.map((e) => `<div class="krow"><span class="small" style="flex:1">${esc(kName(e))}</span><span class="tiny muted">${esc(kAmount(e))}</span></div>`).join('')}</div>
+      <button type="button" class="pri wide" style="margin-top:10px" data-act="kComboSave">${LL('Зберегти', 'Save')}</button>`);
+  }
+  function kComboSave() {
+    const name = (document.getElementById('kcN').value || '').trim().slice(0, 40);
+    if (!name) return toast(LL('Дайте назву прийому', 'Give the meal a name'));
+    const k = kit(); k.combos['c' + Date.now().toString(36)] = { name, items: ui.kCombo.items }; save(); closeSheet();
+    toast(LL('Прийом збережено — він у «Мої»', 'Meal saved — find it in Mine')); return rKitchen();
+  }
+  function kComboAdd(id) {
+    const k = kit(), c = k.combos[id]; if (!c || !ui.kAdd) return;
+    const day = kdayW(ui.kDate || today()), m = Math.min(ui.kAdd.m || 0, kMeals().length - 1);
+    c.items.forEach((e) => day.items.push(Object.assign(JSON.parse(JSON.stringify(e)), { m, at: Date.now() })));
+    save(); closeSheet(); toast(LL('Додано: ', 'Added: ') + c.name); return rKitchen();
+  }
+  function kMine() {
+    const k = kit(), P2 = Object.keys(k.products), D2 = Object.keys(k.dishes);
+    const C2 = Object.keys(k.combos);
+    openSheet(`<b>${LL('Мої продукти й страви', 'My foods and dishes')}</b>
+      ${C2.length ? `<p class="tiny muted" style="margin:6px 0 4px">${LL('Збережені прийоми', 'Saved meals')}</p><div class="klist">${C2.map((id) => { const t = kComboTot(k.combos[id]); return `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(k.combos[id].name)}</div><div class="tiny muted">${plural(k.combos[id].items.length, LL('продукт', 'item'), LL('продукти', 'items'), LL('продуктів', 'items'))} · ${t.kcal}${LL(' ккал', ' kcal')}</div></div><button type="button" class="sm ghost" data-act="kComboDel" data-id="${id}" aria-label="${LL('видалити прийом', 'delete meal')}">✕</button></div>`; }).join('')}</div>` : ''}
+      ${P2.length || D2.length ? `<div class="klist">${P2.map((id) => `<button type="button" class="krow" data-act="kProdEdit" data-id="${id}"><span style="flex:1;text-align:left">${esc(k.products[id].name)}</span><span class="tiny muted">${Math.round(k.products[id].per100.kcal)}${LL(' ккал/100 г', ' kcal/100 g')}</span></button>`).join('')}
+        ${D2.map((id) => `<button type="button" class="krow" data-act="kDishEdit" data-id="${id}"><span style="flex:1;text-align:left">${esc(k.dishes[id].name)}</span><span class="tiny muted">${Math.round(k.dishes[id].per100.kcal)}${LL(' ккал/100 г', ' kcal/100 g')}</span></button>`).join('')}</div>` : C2.length ? '' : `<p class="small muted">${LL('Поки порожньо.', 'Nothing here yet.')}</p>`}
+      <div class="row"><button type="button" style="flex:1" data-act="kNewProd">${LL('+ Продукт з етикетки', '+ Food from a label')}</button><button type="button" style="flex:1" data-act="kNewDish">${LL('+ Страва за рецептом', '+ Recipe')}</button></div>`);
+  }
+  function kSettings() {
+    const p = P(), k = kit(), me = p.me || {}, food = G().food;
+    openSheet(`<b>${LL('Налаштування кухні', 'Kitchen settings')}</b>
+      <div class="grid2"><div><label class="f">${isLb() ? LL('Зріст, дюймів', 'Height, in') : LL('Зріст, см', 'Height, cm')}</label><input inputmode="numeric" id="meH"${isLb() ? ` data-tip="${esc(LL('Ваш зріст у дюймах — потрібен для розрахунку калорій.', 'Your height in inches — needed to calculate calories.'))}"` : ''} value="${me.height ? HD(me.height) : ''}"></div><div><label class="f">${LL('Вік, років', 'Age, years')}</label><input inputmode="numeric" id="meA" value="${me.age || ''}"></div></div>
+      ${food.basis === 'target' ? `<label class="f">${KG(LL('Цільова вага, кг (для білка; порожньо — від поточної ваги)', 'Target weight, kg (for protein; leave blank to use your current weight)'))}</label><input inputmode="decimal" id="meT" value="${me.target ? BW(me.target) : ''}">` : ''}
+      <label class="f">${LL('Прийомів їжі на день', 'Meals per day')}</label><div class="seg">${[3, 4, 5].map((n) => `<button type="button" class="${k.set.meals === n ? 'on' : ''}" data-act="kSetMeals" data-v="${n}">${n}</button>`).join('')}</div>
+      <label class="f">${LL('Склянка води, мл', 'Glass of water, ml')}</label><div class="seg">${[250, 300, 350, 500].map((n) => `<button type="button" class="${k.set.glass === n ? 'on' : ''}" data-act="kSetGlass" data-v="${n}">${n}</button>`).join('')}</div>
+      <div class="grid2"><div><label class="f">${LL('Прокидаюсь о', 'I wake up at')}</label><input type="time" id="kWake" value="${k.set.wake}"></div><div><label class="f">${LL('Лягаю о', 'I go to bed at')}</label><input type="time" id="kBed" value="${k.set.bed}"></div></div>
+      <p class="tiny muted">${LL('Остання склянка — за 2 год до сну, щоб не прокидатись уночі.', 'The last glass is 2 hours before bed so you don’t wake up at night.')}</p>
+      <button type="button" class="pri wide" data-act="kSetSave">${LL('Зберегти', 'Save')}</button>`);
+  }
+  function kAbout() {
+    const N = kNorm();
+    openSheet(`<b>${LL('Як рахує кухня', 'How the kitchen counts')}</b>
+      ${N.nu ? `<p class="small">${LL('<b>Ваша норма.</b> ', '<b>Your targets.</b> ')}${esc(kCalcTxt(N).replace(/^./, (c) => c.toUpperCase()))}</p>` : ''}
+      <p class="small">${LL('<b>Норма.</b> Калорії — формула Міффліна — Сан Жеора × 1,45 і мета програми. Білок — від цільової ваги, якщо її вказано, інакше від поточної (за ожиріння — не вище ваги для ІМТ 30).', '<b>Targets.</b> Calories — Mifflin–St Jeor × 1.45 and your program goal. Protein — from your target weight if you set one, otherwise from your current weight (with obesity, capped at the weight for BMI 30).')}</p>
+      <p class="small">${LL('<b>Склад.</b> База USDA FoodData Central (SR Legacy): числа на 100 г і мірки — без змін з першоджерела. Ваші продукти — з етикетки, страви — з вашого рецепта.', '<b>Composition.</b> USDA FoodData Central (SR Legacy): per-100 g numbers and measures exactly as published. Your foods — from the label; your dishes — from your recipe.')}</p>
+      <p class="small">${LL('<b>Точність.</b> «зважено» і «етикетка» — найточніше; «мірка» — склад точний, а вага залежить від повноти ложки чи склянки; «орієнтир» — порції руками Precision Nutrition.', '<b>Accuracy.</b> “weighed” and “label” are the most accurate; “measure” — the composition is exact, the weight depends on how full the spoon or cup is; “estimate” — Precision Nutrition hand portions.')}</p>
+      <p class="small">${(isLb() ? LL('<b>Тарілка й білок.</b> 0,18 г білка на lb ваги на прийом, щонайменше 4 прийоми (огляд Schoenfeld і Aragon, 2018). У день тренування — прийом з білком до й після.', '<b>Plate and protein.</b> 0.18 g of protein per lb of body weight per meal, at least 4 meals (Schoenfeld and Aragon, 2018). On training days — a protein-rich meal before and after.') : LL('<b>Тарілка й білок.</b> 0,4 г білка на кг на прийом, щонайменше 4 прийоми (огляд Schoenfeld і Aragon, 2018). У день тренування — прийом з білком до й після.', '<b>Plate and protein.</b> 0.4 g of protein per kg per meal, at least 4 meals (Schoenfeld and Aragon, 2018). On training days — a protein-rich meal before and after.'))}</p>
+      <p class="small">${LL('<b>Вода.</b> Норма програми; зранку — склянка після сну. Температура — як приємніше: досліджень, що гаряча вода прискорює обмін, немає.', '<b>Water.</b> Your program’s target; a glass after you wake up. Temperature is up to you: there’s no research showing hot water speeds up your metabolism.')}</p>${kHeartNote()}
+      ${(N.food.notes || []).length ? `<p class="small"><b>${LL('Поради програми', 'Program tips')}</b></p>${N.food.notes.map((x) => `<p class="small" style="margin:6px 0">• ${esc(x)}</p>`).join('')}` : ''}
+      <p class="tiny muted">${LL('Це орієнтир, а не медичний план; при хронічних хворобах узгодьте з лікарем.', 'This is guidance, not a medical plan; if you have a chronic condition, check with your doctor.')}</p>`);
+  }
+  /* вода: + / − склянка; нагадування — підписка й розклад на сервер (remindSync) */
+  function kWater(dir) {
+    const d = ui.kDate || kWaterDay(), day = kdayW(d), g = kit().set.glass;  // сьогодні — день води (нічна зміна)
+    day.water = Math.max(0, (day.water || 0) + dir * g);
+    save(); haptic(); rKitchen();
+    if (d === kWaterDay() && kit().set.water) remindSync(false);
+  }
+  /* вода вимкнена, а нагадувань про тренування немає — прибрати підписку й на сервері (інакше сервер і далі нагадує про воду) */
+  async function waterUnsub() {
+    try {
+      const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+      if (sub) { await fetch(COACH_URL + '/push/unsub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
+    } catch (e) { /* немає */ }
+  }
+  async function kWaterRemind() {
+    const k = kit();
+    if (k.set.water) { k.set.water = false; save(); rKitchen(); if ((S().remind || {}).on) remindSync(false); else waterUnsub(); toast(LL('Нагадування про воду вимкнено', 'Water reminders off')); return; }
+    if (!pushOk()) return rKitchen();
+    let perm = Notification.permission;
+    if (perm !== 'granted') { try { perm = await Notification.requestPermission(); } catch (e) { perm = 'denied'; } }
+    if (perm !== 'granted') { toast(LL('Сповіщення не дозволено', 'Notifications aren’t allowed')); return rKitchen(); }
+    k.set.water = true; save(); rKitchen();
+    const ok = await remindSync(false);
+    toast(ok ? LL('Нагадування про воду увімкнено', 'Water reminders are on') : LL('Не вдалося звʼязатися з сервером — спробуйте пізніше', 'Couldn’t reach the server — try again later'));
+  }
+  /* для тренера: що з'їдено сьогодні й норма (числа — з бази й записів людини) */
+  function kitchenCtx() {
+    try {
+      const N = kNorm(), day = kday(today()), sx = ksex(), t = KITCHEN.dayTotals(day, sx, kctx());
+      const out = [];
+      out.push(LL('Кухня сьогодні: ', 'Kitchen today: ') + t.kcal + LL(' ккал, білок ', ' kcal, protein ') + fmt(t.p) + LL(' г, жири ', ' g, fat ') + fmt(t.f) + LL(' г, вуглеводи ', ' g, carbs ') + fmt(t.c) + LL(' г', ' g') +
+        (N.nu ? LL('; норма: ', '; targets: ') + N.nu.kLo + '–' + N.nu.kHi + LL(' ккал, білок ', ' kcal, protein ') + N.nu.pLo + '–' + N.nu.pHi + LL(' г', ' g') : LL('; норму ще не налаштовано', '; targets not set up yet')) +
+        LL('; вода: ', '; water: ') + (kday(kWaterDay()).water || 0) + LL(' мл з ', ' ml of ') + KITCHEN.waterTarget(sx, kTrain(kWaterDay())) + LL(' мл.', ' ml.'));
+      if (N.nu && N.nu.guard) out.push(kGuardTxt(N.nu));  // межа безпеки норми — тренер не радитиме їсти менше
+      if (kHeart()) out.push(LL('Тиск або серце: скільки пити — узгодити з лікарем.', 'Blood pressure or heart condition: how much to drink — check with the doctor.'));
+      day.items.slice(-12).forEach((e) => { const m = KITCHEN.macros(e, sx, kctx()); if (m) out.push('- ' + kName(e) + (kAmount(e) ? ' (' + kAmount(e) + ')' : '') + ': ' + m.kcal + LL(' ккал, білок ', ' kcal, protein ') + fmt(m.p) + LL(' г [', ' g [') + KQ()[m.q] + ']'); });
+      return out.join('\n');
+    } catch (e) { return ''; }
+  }
+
   function rBody() {
     const p = P(), prog = G();
-    const tabs = [['m', LL('Заміри', "Measurements")], ['n', LL('Харчування', "Nutrition")], ['f', LL('Фото', "Photos")]].concat(prog.tests ? [['t', LL('Тести', "Tests")]] : []);
+    const tabs = [['m', LL('Заміри', "Measurements")], ['f', LL('Фото', "Photos")]].concat(prog.tests ? [['t', LL('Тести', "Tests")]] : []);  // харчування — у «Кухні» (з 3.20.0)
     if (!tabs.some((t) => t[0] === ui.bodyTab)) ui.bodyTab = 'm';
     let body = '';
     if (ui.bodyTab === 'm') {
@@ -1990,30 +2538,6 @@ window.APP_START = () => {
           `, `">+ Add</button></div>
           `)}${arr.length >= 2 ? CHARTS.line(series, { h: 130, label: l }) : ''}${k === 'weight' && arr.length ? LL('<p class="tiny muted">Зважуйтесь зранку натщесерце; дивіться на середню за 7 днів (лінія).</p>', "<p class=\"tiny muted\">Weigh yourself in the morning on an empty stomach; watch the 7-day average (the line).</p>") : ''}</div>`;
       }).join('');
-    } else if (ui.bodyTab === 'n') {
-      const food = prog.food, me = Object.assign({ sex: prog.sex }, p.me || {});
-      /* вага: середня за 7 днів із «Замірів»; поки зважувань немає — з анкети (її людина вже вказала) */
-      const wts = (p.body.weight || []), avg = ENGINE.rolling7(wts), wMeas = avg.length ? avg[avg.length - 1].v : null;
-      const wAns = Number(((DB.custom || {}).answers || {}).weight) || null, wNow = wMeas || wAns;
-      const nu = ENGINE.nutrition(food, me, wNow);
-      const tr = ENGINE.weightTrend(wts), adv = ENGINE.foodAdvice(food, tr);
-      const goalTxt = food.goal === 'loss' ? LL('мета — менше жиру, мʼязи зберегти: дефіцит ≈ ', "goal — lose fat, keep your muscle: deficit ≈ ") + Math.round(food.deficit * 100) + LL(' % від витрат', " % of TDEE")
-        : food.goal === 'recomp' ? LL('мета — менше жиру й більше мʼязів одночасно: невеликий дефіцит ≈ ', "goal — lose fat and build muscle at the same time: a small deficit of ≈ ") + Math.round(food.deficit * 100) + LL(' % від витрат', " % of TDEE")
-        : food.goal === 'gain' ? LL('мета — набрати мʼязи: надлишок ≈ ', "goal — build muscle: a surplus of ≈ ") + Math.round(-food.deficit * 100) + LL(' % від витрат', " % of TDEE") : LL('мета — сила й тонус: калорії на рівні підтримки, без дієт', "goal — strength and tone: maintenance calories, no dieting");
-      body = `${lbH(LL(`<div class="card"><p class="small muted">Дані лише в цьому телефоні. Вага береться із «Замірів» (середня за 7 днів).</p>
-        <div class="grid2"><div><label class="f">Зріст, см</label><input inputmode="numeric" id="meH" value="`, `<div class="card"><p class="small muted">Data stays on this phone only. Weight comes from “Measurements” (7-day average).</p>
-        <div class="grid2"><div><label class="f">Height, cm</label><input inputmode="numeric" id="meH" value="`))}${me.height ? HD(me.height) : ''}${LL(`"></div><div><label class="f">Вік, років</label><input inputmode="numeric" id="meA" value="`, `"></div><div><label class="f">Age, years</label><input inputmode="numeric" id="meA" value="`)}${me.age || ''}"></div></div>
-        ${food.basis === 'target' ? `${KG(LL(`<label class="f">Цільова вага, кг (для білка; порожньо — порахую за зростом)</label><input inputmode="decimal" id="meT" value="`, `<label class="f">Target weight, kg (for protein; leave blank and I’ll estimate it from your height)</label><input inputmode="decimal" id="meT" value="`))}${me.target ? BW(me.target) : ''}">` : ''}${LL(`
-        <p></p><button type="button" class="wide" data-act="meSave">Зберегти</button></div>
-        `, `
-        <p></p><button type="button" class="wide" data-act="meSave">Save</button></div>
-        `)}${!wMeas && wAns ? `${LL(`<div class="note">Поки зважувань немає — норма за вагою з анкети (`, `<div class="note">No weigh-ins yet — targets use the weight from your questionnaire (`)}${fmt(BW(wAns))}${KG(LL(` кг). Зважтеся й додайте вагу у «Заміри» — норма стане точнішою.</div>`, ` kg). Weigh yourself and add it to “Measurements” — your targets will get more accurate.</div>`))}` : ''}
-        ${!wNow ? LL('<div class="note w">Додайте вагу у «Заміри» — і тут зʼявиться норма.</div>', "<div class=\"note w\">Add your weight in “Measurements” and your targets will show up here.</div>") : !nu ? LL('<div class="note w">Вкажіть зріст і вік — і тут зʼявиться норма.</div>', "<div class=\"note w\">Enter your height and age and your targets will show up here.</div>") : `
-        <div class="grid2"><div class="stat"><b>${fmt(nu.kLo)}–${fmt(nu.kHi)}${LL(`</b><span>ккал на день</span></div><div class="stat"><b>`, `</b><span>kcal per day</span></div><div class="stat"><b>`)}${nu.pLo}–${nu.pHi}${LL(` г</b><span>білка на день</span></div></div>
-        <p class="tiny muted">`, ` g</b><span>protein per day</span></div></div>
-        <p class="tiny muted">`)}${esc(goalTxt)}${LL(`. Розрахунок: формула Міффліна — Сан Жеора × 1,45 (основний обмін ≈ `, `. Calculation: Mifflin–St Jeor formula × 1.45 (BMR ≈ `)}${fmt(nu.bmr)}${LL(`, витрати ≈ `, `, TDEE ≈ `)}${fmt(nu.tdee)}${LL(` ккал); білок — `, ` kcal); protein — `)}${fmt(isLb() ? Math.round(food.protein[0] / ENGINE.LB * 100) / 100 : food.protein[0])}–${fmt(isLb() ? Math.round(food.protein[1] / ENGINE.LB * 100) / 100 : food.protein[1])}${KG(LL(` г на кг `, ` g per kg of `))}${food.basis === 'target' ? LL('цільової ваги ', "target weight ") + fmt(BW(nu.target)) + KG(LL(' кг', " kg")) : LL('поточної ваги', "current weight")}.</p>
-        <div class="note ${adv.k === 'ok' ? 'ok' : adv.k === 'wait' ? '' : 'w'}${LL(`"><b>За вашою вагою:</b> `, `"><b>Based on your weight:</b> `)}${esc(LBT(adv.text))}${tr && tr.rate !== null ? LL(' <span class="tiny muted">(темп ', " <span class=\"tiny muted\">(rate ") + (tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : '') + fmt(Math.abs(BW(tr.rate))) + KG(LL(' кг на тиждень)</span>', " kg per week)</span>")) : ''}</div>`}
-        <div class="card">${food.notes.map((x) => `<p class="small" style="margin:6px 0">• ${esc(x)}</p>`).join('')}</div>`;
     } else if (ui.bodyTab === 'f') {
       body = `<div class="seg">${[['front', LL('Спереду', "Front")], ['side', LL('Збоку', "Side")], ['back', LL('Ззаду', "Back")]].map(([k, l]) => `<button type="button" class="${ui.photoPose === k ? 'on' : ''}" data-act="pose" data-v="${k}">${l}</button>`).join('')}${LL(`</div>
         <label class="btn pri" style="display:block;text-align:center;color:var(--accent-ink);border:1px solid var(--accent);background:var(--accent);font-weight:500">Додати фото<input type="file" id="photoIn" accept="image/*" style="display:none"></label>
@@ -2157,8 +2681,8 @@ window.APP_START = () => {
         <p class="tiny muted">Крок ваги зараз: `, `"></div>
         <p class="tiny muted">Current weight step: `)}${fmt(ENGINE.stepFor(p.inv))}${KG(LL(` кг на гантель.</p></div>`, ` kg per dumbbell.</p></div>`))}` : ''}${LL(`
       <h2>Порадник і підказки</h2><div class="card" style="padding:10px 12px">`, `
-      <h2>Guide and tips</h2><div class="card" style="padding:10px 12px">`)}${guideChips()}${LL(`<div class="quick"><button type="button" class="sm" data-act="food">Харчування</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Можливості</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
-      <h2>Резервна копія</h2><div class="card"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: `, `<div class="quick"><button type="button" class="sm" data-act="food">Nutrition</button><button type="button" class="sm" data-act="glAll">Glossary</button><button type="button" class="sm" data-act="whatsnew">Features</button><button type="button" class="sm" data-act="tourReset">Show the tutorial again</button></div></div>
+      <h2>Guide and tips</h2><div class="card" style="padding:10px 12px">`)}${guideChips()}${LL(`<div class="quick"><button type="button" class="sm" data-act="food">Кухня</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Можливості</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
+      <h2>Резервна копія</h2><div class="card"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: `, `<div class="quick"><button type="button" class="sm" data-act="food">Kitchen</button><button type="button" class="sm" data-act="glAll">Glossary</button><button type="button" class="sm" data-act="whatsnew">Features</button><button type="button" class="sm" data-act="tourReset">Show the tutorial again</button></div></div>
       <h2>Backup</h2><div class="card"><p class="small">Data stays on this phone only. Once a week, save a copy to iCloud, “Files”, or Telegram.</p><p class="tiny muted">Last backup: `)}${DB.lastBackup ? dm(DB.lastBackup) : LL('ще не було', "none yet")}${LL(`</p>
         <label class="sw"><span>Разом із фото<div class="tiny muted">файл буде більшим</div></span><input type="checkbox" id="bkPhotos"></label>
         <button type="button" class="pri wide" data-act="backup">Зберегти резервну копію</button><p></p>
@@ -2334,7 +2858,7 @@ window.APP_START = () => {
     if (act === 'rresume') { ensureAudio(); RADIO.resume(); return; }
     if (act === 'rstop') { RADIO.stop(); if (document.body.classList.contains('sheet')) radioSheet(); return; }
     if (act === 'rduck') { S().radio.duck = Number(b.dataset.v); RADIO.setDuck(S().radio.duck); save(); return radioSheet(); }
-    if (act === 'food') { view = 'body'; ui.bodyTab = 'n'; render(); window.scrollTo(0, 0); return; }
+    if (act === 'food' || act === 'goKitchen') { view = 'kitchen'; ui.kDate = null; render(); window.scrollTo(0, 0); return; }
     /* знайомство */
     /* користувач і захист */
     if (act === 'accSwitch') return ACC.leave();
@@ -2474,6 +2998,77 @@ window.APP_START = () => {
     if (act === 'musDays') { ui.musDays = Number(b.dataset.v); return rProgress(); }
     if (act === 'repPrev' || act === 'repNext') { const ym = ui.repMonth || today().slice(0, 7); let [Y, M] = ym.split('-').map(Number); M += act === 'repNext' ? 1 : -1; if (M < 1) { M = 12; Y--; } if (M > 12) { M = 1; Y++; } ui.repMonth = Y + '-' + pad(M); return rProgress(); }
     /* тіло */
+    /* ---- кухня (з 3.20.0) ---- */
+    if (act === 'theme') return themeNext();
+    if (act === 'kDay') { const d = iso(new Date(tms(ui.kDate || today()) + Number(b.dataset.v) * 864e5)); if (d > today()) return; ui.kDate = d === today() ? null : d; return rKitchen(); }
+    if (act === 'kAdd') return kAddOpen(Number(b.dataset.m));
+    if (act === 'kEdit') return kAddOpen(undefined, Number(b.dataset.i));
+    if (act === 'kTab') { const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: b.dataset.v, q: '', ph: a.ph }; return kAddDraw(); }
+    if (act === 'kPhoto') { const fi = document.getElementById('kPhIn'); if (fi) fi.click(); return; }
+    if (act === 'kPhPick') { const a = ui.kAdd, x = a.ph && a.ph.items && a.ph.items[Number(b.dataset.j)], it = x && KITCHEN.item(x.id); if (!it) return;
+      Object.assign(a, { id: it.id, s: it.v.length === 1 ? it.v[0].s : undefined, how: 'g', g: null, mi: undefined, mq: 1, phj: Number(b.dataset.j) }); return kAddDraw(); }
+    if (act === 'kPick') { const it = KITCHEN.item(b.dataset.id); if (!it) return; Object.assign(ui.kAdd, { id: it.id, s: it.v.length === 1 ? it.v[0].s : undefined, how: 'g', g: null, mi: undefined, mq: 1 }); return kAddDraw(); }
+    if (act === 'kPickMy') { Object.assign(ui.kAdd, b.dataset.t === 'pid' ? { pid: b.dataset.id, did: null } : { did: b.dataset.id, pid: null }, { how: 'g', g: null }); return kAddDraw(); }
+    if (act === 'kBack') { const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: a.tab, q: a.q || '', ph: a.ph }; return kAddDraw(); }
+    if (act === 'kState') { ui.kAdd.s = b.dataset.v; ui.kAdd.mi = undefined; return kAddDraw(); }
+    if (act === 'kHow') { ui.kAdd.how = b.dataset.v; return kAddDraw(); }
+    if (act === 'kMeas') { ui.kAdd.mi = Number(b.dataset.j); ui.kAdd.mq = ui.kAdd.mq || 1; return kAddDraw(); }
+    if (act === 'kMq') { ui.kAdd.mq = Math.max(0.5, Math.min(20, (ui.kAdd.mq || 1) + Number(b.dataset.v))); return kAddDraw(); }
+    if (act === 'kHand') { const h = b.dataset.h; if (KITCHEN.HAND_KEYS.indexOf(h) < 0) return; ui.kAdd[h] = Math.max(0, Math.min(10, (ui.kAdd[h] || 0) + Number(b.dataset.v))); return kAddDraw(); }
+    if (act === 'kSave') return kSave();
+    if (act === 'kDel') { if (!confirm(LL('Видалити запис?', 'Delete this entry?'))) return; kdayW(ui.kDate || today()).items.splice(ui.kAdd.i, 1); save(); closeSheet(); return rKitchen(); }
+    if (act === 'kCopy') { const d = ui.kDate || today(), yd = iso(new Date(tms(d) - 864e5)), day = kdayW(d); kday(yd).items.forEach((e) => day.items.push(Object.assign(JSON.parse(JSON.stringify(e)), { at: Date.now() }))); save(); toast(LL('Скопійовано з учора', 'Copied from yesterday')); return rKitchen(); }
+    if (act === 'kGapAdd') {
+      const N = kNorm(), d = today(), t = KITCHEN.dayTotals(kday(d), ksex(), kctx()), g = KITCHEN.proteinGap(t, N.nu ? N.nu.pLo : 0, kctx(), 3), x = g.list[Number(b.dataset.j)];
+      if (!x) return;
+      const e = Object.assign({}, x.e, { m: kMealNow(), at: Date.now() }), k = kit();
+      if (e.t === 'my') { e.x = Object.assign({}, k.products[e.pid].per100); e.nm = k.products[e.pid].name; }
+      if (e.t === 'dish') { e.x = Object.assign({}, k.dishes[e.did].per100); e.dq = k.dishes[e.did].q; e.nm = k.dishes[e.did].name; }
+      kdayW(d).items.push(e); save(); toast(LL('Додано', 'Added')); return rKitchen();
+    }
+    if (act === 'kWater') return kWater(Number(b.dataset.v));
+    if (act === 'kWaterHome') { const day = kdayW(kWaterDay()); day.water = (day.water || 0) + kit().set.glass; save(); haptic(); rHome(); if (kit().set.water) remindSync(false); return; }
+    if (act === 'kWaterRemind') return kWaterRemind();
+    if (act === 'kWSave') {
+      const d = ui.kDate || today(), v = MI('weight', num(document.getElementById('kW').value));
+      if (v === null || v < 25 || v > 300) { toast(isLb() ? LL('Вага — від 55 до 661 lb', 'Weight — 55 to 661 lb') : LL('Вага — від 25 до 300 кг', 'Weight — 25 to 300 kg')); return; }
+      const arr = P().body.weight = P().body.weight || [], j = arr.findIndex((q) => q.d === d);
+      if (j >= 0) arr[j].v = v; else arr.push({ d, v });
+      save(); toast(LL('Збережено', 'Saved')); return rKitchen();
+    }
+    if (act === 'kMine') return kMine();
+    if (act === 'kCombo') return kCombo(Number(b.dataset.m));
+    if (act === 'kComboSave') return kComboSave();
+    if (act === 'kComboAdd') return kComboAdd(b.dataset.id);
+    if (act === 'kComboDel') { if (!confirm(LL('Видалити збережений прийом? Записи днів лишаться.', 'Delete this saved meal? Logged days stay.'))) return; delete kit().combos[b.dataset.id]; save(); return kMine(); }
+    if (act === 'kSet') return kSettings();
+    if (act === 'kAbout') return kAbout();
+    /* прийоми й склянка — одразу, але без перемальовування шторки: набране в полях зросту, віку й часу не губиться */
+    if (act === 'kSetMeals') { const n = Number(b.dataset.v); if ([3, 4, 5].indexOf(n) < 0) return; kit().set.meals = n; save(); sheetEl.querySelectorAll('[data-act="kSetMeals"]').forEach((x) => x.classList.toggle('on', Number(x.dataset.v) === n)); return; }
+    if (act === 'kSetGlass') { const n = Number(b.dataset.v); if ([250, 300, 350, 500].indexOf(n) < 0) return; kit().set.glass = n; save(); if (kit().set.water) remindSync(false); sheetEl.querySelectorAll('[data-act="kSetGlass"]').forEach((x) => x.classList.toggle('on', Number(x.dataset.v) === n)); return; }
+    if (act === 'kSetSave') {
+      const p = P(), h = HDin(num(document.getElementById('meH').value)), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? BWin(num(document.getElementById('meT').value)) : null;
+      if (h !== null && (h < 130 || h > 220)) { toast(isLb() ? LL('Зріст — від 51 до 86 дюймів', 'Height — 51 to 86 in') : LL('Зріст — від 130 до 220 см', "Height — 130 to 220 cm")); return; }
+      if (a !== null && (a < 16 || a > 85)) { toast(LL('Вік — від 16 до 85', "Age — 16 to 85")); return; }
+      if (te !== null && (te < 35 || te > 250)) { toast(isLb() ? LL('Цільова вага — від 78 до 551 lb', 'Target weight — 78 to 551 lb') : LL('Цільова вага — від 35 до 250 кг', "Target weight — 35 to 250 kg")); return; }
+      const wk = document.getElementById('kWake').value, bd = document.getElementById('kBed').value, ok = (x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(x || '');
+      if (!ok(wk) || !ok(bd) || wk === bd) { toast(LL('Вкажіть час підйому й сну', 'Enter your wake-up and bed times')); return; }
+      p.me = Object.assign({}, p.me || {}, { height: h, age: a, target: te });
+      const sa = {}; if (h !== null) sa.height = h; if (a !== null) sa.age = a; if (Object.keys(sa).length) syncAnswers(sa);
+      const k = kit(); k.set.wake = wk; k.set.bed = bd;
+      save(); closeSheet(); toast(LL('Збережено', "Saved")); if (k.set.water) remindSync(false); return view === 'kitchen' ? rKitchen() : render();
+    }
+    if (act === 'kNewProd') return kNewProd();
+    if (act === 'kProdEdit') return kNewProd(b.dataset.id);
+    if (act === 'kProdSave') return kProdSave();
+    if (act === 'kProdDel') { if (!confirm(LL('Видалити продукт? Записи минулих днів лишаться.', 'Delete this food? Past entries stay.'))) return; delete kit().products[ui.kProd.id]; save(); closeSheet(); return rKitchen(); }
+    if (act === 'kNewDish') return kNewDish();
+    if (act === 'kDishEdit') return kNewDish(b.dataset.id);
+    if (act === 'kIngPick') { ui.kDish.pick = b.dataset.pid ? { t: 'my', pid: b.dataset.pid, x: Object.assign({}, kit().products[b.dataset.pid].per100) } : { t: 'food', id: b.dataset.id, s: b.dataset.s }; ui.kDish.q = ''; return kDishDraw(); }
+    if (act === 'kIngAdd') { const g = num(document.getElementById('kdG').value); if (g === null || !(g > 0) || g > 20000) { toast(LL('Вкажіть грами: від 1 г до 20 кг', 'Enter grams: 1 g to 20 kg')); return; } ui.kDish.ings.push(Object.assign({}, ui.kDish.pick, { g, how: 'g' })); ui.kDish.pick = null; return kDishDraw(); }
+    if (act === 'kIngDel') { ui.kDish.ings.splice(Number(b.dataset.j), 1); return kDishDraw(); }
+    if (act === 'kDishSave') return kDishSave();
+    if (act === 'kDishDel') { if (!confirm(LL('Видалити страву? Записи минулих днів лишаться.', 'Delete this recipe? Past entries stay.'))) return; delete kit().dishes[ui.kDish.id]; save(); closeSheet(); return rKitchen(); }
     if (act === 'bodyTab') { ui.bodyTab = b.dataset.v; return rBody(); }
     if (act === 'pose') { ui.photoPose = b.dataset.v; return rBody(); }
     if (act === 'measAdd') return measSheet(b.dataset.m);
@@ -2488,16 +3083,6 @@ window.APP_START = () => {
       openSheet(`<img src="${img ? img.src : ''}${LL(`" style="width:100%" alt="фото"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="`, `" style="width:100%" alt="photo"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="`)}${id}${LL(`">Видалити фото</button>`, `">Delete photo</button>`)}`); return;
     }
     if (act === 'photoDel') { if (!confirm(LL('Видалити фото?', "Delete photo?"))) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
-    if (act === 'meSave') {
-      const h = HDin(num(document.getElementById('meH').value)), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? BWin(num(document.getElementById('meT').value)) : null;  // дюйми й фунти → метрично
-      /* межі — як в анкеті: зріст і вік ідуть і в програму (вік від 55 — інший обсяг) */
-      if (h !== null && (h < 130 || h > 220)) { toast(isLb() ? LL('Зріст — від 51 до 86 дюймів', 'Height — 51 to 86 in') : LL('Зріст — від 130 до 220 см', "Height — 130 to 220 cm")); return; }
-      if (a !== null && (a < 16 || a > 85)) { toast(LL('Вік — від 16 до 85', "Age — 16 to 85")); return; }
-      if (te !== null && (te < 35 || te > 250)) { toast(isLb() ? LL('Цільова вага — від 78 до 551 lb', 'Target weight — 78 to 551 lb') : LL('Цільова вага — від 35 до 250 кг', "Target weight — 35 to 250 kg")); return; }
-      p.me = { height: h, age: a, target: te };
-      const sa = {}; if (h !== null) sa.height = h; if (a !== null) sa.age = a; if (Object.keys(sa).length) syncAnswers(sa);
-      save(); toast(LL('Збережено', "Saved")); return rBody();
-    }
     if (act === 'saveTests') {
       const rec = { d: today() }; let any = false;
       TESTS.forEach(([k]) => { const v = num(document.getElementById('t_' + k).value); rec[k] = v; if (v !== null) any = true; });
@@ -2557,11 +3142,12 @@ window.APP_START = () => {
   document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
+  themeApply(themeNow());
   render();
   initPacks();
   document.title = LL('Тренування', 'Workouts');
-  { const TABS = { home: LL('Головна', 'Home'), plan: LL('План', 'Plan'), progress: LL('Прогрес', 'Progress'), body: LL('Тіло', 'Body'), more: LL('Більше', 'More') };
+  { const TABS = { home: LL('Головна', 'Home'), plan: LL('План', 'Plan'), kitchen: LL('Кухня', 'Kitchen'), body: LL('Тіло', 'Body'), progress: LL('Прогрес', 'Progress'), more: LL('Більше', 'More') };
     document.querySelectorAll('#tabs button').forEach((b) => { const t = TABS[b.dataset.tab], n = [...b.childNodes].find((x) => x.nodeType === 3 && x.textContent.trim()); if (t && n) n.textContent = t; }); }
   badgeSync(); setTimeout(() => remindSync(false), 1500);  // підписка iPhone могла злетіти — тихо поновити й оновити розклад
-  window.__app = { PLAT, get installEv() { return installEv; }, set installEv(v) { installEv = v; }, askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
+  window.__app = { PLAT, get installEv() { return installEv; }, set installEv(v) { installEv = v; }, askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), kPhotoFake: (items) => { if (!ui.kAdd) return; ui.kAdd.ph = kPhotoResult({}, items ? { items } : null); kAddDraw(); }, initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 };

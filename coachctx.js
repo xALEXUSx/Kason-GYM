@@ -52,6 +52,7 @@ var COACHCTX = (function () {
       });
     });
     if (o.prog && o.prog.units === 'lb') out = out.map(function (l) { return String(l).replace(/кг/g, 'lb').replace(/\bkg\b/g, 'lb'); });  // програма у фунтах (з 3.18.0)
+    if (o.kitchen) out.push(o.kitchen);  // кухня сьогодні (з 3.20.0): записане й норма — числа з бази USDA й записів людини
     return out.join('\n');
   }
   return { text: text };

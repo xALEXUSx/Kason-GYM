@@ -418,15 +418,25 @@ var ENGINE = (function () {
     sc.pct.forEach(function (pc, i) { var L = down(w * pc); if (ex.type === 'mach' && L <= 0) return; if (!out.length || L > out[out.length - 1].load) out.push({ load: L, reps: sc.reps[i] }); });
     return out;
   }
-  /* Харчування: Міффлін — Сан Жеор × 1,45; мета «схуднення» — мінус дефіцит; білок — від цільової або поточної ваги. */
+  /* Харчування: Міффлін — Сан Жеор × 1,45; мета «схуднення» — мінус дефіцит; білок — від вказаної цільової ваги, інакше — від поточної,
+     але не вище ваги для ІМТ 30 (огляд Amsterdam UMC «Protein requirement in obesity»: надлишок жиру понад ІМТ 30 у розрахунку білка не враховують).
+     До 3.20.0 без цільової ваги брали вагу для ІМТ 27,5 — без джерела, і людям зі звичайною вагою білок виходив більшим, ніж від власної ваги
+     (жінка 170 см і 60 кг — від 79,5 кг). */
   function nutrition(food, me, weight) {
     if (!food || !me || !(me.age > 0) || !(me.height > 0) || !(weight > 0)) return null;
     var bmr = 10 * weight + 6.25 * me.height - 5 * me.age + (me.sex === 'f' ? -161 : 5);
-    var tdee = bmr * 1.45, mid = tdee * (1 - (food.deficit || 0));
+    /* межі безпеки (з 3.20.0, контрольний аудит 23.10): ІМТ < 18,5 (недостатня вага, ВООЗ) — без дефіциту; зі схудненням калорії — не нижче
+       1200 на день для жінок і 1500 для чоловіків без нагляду лікаря (Harvard Health, «Calorie counting made easy») — дефіцит зменшується
+       до цієї межі, а якщо й так нижче — калорії підтримки. До аудиту жінка 70 років, 150 см, 45 кг з метою «схуднути» отримувала 900–1100 ккал. */
+    var tdee = bmr * 1.45, def = food.deficit || 0, guard = '', bmi = weight / Math.pow(me.height / 100, 2), floor = me.sex === 'f' ? 1200 : 1500;
+    if (def > 0 && bmi < 18.5) { def = 0; guard = 'under'; }
+    if (def > 0 && tdee * (1 - def) - 100 < floor) { def = Math.max(0, 1 - (floor + 100) / tdee); guard = def > 0 ? 'floor' : 'floor0'; }
+    var mid = tdee * (1 - def);
     var r50 = function (x) { return Math.round(x / 50) * 50; }, r10 = function (x) { return Math.round(x / 10) * 10; };
-    var target = me.target > 0 ? me.target : Math.round(27.5 * Math.pow(me.height / 100, 2));
-    var base = food.basis === 'target' ? target : weight;
-    return { bmr: Math.round(bmr), tdee: Math.round(tdee), kLo: r50(mid - 100), kHi: r50(mid + 100), pLo: r10(food.protein[0] * base), pHi: r10(food.protein[1] * base), base: base, target: target };
+    var cap = Math.round(30 * Math.pow(me.height / 100, 2) * 10) / 10, capped = weight > cap;
+    var own = food.basis === 'target' && me.target > 0;
+    var base = own ? me.target : Math.min(weight, cap);
+    return { bmr: Math.round(bmr), tdee: Math.round(tdee), kLo: r50(mid - 100), kHi: r50(mid + 100), pLo: r10(food.protein[0] * base), pHi: r10(food.protein[1] * base), base: base, target: own ? me.target : null, cap: cap, capped: !own && capped, def: Math.round(def * 1000) / 1000, guard: guard, floor: floor };
   }
   /* Темп зміни ваги за середньою за 7 днів, кг на тиждень (потрібно ≥ 14 днів даних). */
   function weightTrend(points) {
@@ -455,8 +465,16 @@ var ENGINE = (function () {
       if (r > 0.25) return { k: 'less', text: LL('Вага росте — заберіть ≈ 150–200 ккал на день.', "Weight is going up — cut ≈ 150–200 kcal a day.") };
       return { k: 'ok', text: LL('Вага стоїть або повільно йде — для «менше жиру й більше мʼязів» це норма. Стежте за талією в «Замірах».', "Your weight is steady or dropping slowly — that’s normal when losing fat and building muscle. Keep an eye on your waist in “Measurements.”") };
     }
+    if (food.goal === 'loss' && pct !== null) {  // з 3.20.0 — у % ваги (Helms та ін. 2014: −0,5…−1 % на тиждень); до того −0,5…−1 кг для всіх
+      if (pct < -1) return { k: 'more', text: LL('Худнете швидше за 1 % ваги на тиждень — мʼязам бракує енергії: додайте ≈ 200 ккал на день.', "You’re losing more than 1% of your weight a week — your muscles are short on energy: add ≈ 200 kcal a day.") };
+      if (pct > 0.2) return { k: 'less', text: LL('Вага росте, а мета — схуднути: заберіть ≈ 200 ккал на день.', "Your weight is going up, but your goal is to lose weight — cut ≈ 200 kcal a day.") };  // до 3.20.0 тут казало «стоїть»
+      if (pct > -0.2) return { k: 'less', text: LL('Вага стоїть 2 тижні — заберіть ≈ 200 ккал на день.', "Weight hasn’t moved in 2 weeks — cut ≈ 200 kcal a day.") };
+      if (pct > -0.5) return { k: 'slow', text: LL('Худнете повільніше за план (−0,5…−1 % ваги на тиждень). Якщо так ще тиждень — заберіть ≈ 200 ккал.', "You’re losing slower than planned (−0.5…−1% of your weight a week). If it stays like this another week, cut ≈ 200 kcal.") };
+      return { k: 'ok', text: LL('Темп у нормі (−0,5…−1 % ваги на тиждень) — нічого не міняйте.', "Rate is on track (−0.5…−1% of your weight a week) — don’t change anything.") };
+    }
     if (food.goal === 'loss') {
       if (r < -1) return { k: 'more', text: LL('Худнете швидше за 1 кг на тиждень — додайте ≈ 200 ккал на день.', "You’re losing more than 1 kg a week — add ≈ 200 kcal a day.") };
+      if (r > 0.2) return { k: 'less', text: LL('Вага росте, а мета — схуднути: заберіть ≈ 200 ккал на день.', "Your weight is going up, but your goal is to lose weight — cut ≈ 200 kcal a day.") };
       if (r > -0.2) return { k: 'less', text: LL('Вага стоїть 2 тижні — заберіть ≈ 200 ккал на день.', "Weight hasn’t moved in 2 weeks — cut ≈ 200 kcal a day.") };
       if (r > -0.5) return { k: 'slow', text: LL('Худнете повільніше за план (−0,5…−1 кг на тиждень). Якщо так ще тиждень — заберіть ≈ 200 ккал.', "You’re losing slower than planned (−0.5…−1 kg a week). If it stays that way another week, cut ≈ 200 kcal.") };
       return { k: 'ok', text: LL('Темп у нормі (−0,5…−1 кг на тиждень) — нічого не міняйте.', "Rate is on track (−0.5…−1 kg a week) — don’t change anything.") };
