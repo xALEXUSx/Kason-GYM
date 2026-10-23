@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.13.0';
+  const VERSION = '3.13.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -87,7 +87,7 @@ window.APP_START = () => {
   const P = () => DB.profiles[DB.active];
   const G = () => PROGRAMS[DB.active];
   const S = () => DB.settings;
-  const nextN = () => P().sessions.length + (P().offset || 0);
+  const nextN = () => Math.max(0, P().sessions.length + (P().offset || 0));  // не нижче нуля (див. ENGINE.planFor)
   /* назва тренування — і для старих записів, яких у програмі вже немає (Д1–Д3 після зміни днів чи анкети) */
   const woTitle = (w) => ((G().workouts || {})[w] || PROGRAMS.him.workouts[w] || {}).title || w;
   /* де було тренування — в історії, коли це не очевидно: «і вдома, і в залі» або місце інше, ніж у програмі зараз
@@ -126,9 +126,41 @@ window.APP_START = () => {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (view === 'workout' && P() && P().draft) keepAwake(true); if (audio && audio.state === 'suspended' && RADIO.state === 'playing') audio.resume(); tickTimer(); } });
 
   /* ---------- шторка ---------- */
-  function openSheet(html) { sheetEl.innerHTML = '<div class="grab"></div>' + html; document.body.classList.add('sheet'); }
+  function openSheet(html) { sheetEl.style.transform = ''; sheetEl.style.transition = ''; sheetEl.innerHTML = '<div class="grab"></div>' + html; document.body.classList.add('sheet'); }
   function closeSheet() { document.body.classList.remove('sheet'); kp = null; if (ASK.rec) askCancel(); }
   sheetBg.addEventListener('click', closeSheet);
+  /* жест iPhone: потягнути шторку вниз — закрити (слово Alexа 23.10: «не згортаються вікна, коли я сильно тягну пальцем вниз»).
+     Шторка йде за пальцем; відпустили нижче 110 px або різким рухом — закривається, інакше — повертається на місце.
+     Тягнути можна, лише коли вміст під пальцем уже прокручено до верху (прокрутка чату й списків не ламається), не з поля вводу
+     і не вбік (горизонтальні рядки кнопок). */
+  (function sheetSwipe() {
+    let y0 = 0, x0 = 0, dy = 0, t0 = 0, drag = false, from = null, hideT = 0;
+    const atTop = (el) => { for (let n = el; n; n = n.parentNode) { if (n.scrollTop > 0) return false; if (n === sheetEl) return true; } return true; };
+    const field = (el) => !!(el && el.closest && el.closest('input, textarea, select, [contenteditable]'));
+    sheetEl.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) { drag = false; return; }
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; t0 = Date.now(); drag = false; from = e.target;
+    }, { passive: true });
+    sheetEl.addEventListener('touchmove', (e) => {
+      if (e.touches.length !== 1 || !document.body.classList.contains('sheet')) return;
+      const d = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+      if (!drag) {
+        if (d < 8 || dx > d || field(from) || !atTop(from)) return;
+        drag = true; clearTimeout(hideT); sheetEl.style.transition = 'none';
+      }
+      dy = Math.max(0, d); sheetEl.style.transform = 'translateY(' + dy + 'px)'; e.preventDefault();
+    }, { passive: false });
+    const end = () => {
+      if (!drag) return; drag = false;
+      sheetEl.style.transition = '';
+      const fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+      if (dy > 110 || (fast && dy > 40)) {
+        sheetEl.style.transform = 'translateY(105%)'; closeSheet();
+        hideT = setTimeout(() => { sheetEl.style.transform = ''; }, 300);
+      } else sheetEl.style.transform = '';
+    };
+    sheetEl.addEventListener('touchend', end); sheetEl.addEventListener('touchcancel', end);
+  })();
 
   /* ---------- таймер відпочинку ---------- */
   const timerEl = document.getElementById('timer');
@@ -487,6 +519,7 @@ window.APP_START = () => {
   function startWorkout(wid, ready, place) {
     ensureAudio(); VOICE.unlock(); stopTimer();  // таймер від попереднього тренування не переносимо в нове
     P().draft = buildDraft(wid, ready, place); save(); view = 'workout'; render(); window.scrollTo(0, 0);
+    badgeSync(); remindSync(false);  // почали — значок геть, сьогодні нагадування не прийде
     const d = P().draft, prog = G(), mins = ENGINE.estimateMins(prog, d.items), nEx = d.items.filter((x) => !x.skipped).length;
     talk(woTitle(d.workout) + '. ' + nEx + ' ' + VOICE.plural(nEx, 'вправа', 'вправи', 'вправ') + '. Приблизно ' + mins + ' ' + VOICE.plural(mins, 'хвилина', 'хвилини', 'хвилин') + '.'
       + (ready === 'r' ? ' Сьогодні без вправ на поперек. ' + L('r', 0) : ready === 'y' ? ' Вправи на поперек сьогодні легше. ' + L('y', 0) : ' ') + (hard() ? L('start', d.n) : 'Починаємо.') + (S().mode === 'list' ? '' : ' Спершу розминка.'));
@@ -871,7 +904,7 @@ window.APP_START = () => {
       it.sets.forEach((s) => { if (!s.done || !(Number(s.reps) > 0)) return; const x = { ex: it.ex, variant: it.variant || undefined, type: s.type || 'N', load: s.load === '' ? null : s.load, reps: Number(s.reps), rir: s.rir === null || s.rir === undefined ? null : Number(s.rir) }; if (s.mini && s.mini.length) x.mini = s.mini.filter((r) => r > 0); sets.push(x); (s.pr || []).forEach((t) => types.add(t)); });
       if (types.size) prList.push({ ex: it.ex, types: Array.from(types) });
     });
-    if (!sets.length) { if (confirm('Жодного підходу не відмічено. Закрити тренування без збереження?')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); } return; }
+    if (!sets.length) { if (confirm('Жодного підходу не відмічено. Закрити тренування без збереження?')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); remindSync(false); } return; }
     const st = draftStats(d);
     if (st.done < st.total && !confirm('Відмічено ' + st.done + ' з ' + st.total + ' підходів. Завершити тренування?')) return;
     const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, place: d.place === 'gym' || d.place === 'home' ? d.place : undefined, deload: d.deload, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
@@ -960,7 +993,7 @@ window.APP_START = () => {
       <div class="grid2"><div class="stat"><b>${s.mins} хв</b><span>тривалість</span></div><div class="stat"><b>${work}</b><span>робочих підходів</span></div>
       <div class="stat"><b>${vol ? fmt(Math.round(vol)) + ' кг' : '—'}</b><span>обсяг${dv !== null ? ' · ' + (dv >= 0 ? '+' : '') + dv + ' % до минулого' : ''}</span></div><div class="stat"><b>${s.prs || 0}</b><span>рекордів</span></div></div>
       ${s.prList && s.prList.length ? `<h2>🏆 Рекорди</h2><div class="card"><ul class="list">${s.prList.map((x) => `<li><span>${esc(prog.ex[x.ex].name)}</span><span class="chip g">${x.types.map((t) => ({ e1rm: 'максимум', weight: 'вага', reps: 'повторення' }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}
-      <h2>Що попрацювало</h2><div class="card">${CHARTS.bodyMap(ms, 6)}</div>
+      <h2>Що попрацювало</h2><div class="card">${CHARTS.bodyMap(ms, 6, G().sex)}</div>
       <p class="small muted">Наступне: ${esc(woTitle(np.workout))} (тиждень ${np.week}).</p>
       <button type="button" class="wide" data-act="shareSum">Поділитися підсумком</button><p></p>
       <button type="button" class="pri wide big" data-act="sumDone">Готово</button>`;
@@ -1050,6 +1083,7 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.</div></li>
         <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
@@ -1137,8 +1171,7 @@ window.APP_START = () => {
     openSheet(`<div class="sp"><b>Запитати тренера</b><div class="row" style="gap:6px;flex-wrap:nowrap"><button type="button" class="sm ghost" id="askNew" data-act="askNew" hidden>Нова розмова</button><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div></div>
       <div class="chat" id="askChat"></div>
       <div class="askbar"><button type="button" class="mic" id="askMic" data-act="askMic" aria-label="говорити">${ICON.mic}</button><div class="small" id="askState" aria-live="polite"></div></div>
-      <div class="row askrow"><input id="askText" type="text" maxlength="600" placeholder="Або напишіть питання" enterkeyhint="send" autocomplete="off"><button type="button" class="sm" data-act="askSend">Надіслати</button></div>
-      <p class="tiny muted">Голос розпізнає сервер тренера й у Google не передає. Відповідає Gemini (Google) — йому йдуть лише текст питання й ваша програма, без імені, здоровʼя, замірів і фото.</p>`);
+      <div class="row askrow"><input id="askText" type="text" maxlength="600" placeholder="Або напишіть питання" enterkeyhint="send" autocomplete="off"><button type="button" class="sm" data-act="askSend">Надіслати</button></div>`);  // пояснення про дані — потім окремим посиланням (слово Alexа 23.10), не в чаті
     const inp = document.getElementById('askText');
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); askSend({ text: inp.value }); } });
     askDraw();
@@ -1344,12 +1377,14 @@ window.APP_START = () => {
     if (g !== ASK.gen) return;
     const t = ASK.chat[k];
     if (t && S().voice.on && !t.heard) return askSpeak(k, true);
+    /* запобіжник: iPhone може приспати звук посеред відповіді — тоді «говорю» не висить вічно (поки воно є, фрази тренера тренування мовчать) */
+    const until = Date.now() + 90000;
     const w = setInterval(() => {
       if (g !== ASK.gen) return clearInterval(w);
-      if (!PLAY.srcs.length || !audio || audio.currentTime >= PLAY.t - 0.02) { clearInterval(w); PLAY.t = 0; RADIO.duck(false); ASK.st = 'idle'; askDraw(); }
+      if (!PLAY.srcs.length || !audio || audio.currentTime >= PLAY.t - 0.02 || Date.now() > until) { clearInterval(w); PLAY.t = 0; RADIO.duck(false); ASK.st = 'idle'; askDraw(); }
     }, 250);
   }
-  function askWaitQuiet(k, g) { const w = setInterval(() => { if (g !== ASK.gen || ASK.st !== 'talk') return clearInterval(w); if (!speaking()) { clearInterval(w); ASK.st = 'idle'; askDraw(); } }, 300); }
+  function askWaitQuiet(k, g) { const until = Date.now() + 90000; const w = setInterval(() => { if (g !== ASK.gen || ASK.st !== 'talk') return clearInterval(w); if (!speaking() || Date.now() > until) { clearInterval(w); ASK.st = 'idle'; askDraw(); } }, 300); }
   function pcmWav(chunks) {
     const parts = chunks.map((b) => { const s = atob(b), u = new Uint8Array(s.length); for (let k = 0; k < s.length; k++) u[k] = s.charCodeAt(k); return u; });
     const n = parts.reduce((a, u) => a + u.length, 0), out = new Uint8Array(44 + n), dv = new DataView(out.buffer), w = (o, x) => { for (let k = 0; k < x.length; k++) dv.setUint8(o + k, x.charCodeAt(k)); };
@@ -1377,18 +1412,20 @@ window.APP_START = () => {
   }
   /* ---------- Нагадування про тренування й значок на іконці (з 3.13.0) ----------
      Сповіщення приходить у дні тренувань в обраний час (сервер `kason-gym-coach`, Web Push; розклад — кожні 5 хв), якщо сьогодні ще
-     не тренувались. Значок «1» на іконці — поки сьогоднішнє тренування за планом не зроблено. На iPhone — лише застосунок з іконки
+     не тренувались. Значок «1» на іконці — поки сьогоднішнє тренування за планом не почато. На iPhone — лише застосунок з іконки
      (iOS 16.4+), дозвіл — один раз «Дозволити». Підписки iPhone іноді злітають — на кожному запуску тихо поновлюємо (remindSync). */
   const VAPID_PUBLIC = 'BKnsTFnbMRHmlcsz7_rGnaOUMspG72jcNeLL0auLEYadR9aQKqxoozL27zWTr-AG_ZyvEMG0T-azWrBCk7JS4Cc';
   const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const trainDays = () => { const p = P(), prog = G(); return (p.days && p.days.length ? p.days : prog.days) || []; };
   const dayNames = (ds) => ds.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][d]).join(' / ');
   function vapidKey() { const s = atob(VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((VAPID_PUBLIC.length + 3) % 4)), u = new Uint8Array(s.length); for (let k = 0; k < s.length; k++) u[k] = s.charCodeAt(k); return u; }
-  /* значок: сьогодні день тренування й ще не тренувались — «1», інакше — прибрати */
+  /* сьогодні вже тренувались або тренування почато (чернетка сьогоднішня) — значок і нагадування більше не потрібні */
+  const trainedToday = () => { const p = P(); return !!p && (p.sessions.some((s) => s.date === today()) || !!(p.draft && p.draft.date === today())); };
+  /* значок: сьогодні день тренування й ще не почали — «1», інакше — прибрати (слово Alexа 23.10: крапка має зникати, коли запускаю тренування) */
   function badgeSync() {
     try {
       if (!('setAppBadge' in navigator) || !P()) return;
-      const todo = trainDays().indexOf(new Date().getDay()) >= 0 && !P().sessions.some((s) => s.date === today());
+      const todo = trainDays().indexOf(new Date().getDay()) >= 0 && !trainedToday();
       (todo ? navigator.setAppBadge(1) : navigator.clearAppBadge()).catch(() => {});
     } catch (e) { /* немає */ }
   }
@@ -1401,7 +1438,7 @@ window.APP_START = () => {
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey() });  // злетіла — поновити
       const p = P(), prog = G(), plan = ENGINE.planFor(prog, nextN()), wo = prog.workouts[plan.workout];
       const body = { sub: sub.toJSON(), on: true, days: trainDays(), time: r.time || '18:00', tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Kyiv',
-        next: wo ? wo.title + ' · ' + plural(wo.items.length, 'вправа', 'вправи', 'вправ') : '', done: p.sessions.some((s) => s.date === today()) ? today() : '', test: !!test };
+        next: wo ? wo.title + ' · ' + plural(wo.items.length, 'вправа', 'вправи', 'вправ') : '', done: trainedToday() ? today() : '', test: !!test };
       const res = await fetch(COACH_URL + '/push/sub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       return res.ok;
     } catch (e) { return false; }
@@ -1432,10 +1469,10 @@ window.APP_START = () => {
     let body;
     if (!pushOk()) body = `<p class="small muted">${standalone ? 'Нагадування потрібен iOS 16.4 або новіший.' : 'Нагадування працюють, коли застосунок відкрито з іконки на початковому екрані (Safari → «Поділитися» → «На початковий екран»).'}</p>`;
     else if (Notification.permission === 'denied') body = '<div class="note w small"><b>Сповіщення заборонено.</b> Увімкнути: «Параметри» iPhone → «Сповіщення» → «Тренування» → «Дозволити сповіщення».</div>';
-    else if (r.on) body = `<p class="small"><b>✓ Увімкнено</b> · ${ds.length ? dayNames(ds) : 'дні тренувань'}, якщо ще не тренувались. Значок «1» на іконці — поки тренування за планом не зроблено.</p>
+    else if (r.on) body = `<p class="small"><b>✓ Увімкнено</b> · ${ds.length ? dayNames(ds) : 'дні тренувань'}, якщо ще не тренувались. Значок «1» на іконці — поки сьогодні не почали тренування.</p>
       <label class="f" for="remindTime">Час нагадування</label><input type="time" id="remindTime" value="${esc(r.time || '18:00')}" step="300">
       <div class="row" style="gap:8px;margin-top:10px"><button type="button" class="sm" data-act="remindTest">Надіслати пробне</button><button type="button" class="sm ghost" data-act="remindOff">Вимкнути</button></div>`;
-    else body = `<p class="small muted">Сповіщення в дні тренувань (${ds.length ? dayNames(ds) : 'за планом'}) в обраний час і значок «1» на іконці, поки тренування не зроблено. iPhone один раз спитає дозвіл — натисніть «Дозволити».</p>
+    else body = `<p class="small muted">Сповіщення в дні тренувань (${ds.length ? dayNames(ds) : 'за планом'}) в обраний час і значок «1» на іконці, поки сьогодні не почали тренування. iPhone один раз спитає дозвіл — натисніть «Дозволити».</p>
       <button type="button" class="pri wide" data-act="remindOn">Увімкнути нагадування</button>`;
     return `<h2>Нагадування</h2><div class="card">${body}</div>`;
   }
@@ -1631,7 +1668,7 @@ window.APP_START = () => {
       Object.keys(raw).forEach((k) => { wkv[k] = Math.round(raw[k] / (days / 7) * 10) / 10; });
       const present = MUSCLES.filter((m) => Object.values(prog.ex).some((e) => e.m.p.indexOf(m[0]) >= 0));
       body = `<div class="seg">${[[7, '7 днів'], [28, '28 днів (сер. за тиждень)']].map(([k, l]) => `<button type="button" class="${ui.musDays === k ? 'on' : ''}" data-act="musDays" data-v="${k}">${l}</button>`).join('')}</div>
-        <div class="card">${CHARTS.bodyMap(wkv, volHi() ? 12 : 8)}<p class="tiny muted" style="text-align:center">Що темніше — то більше підходів на тиждень. Основний мʼяз вправи — 1 підхід, допоміжний — 0,5.</p></div>
+        <div class="card">${CHARTS.bodyMap(wkv, volHi() ? 12 : 8, G().sex)}<p class="tiny muted" style="text-align:center">Що темніше — то більше підходів на тиждень. Основний мʼяз вправи — 1 підхід, допоміжний — 0,5.</p></div>
         <h2>Підходи на тиждень</h2><div class="card">${CHARTS.hbars(present.map(([k, l]) => ({ label: l, v: wkv[k] || 0 })), volHi() ? { lo: 10, hi: 20, zoneLabel: 'наукові огляди: 10–20 робочих підходів на тиждень для росту мʼязів' } : { lo: 6, hi: 12, zoneLabel: 'орієнтир для сили й тонусу: 6–12 підходів на тиждень' })}</div>`;
     } else {
       const ym = ui.repMonth || today().slice(0, 7);
@@ -2017,7 +2054,7 @@ window.APP_START = () => {
     /* тренування */
     if (act === 'minimize') { view = 'home'; return render(); }
     if (act === 'finish') return finishWorkout();
-    if (act === 'discard') { if (confirm('Скасувати тренування? Відмічені підходи не збережуться.')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); } return; }
+    if (act === 'discard') { if (confirm('Скасувати тренування? Відмічені підходи не збережуться.')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); remindSync(false); } return; }  // скасували — сьогодні ще не тренувались: значок (rHome) і нагадування повертаються
     if (act === 'done') return toggleDone(i, j);
     if (act === 'kp') return openKp(i, j, b.dataset.f);
     if (act === 'stype') { if (p.draft.items[i].sets[j].done) return toast('Підхід уже позначено ✓ — спершу зніміть позначку'); return typeSheet(i, j); }
