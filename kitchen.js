@@ -119,29 +119,43 @@ var KITCHEN = (function () {
     return { need: need, list: list.slice(0, limit || 4) };
   }
 
-  /* вода: норма на сьогодні, мл — день тренування — верхня межа, інакше нижня */
-  function waterTarget(sex, training) { var w = WATER[sex === 'f' ? 'f' : 'm']; return Math.round((training ? w[1] : w[0]) * 1000); }
+  /* вода: норма на сьогодні, мл. vol — свій обʼєм на звичайний день (з 3.21.0, налаштування «Кухні»); без нього — норма програми
+     (чоловіки 2,5 л, жінки 2 л). День тренування — ще +0,5 л (як у програмі: 2,5–3 / 2–2,5 л). */
+  function waterTarget(sex, training, vol) {
+    var w = WATER[sex === 'f' ? 'f' : 'm'], base = vol > 0 ? vol : w[0] * 1000;
+    return Math.round(base + (training ? (w[1] - w[0]) * 1000 : 0));
+  }
   var hm = function (s) { var m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
   var pad = function (n) { return (n < 10 ? '0' : '') + n; };
   var fmtT = function (m) { m = ((Math.round(m / 5) * 5) % 1440 + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
-  /* розклад нагадувань: склянок n = норма ÷ склянка (вгору); перша — через 15 хв після пробудження («після сну»), остання — за 2 год
-     до сну (щоб не прокидатись уночі); між ними — рівно; у день тренування одна — за 1,5 год до нього. Повертає [{ t, k: 'wake'|'train'|'' }]. */
-  function waterTimes(wake, bed, target, glass, trainAt) {
-    var w = hm(wake), b = hm(bed); if (w === null) w = 7 * 60; if (b === null) b = 23 * 60;
-    if (b <= w) b += 1440;
-    var n = Math.max(1, Math.ceil(target / Math.max(100, glass || 350)));
-    var first = w + 15, last = Math.max(first, b - 120), out = [];
-    for (var i = 0; i < n; i++) out.push({ m: n === 1 ? first : first + (last - first) * i / (n - 1), k: i === 0 ? 'wake' : '' });
+  /* розклад між першою (f) і останньою (l) склянкою, хвилини (l ≥ f; через північ — l > 1440): склянок n = норма ÷ склянка (вгору),
+     рівно між ними; у день тренування одна — за 1,5 год до нього (trainAt), якщо це між першою й останньою. [{ t, k: 'wake'|'train'|'' }] */
+  function plan(f, l, target, glass, trainAt) {
+    var n = Math.max(1, Math.ceil(target / Math.max(100, glass || 350))), out = [];
+    for (var i = 0; i < n; i++) out.push({ m: n === 1 ? f : f + (l - f) * i / (n - 1), k: i === 0 ? 'wake' : '' });
     var ta = hm(trainAt);
     if (ta !== null && n > 1) {
-      var want = ta - 90; if (want < w) want += 1440;
-      if (want > first && want <= last) {
+      var want = ta - 90; if (want < f) want += 1440;
+      if (want > f && want <= l) {
         var j = 1; for (var q = 1; q < n; q++) if (Math.abs(out[q].m - want) < Math.abs(out[j].m - want)) j = q;
         out[j] = { m: want, k: 'train' };
         out.sort(function (a, c) { return a.m - c.m; });
       }
     }
     return out.map(function (x) { return { t: fmtT(x.m), k: x.k }; }).filter(function (x, i, a) { return !i || x.t !== a[i - 1].t; });
+  }
+  /* з 3.21.0: перша й остання склянка — свої (налаштування «Кухні»); остання раніше першої за годинником — розклад через північ (нічна зміна) */
+  function waterPlan(first, last, target, glass, trainAt) {
+    var f = hm(first), l = hm(last); if (f === null) f = 7 * 60 + 15; if (l === null) l = 21 * 60;
+    if (l <= f) l += 1440;
+    return plan(f, l, target, glass, trainAt);
+  }
+  /* до 3.21.0: від підйому й сну — перша через 15 хв після підйому, остання за 2 год до сну (так рахуються перша й остання за замовчуванням) */
+  function waterTimes(wake, bed, target, glass, trainAt) {
+    var w = hm(wake), b = hm(bed); if (w === null) w = 7 * 60; if (b === null) b = 23 * 60;
+    if (b <= w) b += 1440;
+    var first = w + 15;
+    return plan(first, Math.max(first, b - 120), target, glass, trainAt);
   }
 
   /* пошук звичними словами (з 3.20.1; жива перевірка 23.10: «курка» з підказки поля не знаходила нічого — у базі «Куряче філе»):
@@ -172,6 +186,6 @@ var KITCHEN = (function () {
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
-    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterTimes: waterTimes, search: search, worse: worse };
+    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterTimes: waterTimes, waterPlan: waterPlan, search: search, worse: worse };
 })();
 if (typeof module !== 'undefined') module.exports = KITCHEN;
