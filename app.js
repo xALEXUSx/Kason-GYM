@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.21.2';
+  const VERSION = '3.21.3';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -2192,9 +2192,11 @@ window.APP_START = () => {
   /* склянки: скільки за нормою, скільки випито, рядок «Випито 3 з 8 склянок · залишилось 5 (1,75 л)» (з 3.21.0, слово Alexа 23.10:
      «на головній не видно скільки склянок випив та скільки залишилось, потрібна така ж візуалізація як на кухні») */
   function kGlasses(target, ml, glass) {
-    const n = Math.ceil(target / glass), done = Math.floor(ml / glass * 2 + 1e-9) / 2, left = Math.max(0, Math.ceil((target - ml) / (glass / 2) - 1e-9)) / 2, leftMl = Math.max(0, target - ml);  // з 3.21.1 — по половинці
-    const icons = `<div class="glasses" role="img" aria-label="${LL('випито ', 'drank ')}${kGlN(Math.min(done, n))}${LL(' з ', ' of ')}${n}">${Array.from({ length: n }, (_, j) => `<i class="${j + 1 <= done ? 'on' : j + 0.5 <= done ? 'half' : ''}"></i>`).join('')}</div>`;
-    const line = ml < target ? LL('Випито ', 'Drank ') + kGlN(Math.min(done, n)) + LL(' з ', ' of ') + n + (I18N.lang === 'en' ? (n === 1 ? ' glass' : ' glasses') : (n === 1 ? ' склянки' : ' склянок'))
+    /* з 3.21.3 (жива перевірка 3.21.2: «Випито 0 з 7 склянок · залишилось 6½ склянки»): загальна кількість — теж у половинках, як залишок
+       і порції; неповна остання склянка — половинний значок (слово Alexа 24.10: «загальна кількість склянок у половинках, як залишок») */
+    const n = Math.ceil(target / (glass / 2) - 1e-9) / 2, done = Math.floor(ml / glass * 2 + 1e-9) / 2, left = Math.max(0, Math.ceil((target - ml) / (glass / 2) - 1e-9)) / 2, leftMl = Math.max(0, target - ml);  // з 3.21.1 — по половинці
+    const icons = `<div class="glasses" role="img" aria-label="${LL('випито ', 'drank ')}${kGlN(ml >= target ? n : Math.min(done, n))}${LL(' з ', ' of ')}${kGlN(n)}">${Array.from({ length: Math.ceil(n) }, (_, j) => { const cap = Math.min(1, n - j), f = Math.min(cap, Math.max(0, (ml >= target ? n : done) - j)); return `<i class="${[f >= cap ? 'on' : f >= 0.5 ? 'half' : '', cap < 1 ? 'part' : ''].filter(Boolean).join(' ')}"></i>`; }).join('')}</div>`;
+    const line = ml < target ? LL('Випито ', 'Drank ') + kGlN(Math.min(done, n)) + LL(' з ', ' of ') + kGlN(n) + (n % 1 ? LL(' склянки', ' glasses') : I18N.lang === 'en' ? (n === 1 ? ' glass' : ' glasses') : (n === 1 ? ' склянки' : ' склянок'))
       + ' · ' + LL('залишилось ', '') + kGlW(left) + LL('', ' left') + ' (' + fmt(leftMl / 1000) + LL(' л)', ' L)')
       : LL('Норму води на сьогодні виконано ✓', 'Today’s water goal is done ✓');
     return { n, done, left, icons, line };
