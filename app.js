@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.20.1';
+  const VERSION = '3.20.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -2515,9 +2515,14 @@ window.APP_START = () => {
     try {
       const N = kNorm(), day = kday(today()), sx = ksex(), t = KITCHEN.dayTotals(day, sx, kctx());
       const out = [];
-      out.push(LL('Кухня сьогодні: ', 'Kitchen today: ') + t.kcal + LL(' ккал, білок ', ' kcal, protein ') + fmt(t.p) + LL(' г, жири ', ' g, fat ') + fmt(t.f) + LL(' г, вуглеводи ', ' g, carbs ') + fmt(t.c) + LL(' г', ' g') +
+      /* без записів — не «0 ккал» (з 3.20.2, питання Alexа 23.10: «якщо у вкладці кухня нічого не фіксувати — це якось впливає…»):
+         «Кухню» ведуть не всі, і тренер не має казати «ти сьогодні не їв» чи «не пив» */
+      const wml = kday(kWaterDay()).water || 0;
+      out.push((day.items.length ? LL('Кухня сьогодні: ', 'Kitchen today: ') + t.kcal + LL(' ккал, білок ', ' kcal, protein ') + fmt(t.p) + LL(' г, жири ', ' g, fat ') + fmt(t.f) + LL(' г, вуглеводи ', ' g, carbs ') + fmt(t.c) + LL(' г', ' g')
+          : LL('Кухня сьогодні: записів їжі немає — людина може не вести «Кухню»; не роби висновків, що вона не їла чи скільки зʼїла', 'Kitchen today: no food logged — the person may not use the Kitchen; don’t conclude that they haven’t eaten or how much they ate')) +
         (N.nu ? LL('; норма: ', '; targets: ') + N.nu.kLo + '–' + N.nu.kHi + LL(' ккал, білок ', ' kcal, protein ') + N.nu.pLo + '–' + N.nu.pHi + LL(' г', ' g') : LL('; норму ще не налаштовано', '; targets not set up yet')) +
-        LL('; вода: ', '; water: ') + (kday(kWaterDay()).water || 0) + LL(' мл з ', ' ml of ') + KITCHEN.waterTarget(sx, kTrain(kWaterDay())) + LL(' мл.', ' ml.'));
+        (wml ? LL('; вода: ', '; water: ') + wml + LL(' мл з ', ' ml of ') + KITCHEN.waterTarget(sx, kTrain(kWaterDay())) + LL(' мл.', ' ml.')
+          : LL('; воду не відмічено — не роби висновків, скільки людина випила (норма ', '; no water logged — don’t conclude how much they drank (target ') + KITCHEN.waterTarget(sx, kTrain(kWaterDay())) + LL(' мл).', ' ml).')));
       if (N.nu && N.nu.guard) out.push(kGuardTxt(N.nu));  // межа безпеки норми — тренер не радитиме їсти менше
       if (kHeart()) out.push(LL('Тиск або серце: скільки пити — узгодити з лікарем.', 'Blood pressure or heart condition: how much to drink — check with the doctor.'));
       day.items.slice(-12).forEach((e) => { const m = KITCHEN.macros(e, sx, kctx()); if (m) out.push('- ' + kName(e) + (kAmount(e) ? ' (' + kAmount(e) + ')' : '') + ': ' + m.kcal + LL(' ккал, білок ', ' kcal, protein ') + fmt(m.p) + LL(' г [', ' g [') + KQ()[m.q] + ']'); });
