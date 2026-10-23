@@ -1,3 +1,4 @@
+var TR = typeof TR === 'function' ? TR : (typeof I18N !== 'undefined' ? I18N.tr : function (s) { return s; });  // словник мови (i18n.js); у node — українська
 /* Підказки-хмарки: затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення простою мовою.
    Текст шукається так: data-tip на самому елементі → дія (data-act) з уточненням (data-f, data-v…) → клавіша (data-k) →
    CSS-селектор із SEL. Значення — рядок або функція від елемента (коли пояснення залежить від стану). */
@@ -156,6 +157,14 @@ var TIPS = (function () {
     [
     "askNew",
     "Почати розмову заново: тренер забуде попередні питання."
+    ],
+    [
+    "langPick",
+    "Мова застосунку: українська чи англійська (американська). Обирається один раз; змінити — у «Більше»."
+    ],
+    [
+    "langSet",
+    "Змінити мову застосунку. Застосунок перезапуститься — тексти, голос і тренер перейдуть на обрану мову."
     ],
     [
     "install",
@@ -1075,7 +1084,7 @@ var TIPS = (function () {
     ],
     [
     "sel:label.btn:has(#restoreIn)",
-    "Повернути дані з файла копії. Поточні дані буде замінено."
+    "Повернути дані з файлу копії. Поточні дані буде замінено."
     ],
     [
     "csv",
@@ -1136,7 +1145,7 @@ var TIPS = (function () {
   }
   function show(hit) {
     var b = bubble(), r = hit.el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
-    b.firstChild.textContent = hit.text; b.className = 'on';
+    b.firstChild.textContent = TR(hit.text); b.className = 'on';
     var bw = b.offsetWidth, bh = b.offsetHeight, cx = r.left + r.width / 2;
     var left = Math.max(10, Math.min(W - bw - 10, cx - bw / 2));
     var above = r.top - bh - 12 > 8;

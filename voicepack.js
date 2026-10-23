@@ -1,3 +1,4 @@
+var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Записані голоси тренера: кожне речення озвучене нейроголосом один раз.
    Пакет: voices/<id>/bundle.json { name, gender, files: [файли], clips: { "речення": [зсув, довжина, № файлу] } } +
    самі файли записів (AAC) до 20 МБ кожен; старі пакети без files — один clips.bin. Відтворення — через Web Audio, речення йдуть одне за одним;
@@ -10,7 +11,7 @@ var VOICEPACK = (function () {
   async function load(id) {
     if (packs[id]) return packs[id];
     var r = await fetch('voices/' + id + '/bundle.json', { cache: 'no-cache' });
-    if (!r.ok) throw new Error('немає пакета ' + id);
+    if (!r.ok) throw new Error(LL('немає пакета ', "no pack ") + id);
     var p = await r.json(); p.id = id; packs[id] = p; return p;
   }
   function has(id, segs) { var p = packs[id]; if (!p) return false; for (var i = 0; i < segs.length; i++) if (!p.clips[segs[i]]) return false; return true; }
@@ -28,7 +29,7 @@ var VOICEPACK = (function () {
   async function binLoad(id, k, progress) {
     var url = binUrl(id, k), c = null;
     try { c = window.caches ? await caches.open(CACHE) : null; if (c) { var hit = await c.match(url); if (hit) return await hit.arrayBuffer(); } } catch (e) { c = null; }
-    var res = await fetch(url); if (!res.ok) throw new Error('немає файлу голосу');
+    var res = await fetch(url); if (!res.ok) throw new Error(LL('немає файлу голосу', "no voice file"));
     var total = Number(res.headers.get('content-length')) || 0, data;
     if (progress && res.body && res.body.getReader) {
       var rd = res.body.getReader(), parts = [], got = 0;
@@ -109,7 +110,7 @@ var VOICEPACK = (function () {
     /* без дотику iOS може ніколи не відповісти на resume() — чекаємо не довше 0,3 с, далі запасний шлях */
     if (ctx.state !== 'running' && ctx.resume && !ctx.startRendering) try { await Promise.race([ctx.resume(), new Promise(function (ok) { setTimeout(ok, 300); })]); } catch (e) { /* немає */ }
     /* iOS «приспав» Web Audio (згортання, дзвінок, без дотику) — граємо той самий запис через <audio> */
-    if (ctx.state !== 'running' && !ctx.startRendering) { lastError = 'Web Audio приспано — граю через <audio>'; return playMedia(id, segs, my); }
+    if (ctx.state !== 'running' && !ctx.startRendering) { lastError = LL('Web Audio приспано — граю через <audio>', "Web Audio is suspended — playing via <audio>"); return playMedia(id, segs, my); }
     setPlaying(true);
     try {
       var bufs = [];

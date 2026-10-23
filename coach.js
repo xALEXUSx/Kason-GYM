@@ -1,3 +1,4 @@
+var TR = typeof TR === 'function' ? TR : (typeof I18N !== 'undefined' ? I18N.tr : function (s) { return s; });  // словник мови (i18n.js); у node — українська
 /* Тренер: техніка кожної вправи й характер. Структура вправи:
    why — навіщо (аргумент), setup — положення, move — рух, breath — дихання,
    dont — [помилка, чому так не можна]. Говорить на «ти» — це голос тренера. */
@@ -222,7 +223,7 @@ var COACH = (function () {
     },
     birddog: {
       why: 'Розгиначі спини й сідниці на витривалість — «велика трійка» Макгілла.',
-      setup: 'На четвереньках: долоні під плечима, коліна під тазом, спина рівна.',
+      setup: 'Навкарачки: долоні під плечима, коліна під тазом, спина рівна.',
       move: 'Витягни протилежні руку й ногу в лінію з корпусом, тримай вісім-десять секунд, повернись.',
       dont: [['Не задирай ногу вище корпусу', 'поперек прогинається'],
         ['Не повертай таз', 'уяви склянку води на спині — вона не має впасти']]
@@ -436,7 +437,7 @@ var COACH = (function () {
     var o = (OVER[progId] || {})[exId], out = {};
     Object.keys(base).forEach(function (k) { out[k] = base[k]; });
     if (o) Object.keys(o).forEach(function (k) { out[k] = o[k]; });
-    return out;
+    return typeof I18N !== 'undefined' ? I18N.view(out) : out;  // техніка — мовою застосунку (словник)
   }
 
   /* Характер: жорсткий, з гумором, але без глузування з болю. {m|f} — форма за статтю. */
@@ -458,17 +459,17 @@ var COACH = (function () {
   function gender(t, sex) { return String(t).replace(/\{([^|}]*)\|([^}]*)\}/g, function (m, a, b) { return sex === 'f' ? b : a; }); }
   function line(kind, sex, seed) {
     var pool = LINES[kind]; if (!pool) return '';
-    if (typeof pool === 'string') return gender(pool, sex);
-    return gender(pool[Math.abs(seed || 0) % pool.length], sex);
+    if (typeof pool === 'string') return gender(TR(pool), sex);
+    return gender(TR(pool[Math.abs(seed || 0) % pool.length]), sex);
   }
   function dontText(sc) {
     if (!sc || !sc.dont || !sc.dont.length) return '';
-    var ord = ['Перше', 'Друге', 'Третє', 'Четверте'];
-    return 'Чого не робити. ' + sc.dont.map(function (x, i) { return ord[i] + ': ' + x[0].charAt(0).toLowerCase() + x[0].slice(1) + ' — ' + x[1] + '.'; }).join(' ');
+    var ord = ['Перше', 'Друге', 'Третє', 'Четверте'].map(TR);
+    return TR('Чого не робити. ') + sc.dont.map(function (x, i) { return ord[i] + ': ' + x[0].charAt(0).toLowerCase() + x[0].slice(1) + ' — ' + x[1] + '.'; }).join(' ');
   }
   function howText(sc) {
     if (!sc) return '';
-    return 'Навіщо: ' + sc.why + ' Положення: ' + sc.setup + ' Рух: ' + sc.move + (sc.breath ? ' Дихання: ' + sc.breath : '');
+    return TR('Навіщо: ') + sc.why + TR(' Положення: ') + sc.setup + TR(' Рух: ') + sc.move + (sc.breath ? TR(' Дихання: ') + sc.breath : '');
   }
   return { EX: EX, get: get, line: line, gender: gender, dontText: dontText, howText: howText, LINES: LINES };
 })();

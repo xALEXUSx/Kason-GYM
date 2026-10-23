@@ -1,7 +1,8 @@
+var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Графіки на SVG — без бібліотек, працюють без інтернету. */
 var CHARTS = (function () {
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function fmt(x) { return String(Math.round(x * 10) / 10).replace('.', ','); }
+  function fmt(x) { var s = String(Math.round(x * 10) / 10); return typeof I18N !== 'undefined' && I18N.lang === 'en' ? s : s.replace('.', ','); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function range(min, max) { if (min === max) { var d = Math.abs(min) * 0.1 || 1; return [min - d, max + d]; } var p = (max - min) * 0.1; return [min - p, max + p]; }
 
@@ -10,7 +11,7 @@ var CHARTS = (function () {
     o = o || {};
     var W = 340, H = o.h || 180, L = 38, R = 10, T = 12, B = 24;
     var all = []; series.forEach(function (s) { all = all.concat(s.pts); });
-    if (!all.length) return '<div class="empty">' + (o.empty || 'Ще немає даних') + '</div>';
+    if (!all.length) return '<div class="empty">' + (o.empty || LL('Ще немає даних', "No data yet")) + '</div>';
     var t0 = Math.min.apply(null, all.map(function (p) { return p.t; })), t1 = Math.max.apply(null, all.map(function (p) { return p.t; }));
     if (t0 === t1) { t0 -= 864e5 * 3; t1 += 864e5 * 3; }
     var vr = range(Math.min.apply(null, all.map(function (p) { return p.v; })), Math.max.apply(null, all.map(function (p) { return p.v; })));
@@ -35,7 +36,7 @@ var CHARTS = (function () {
                   : '<circle cx="' + x(p.t).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="3.2" style="fill:' + s.color + '"/>';
       });
     });
-    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.label || 'графік') + '">' + g + '</svg>';
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.label || LL('графік', "chart")) + '">' + g + '</svg>';
   }
 
   /* Горизонтальні смуги з цільовою зоною: rows [{label, v, color}] */
@@ -46,7 +47,7 @@ var CHARTS = (function () {
       var w = Math.min(100, r.v / mx * 100);
       return '<div class="hbr"><div class="hbl">' + esc(r.label) + '</div><div class="hbt"><div class="hbz" style="left:' + (lo / mx * 100) + '%;width:' + ((hi - lo) / mx * 100) + '%"></div>' +
         '<div class="hbf" style="width:' + w + '%;background:' + (r.v >= lo ? 'var(--ok)' : r.v > 0 ? 'var(--accent)' : 'transparent') + '"></div></div><div class="hbv">' + fmt(r.v) + '</div></div>';
-    }).join('') + '</div><div class="legend"><span><i class="z"></i>' + esc(o.zoneLabel || 'орієнтир ' + lo + '–' + hi + ' підходів') + '</span></div>';
+    }).join('') + '</div><div class="legend"><span><i class="z"></i>' + esc(o.zoneLabel || LL('орієнтир ', "target ") + lo + '–' + hi + LL(' підходів', " sets")) + '</span></div>';
   }
 
   /* Кільце прогресу */
@@ -87,24 +88,24 @@ var CHARTS = (function () {
         '<circle cx="60" cy="20" r="13" ' + base + '/><rect x="54" y="31" width="12" height="10" rx="4" ' + base + '/>' +
         ['torso', 'armL', 'armR', 'legL', 'legR'].map(function (k) { return '<path d="' + B[k] + '" ' + base + '/>'; }).join('') + '</g>';
     }
-    var front = sil(0) + pair('delts', 'Плечі', B.delt, B.delt[4]) + two('chest', 'Груди', B.chest) + pair('biceps', 'Біцепс', B.bic, 82) + pair('forearms', 'Передпліччя', B.fore, 114) +
-      '<g><title>Прес ' + t('abs') + '</title><rect x="' + B.abs[0] + '" y="78" width="' + B.abs[1] + '" height="44" rx="6" style="fill:' + c('abs') + '"/></g>' +
-      two('obliques', 'Косі', B.obl) + pair('quads', 'Квадрицепс', [B.quad[0], B.quad[1], B.quad[2], 27], 165);
+    var front = sil(0) + pair('delts', LL('Плечі', "Shoulders"), B.delt, B.delt[4]) + two('chest', LL('Груди', "Chest"), B.chest) + pair('biceps', LL('Біцепс', "Biceps"), B.bic, 82) + pair('forearms', LL('Передпліччя', "Forearms"), B.fore, 114) +
+      LL('<g><title>Прес ', "<g><title>Abs ") + t('abs') + '</title><rect x="' + B.abs[0] + '" y="78" width="' + B.abs[1] + '" height="44" rx="6" style="fill:' + c('abs') + '"/></g>' +
+      two('obliques', LL('Косі', "Obliques"), B.obl) + pair('quads', LL('Квадрицепс', "Quads"), [B.quad[0], B.quad[1], B.quad[2], 27], 165);
     var back = sil(130) + '<g transform="translate(130,0)">' +
-      '<g><title>Трапеції ' + t('traps') + '</title><path d="' + B.traps + '" style="fill:' + c('traps') + '"/></g>' +
-      pair('reardelts', 'Задні дельти', B.delt, B.delt[4]) + two('lats', 'Спина', B.lats) + pair('triceps', 'Трицепс', B.bic, 82) +
-      '<g><title>Поперек ' + t('lowback') + '</title><rect x="51" y="100" width="18" height="22" rx="5" style="fill:' + c('lowback') + '"/></g>' +
-      pair('glutes', 'Сідниці', [B.glute[0], B.glute[1], B.glute[2], B.glute[3]], B.glute[4]) + pair('hams', 'Задня поверхня стегна', [B.ham[0], B.ham[1], 7.5, 24], 176) +
-      pair('calves', 'Литки', [49, 71, 6, 16], 222) + '</g>';
-    return '<svg class="bodymap" viewBox="0 0 250 260" role="img" aria-label="карта мʼязів">' + front + back +
-      '<text x="60" y="258" text-anchor="middle" class="tl">спереду</text><text x="190" y="258" text-anchor="middle" class="tl">ззаду</text></svg>';
+      LL('<g><title>Трапеції ', "<g><title>Traps ") + t('traps') + '</title><path d="' + B.traps + '" style="fill:' + c('traps') + '"/></g>' +
+      pair('reardelts', LL('Задні дельти', "Rear delts"), B.delt, B.delt[4]) + two('lats', LL('Спина', "Back"), B.lats) + pair('triceps', LL('Трицепс', "Triceps"), B.bic, 82) +
+      LL('<g><title>Поперек ', "<g><title>Lower back ") + t('lowback') + '</title><rect x="51" y="100" width="18" height="22" rx="5" style="fill:' + c('lowback') + '"/></g>' +
+      pair('glutes', LL('Сідниці', "Glutes"), [B.glute[0], B.glute[1], B.glute[2], B.glute[3]], B.glute[4]) + pair('hams', LL('Задня поверхня стегна', "Hamstrings"), [B.ham[0], B.ham[1], 7.5, 24], 176) +
+      pair('calves', LL('Литки', "Calves"), [49, 71, 6, 16], 222) + '</g>';
+    return LL('<svg class="bodymap" viewBox="0 0 250 260" role="img" aria-label="карта мʼязів">', "<svg class=\"bodymap\" viewBox=\"0 0 250 260\" role=\"img\" aria-label=\"muscle map\">") + front + back +
+      LL('<text x="60" y="258" text-anchor="middle" class="tl">спереду</text><text x="190" y="258" text-anchor="middle" class="tl">ззаду</text></svg>', "<text x=\"60\" y=\"258\" text-anchor=\"middle\" class=\"tl\">front</text><text x=\"190\" y=\"258\" text-anchor=\"middle\" class=\"tl\">back</text></svg>");
   }
 
   /* Календар місяця: marks {YYYY-MM-DD: 't'|'d'} */
   function month(ym, marks, todayStr) {
     var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)) - 1;
     var first = new Date(y, m, 1), days = new Date(y, m + 1, 0).getDate(), lead = (first.getDay() + 6) % 7;
-    var h = '<div class="cal">' + ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'].map(function (d) { return '<div class="ch">' + d + '</div>'; }).join('');
+    var h = '<div class="cal">' + [LL('пн', "Mon"), LL('вт', "Tue"), LL('ср', "Wed"), LL('чт', "Thu"), LL('пт', "Fri"), LL('сб', "Sat"), LL('нд', "Sun")].map(function (d) { return '<div class="ch">' + d + '</div>'; }).join('');
     for (var i = 0; i < lead; i++) h += '<div></div>';
     for (var d = 1; d <= days; d++) {
       var ds = y + '-' + pad(m + 1) + '-' + pad(d), k = marks[ds] || '';

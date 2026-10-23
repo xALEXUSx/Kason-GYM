@@ -1,19 +1,20 @@
+var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Радіо для тренувань. Звук іде через Web Audio (GainNode), тож його можна плавно притишувати, коли говорить тренер:
    на iPhone гучність аудіоелемента з коду не змінюється. Для цього потрібні станції з дозволом CORS на кожному кроці
    переадресації — усі нижче перевірено 22.10.2026. */
 var RADIO = (function () {
   var STATIONS = [
-    { id: 'workout', g: 'Для тренувань', name: 'RauteMusik Workout', genre: 'денс, хіп-хоп, хіти без зупинки', url: 'https://workout-high.rautemusik.fm/' },
-    { id: 'antenne', g: 'Для тренувань', name: 'Antenne Bayern Workout Hits', genre: 'поп і денс-хіти', url: 'https://mp3channels.webradio.antenne.de/workout-hits' },
-    { id: 'fit', g: 'Для тренувань', name: 'FIT Radio High Energy', genre: 'енергійна електроніка', url: 'https://radio.webicdp.com/listen/fmvfitradiohighenergy/radio.mp3' },
-    { id: 'hotmix', g: 'Для тренувань', name: 'Hotmix Sport', genre: 'спортивний мікс', url: 'https://streaming.hotmixradio.com/hotmix-sport-plus-en-mp3' },
-    { id: 'power', g: 'Українські', name: 'Power FM', genre: 'поп, топ-40', url: 'https://cast.brg.ua/powerfm_main_public_mp3_hq' },
-    { id: 'djfm', g: 'Українські', name: 'DJFM Dance', genre: 'денс', url: 'https://cast.brg.ua/djfmdance_main_public_mp3_hq' },
-    { id: 'radivo', g: 'Українські', name: 'RadiVo', genre: 'поп і рок', url: 'https://radivo.thx8te.kh.ua/listen/radivo/radio.mp3' },
-    { id: 'bob', g: 'Рок і метал', name: 'RADIO BOB! Hardrock', genre: 'хард-рок', url: 'https://streams.radiobob.de/bob-hardrock/mp3-192/streams.radiobob.de/' },
-    { id: 'oui', g: 'Рок і метал', name: 'OUI FM', genre: 'рок', url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3' },
-    { id: 'metal', g: 'Рок і метал', name: 'RADIO BOB! Metal', genre: 'метал', url: 'https://streams.radiobob.de/bob-metal/mp3-192/streams.radiobob.de/' },
-    { id: 'dnb', g: 'Драм-н-бейс', name: 'UK Bass Radio', genre: 'драм-н-бейс, брейкбіт', url: 'https://s2.ssl-stream.com/listen/uk_bass_radio/stream' }
+    { id: 'workout', g: LL('Для тренувань', "Workout"), name: 'RauteMusik Workout', genre: LL('денс, хіп-хоп, хіти без зупинки', "dance, hip-hop, nonstop hits"), url: 'https://workout-high.rautemusik.fm/' },
+    { id: 'antenne', g: LL('Для тренувань', "Workout"), name: 'Antenne Bayern Workout Hits', genre: LL('поп і денс-хіти', "pop and dance hits"), url: 'https://mp3channels.webradio.antenne.de/workout-hits' },
+    { id: 'fit', g: LL('Для тренувань', "Workout"), name: 'FIT Radio High Energy', genre: LL('енергійна електроніка', "high-energy electronic"), url: 'https://radio.webicdp.com/listen/fmvfitradiohighenergy/radio.mp3' },
+    { id: 'hotmix', g: LL('Для тренувань', "Workout"), name: 'Hotmix Sport', genre: LL('спортивний мікс', "sports mix"), url: 'https://streaming.hotmixradio.com/hotmix-sport-plus-en-mp3' },
+    { id: 'power', g: LL('Українські', "Ukrainian"), name: 'Power FM', genre: LL('поп, топ-40', "pop, top 40"), url: 'https://cast.brg.ua/powerfm_main_public_mp3_hq' },
+    { id: 'djfm', g: LL('Українські', "Ukrainian"), name: 'DJFM Dance', genre: LL('денс', "dance"), url: 'https://cast.brg.ua/djfmdance_main_public_mp3_hq' },
+    { id: 'radivo', g: LL('Українські', "Ukrainian"), name: 'RadiVo', genre: LL('поп і рок', "pop and rock"), url: 'https://radivo.thx8te.kh.ua/listen/radivo/radio.mp3' },
+    { id: 'bob', g: LL('Рок і метал', "Rock & metal"), name: 'RADIO BOB! Hardrock', genre: LL('хард-рок', "hard rock"), url: 'https://streams.radiobob.de/bob-hardrock/mp3-192/streams.radiobob.de/' },
+    { id: 'oui', g: LL('Рок і метал', "Rock & metal"), name: 'OUI FM', genre: LL('рок', "rock"), url: 'https://ouifm.ice.infomaniak.ch/ouifm-high.mp3' },
+    { id: 'metal', g: LL('Рок і метал', "Rock & metal"), name: 'RADIO BOB! Metal', genre: LL('метал', "metal"), url: 'https://streams.radiobob.de/bob-metal/mp3-192/streams.radiobob.de/' },
+    { id: 'dnb', g: LL('Драм-н-бейс', "Drum and bass"), name: 'UK Bass Radio', genre: LL('драм-н-бейс, брейкбіт', "drum and bass, breakbeat"), url: 'https://s2.ssl-stream.com/listen/uk_bass_radio/stream' }
   ];
   var el = null, ctx = null, gain = null, cur = null, state = 'off', duckLevel = 0.5, ducked = false, listeners = [], pausedAt = 0;
   /* Safari на iPhone часто пускає звук потоку повз Web Audio (вади WebKit 151589, 180696): музика грає, а гучність з коду не діє.
@@ -52,7 +53,7 @@ var RADIO = (function () {
   function mediaSession() {
     if (!('mediaSession' in navigator) || !cur) return;
     try {
-      navigator.mediaSession.metadata = new MediaMetadata({ title: cur.name, artist: cur.genre, album: 'Радіо · Тренування' });
+      navigator.mediaSession.metadata = new MediaMetadata({ title: cur.name, artist: cur.genre, album: LL('Радіо · Тренування', "Radio · Workouts") });
       navigator.mediaSession.setActionHandler('play', function () { resume(); });
       navigator.mediaSession.setActionHandler('pause', function () { pause(); });
       navigator.mediaSession.setActionHandler('stop', function () { stop(); });

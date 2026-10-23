@@ -1,3 +1,4 @@
+var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Голосовий тренер: системний синтез мовлення (українські голоси телефону), без мережі.
    Тексти фраз — чисті функції (перевіряються в node); озвучення — лише в браузері. */
 var VOICE = (function () {
@@ -15,41 +16,41 @@ var VOICE = (function () {
     }, 200);
   }
 
-  function plural(n, a, b, c) { var x = Math.abs(n) % 10, y = Math.abs(n) % 100; return x === 1 && y !== 11 ? a : x >= 2 && x <= 4 && (y < 12 || y > 14) ? b : c; }
+  function plural(n, a, b, c) { if (typeof I18N !== 'undefined' && I18N.lang === 'en') return Math.abs(n) === 1 ? a : c; var x = Math.abs(n) % 10, y = Math.abs(n) % 100; return x === 1 && y !== 11 ? a : x >= 2 && x <= 4 && (y < 12 || y > 14) ? b : c; }
   /* Число вголос: 12,5 → «12 з половиною», 13,25 → «13 і чверть», 13,75 → «13 і три чверті». */
   function numWords(x) {
     var n = Math.round(Number(x) * 100) / 100, whole = Math.floor(n), fr = Math.round((n - whole) * 100);
     if (fr === 0) return String(whole);
-    if (fr === 50) return whole + ' з половиною';
-    if (fr === 25) return (whole ? whole + ' і ' : '') + 'чверть';
-    if (fr === 75) return (whole ? whole + ' і ' : '') + 'три чверті';
-    return String(n).replace('.', ',');
+    if (fr === 50) return whole + LL(' з половиною', " and a half");
+    if (fr === 25) return (whole ? whole + LL(' і ', " and ") : '') + LL('чверть', "a quarter");
+    if (fr === 75) return (whole ? whole + LL(' і ', " and ") : '') + LL('три чверті', "three quarters");
+    return typeof I18N !== 'undefined' && I18N.lang === 'en' ? String(n) : String(n).replace('.', ',');
   }
   function kg(x) {
     var n = Math.round(Number(x) * 100) / 100;
-    if (n !== Math.floor(n)) return numWords(n) + ' кілограма';
-    return n + ' ' + plural(n, 'кілограм', 'кілограми', 'кілограмів');
+    if (n !== Math.floor(n)) return numWords(n) + LL(' кілограма', " kilograms");
+    return n + ' ' + plural(n, LL('кілограм', "kilogram"), LL('кілограми', "kilograms"), LL('кілограмів', "kilograms"));
   }
-  function secs(n) { return n + ' ' + plural(n, 'секунда', 'секунди', 'секунд'); }
-  function reps(n) { return n + ' ' + plural(n, 'повторення', 'повторення', 'повторень'); }
+  function secs(n) { return n + ' ' + plural(n, LL('секунда', "second"), LL('секунди', "seconds"), LL('секунд', "seconds")); }
+  function reps(n) { return n + ' ' + plural(n, LL('повторення', "rep"), LL('повторення', "reps"), LL('повторень', "reps")); }
   /* Ціль підходу: ex — вправа, s — підхід {load, reps, type}, it — {min, max}. */
   /* Ціль підходу окремими реченнями — кожне речення окремо записується в голосовий пакет. */
   function cap(t) { t = String(t); return t.charAt(0).toUpperCase() + t.slice(1); }
   function target(ex, s, it, side) {
     var out = [], hasLoad = s.load !== null && s.load !== undefined && s.load !== '';
-    if (ex.type === 'band') { if (hasLoad) out.push('Рівень ' + numWords(s.load) + '.'); }
+    if (ex.type === 'band') { if (hasLoad) out.push(LL('Рівень ', "Level ") + numWords(s.load) + '.'); }
     else if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) {
-      if (!hasLoad) { if (ex.type === 'dbopt') out.push('Без гантелі.'); }
-      else if (Number(s.load) === 0) out.push('Лише гриф.');
-      else { out.push(cap(kg(s.load)) + ' дисків.'); if (side && side.length) out.push('На кожен бік — ' + side.map(numWords).join(' плюс ') + '.'); }
+      if (!hasLoad) { if (ex.type === 'dbopt') out.push(LL('Без гантелі.', "No dumbbell.")); }
+      else if (Number(s.load) === 0) out.push(LL('Лише гриф.', "Handle only."));
+      else { out.push(cap(kg(s.load)) + LL(' дисків.', " of plates.")); if (side && side.length) out.push(LL('На кожен бік — ', "Each side: ") + side.map(numWords).join(LL(' плюс ', " plus ")) + '.'); }
     }
     else if (ex.type === 'mach') { if (hasLoad) out.push(cap(kg(s.load)) + '.'); }  // тренажер чи блок: вага в кг, без дисків
-    if (ex.type === 'amrap') out.push('Скільки зможете, із запасом два.');
-    else if (s.type === 'M') out.push('До відмови.');
-    else if (ex.type === 'time') out.push(it.min === it.max || !it.max ? cap(secs(s.reps || it.max)) + '.' : 'Від ' + it.min + ' до ' + secs(it.max) + '.');
-    else if (s.type === 'W') { out.push(cap(reps(s.reps || 12)) + '.'); out.push('Легко.'); }
-    else if (it.max) out.push(it.min === it.max ? cap(reps(it.max)) + '.' : 'Від ' + it.min + ' до ' + reps(it.max) + '.');
-    if (ex.side) out.push('Для кожної сторони.');
+    if (ex.type === 'amrap') out.push(LL('Скільки зможете, із запасом два.', "As many as you can, with two in reserve."));
+    else if (s.type === 'M') out.push(LL('До відмови.', "To failure."));
+    else if (ex.type === 'time') out.push(it.min === it.max || !it.max ? cap(secs(s.reps || it.max)) + '.' : LL('Від ', "From ") + it.min + LL(' до ', " to ") + secs(it.max) + '.');
+    else if (s.type === 'W') { out.push(cap(reps(s.reps || 12)) + '.'); out.push(LL('Легко.', "Keep it light.")); }
+    else if (it.max) out.push(it.min === it.max ? cap(reps(it.max)) + '.' : LL('Від ', "From ") + it.min + LL(' до ', " to ") + reps(it.max) + '.');
+    if (ex.side) out.push(LL('Для кожної сторони.', "Each side."));
     return out.join(' ');
   }
   /* Коротка порада: перші речення поради, доки не набереться ≈ 50 знаків. */
@@ -60,8 +61,16 @@ var VOICE = (function () {
   }
 
   /* Текст для голосу: символи й скорочення — словами (5 хв → 5 хвилин, 20–30 с → від 20 до 30 секунд). */
-  var UNITS = [[/(\d+)\s*хв\.?(?=[\s.,;:!?)]|$)/g, ['хвилина', 'хвилини', 'хвилин']], [/(\d+)\s*с(?=[\s.,;:!?)]|$)/g, ['секунда', 'секунди', 'секунд']], [/(\d+)\s*кг(?=[\s.,;:!?)]|$)/g, ['кілограм', 'кілограми', 'кілограмів']]];
+  var UNITS = [[/(\d+)\s*хв\.?(?=[\s.,;:!?)]|$)/g, [LL('хвилина', "minute"), LL('хвилини', "minutes"), LL('хвилин', "minutes")]], [/(\d+)\s*с(?=[\s.,;:!?)]|$)/g, [LL('секунда', "second"), LL('секунди', "seconds"), LL('секунд', "seconds")]], [/(\d+)\s*кг(?=[\s.,;:!?)]|$)/g, [LL('кілограм', "kilogram"), LL('кілограми', "kilograms"), LL('кілограмів', "kilograms")]]];
+  /* англійською: min / sec / kg / lb → слова; × → times; ≈ → about; 8–12 → 8 to 12 */
+  var UNITS_EN = [[/(\d+(?:\.\d+)?)\s*min\b\.?/g, ['minute', 'minutes']], [/(\d+(?:\.\d+)?)\s*(?:sec|s)\b\.?/g, ['second', 'seconds']], [/(\d+(?:\.\d+)?)\s*kg\b\.?/g, ['kilogram', 'kilograms']], [/(\d+(?:\.\d+)?)\s*lbs?\b\.?/g, ['pound', 'pounds']]];
+  function normEn(t) {
+    var a = String(t).replace(/[ \t]{2,}/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\s·\s/g, ', ').replace(/\s*×\s*/g, ' times ').replace(/≈\s*/g, 'about ').replace(/(\d)°/g, '$1 degrees').replace(/\s–\s/g, ', ').replace(/(\d+)–(\d+)/g, '$1 to $2');
+    UNITS_EN.forEach(function (u) { a = a.replace(u[0], function (m, n) { return n + ' ' + (Number(n) === 1 ? u[1][0] : u[1][1]); }); });
+    return a.trim();
+  }
   function norm(t) {
+    if (typeof I18N !== 'undefined' && I18N.lang === 'en') return normEn(t);
     var a = String(t).replace(/[ \t]{2,}/g, ' ').replace(/[ \t]*\n[ \t]*/g, '\n').replace(/\s·\s/g, ', ').replace(/×/g, ' на ').replace(/≈\s*/g, 'приблизно ').replace(/(\d)°/g, '$1 градусів').replace(/\s–\s/g, ', ').replace(/по (\d+)–(\d+)/g, 'по $1-$2').replace(/(\d+)–(\d+)/g, 'від $1 до $2');
     UNITS.forEach(function (u) { a = a.replace(u[0], function (m, n) { return n + ' ' + plural(Number(n), u[1][0], u[1][1], u[1][2]); }); });
     return a.trim();
@@ -75,7 +84,11 @@ var VOICE = (function () {
   }
 
   /* ---------- браузер ---------- */
-  function ukVoices() { return voices.filter(function (v) { return /^uk/i.test(v.lang || ''); }); }
+  /* голоси мови застосунку: українська — uk; англійська — спершу американські (en-US), потім будь-які англійські */
+  function ukVoices() {
+    if (typeof I18N !== 'undefined' && I18N.lang === 'en') { var us = voices.filter(function (v) { return /^en[-_]US/i.test(v.lang || ''); }); return us.length ? us : voices.filter(function (v) { return /^en/i.test(v.lang || ''); }); }
+    return voices.filter(function (v) { return /^uk/i.test(v.lang || ''); });
+  }
   function chosen() {
     var uk = ukVoices(); if (!uk.length) return null;
     for (var i = 0; i < uk.length; i++) if (uk[i].voiceURI === cfg.uri) return uk[i];

@@ -1,6 +1,9 @@
+var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Рушій: розклад, метрики, підказки прогресії, рекорди, плато, втома. Без DOM — перевіряється в node. */
 var ENGINE = (function () {
   var STEP = 2.5;
+  /* десятковий знак підказок: 2,5 — українською, 2.5 — англійською (у node — українська) */
+  function dec(s) { return typeof I18N !== 'undefined' && I18N.lang === 'en' ? String(s) : String(s).replace('.', ','); }
 
   function round1(x) { return Math.round(x * 10) / 10; }
 
@@ -36,10 +39,10 @@ var ENGINE = (function () {
     return set.reps;
   }
   function metricLabel(ex) {
-    if (ex.type === 'db' || ex.type === 'mach') return 'розрахунковий максимум, кг';
-    if (ex.type === 'band') return 'рівень × повторення';
-    if (ex.type === 'time') return 'секунди, кращий підхід';
-    return 'повторення, кращий підхід';
+    if (ex.type === 'db' || ex.type === 'mach') return LL('розрахунковий максимум, кг', "estimated 1RM, kg");
+    if (ex.type === 'band') return LL('рівень × повторення', "level × reps");
+    if (ex.type === 'time') return LL('секунди, кращий підхід', "seconds, best set");
+    return LL('повторення, кращий підхід', "reps, best set");
   }
 
   /* Історія вправи: [{date, n, deload, sets:[…]}] за зростанням дати. */
@@ -124,11 +127,11 @@ var ENGINE = (function () {
     if (!pre) return null;  // до перерви цієї вправи не було — звичайна підказка
     for (i = hist.length - 1; i >= 0; i--) if (hist[i].date >= back.since && hist[i].date > back.pre) { ret = hist[i]; break; }
     var min = item.min, max = item.max, out = { sets: [], note: '' }, ps = pre.sets;
-    var head = back.kind === 'short' ? 'Перший тиждень після перерви: ' : 'Повернення після перерви, тиждень ' + back.k + ' з ' + back.N + ': ';
+    var head = back.kind === 'short' ? LL('Перший тиждень після перерви: ', "First week after a break: ") : LL('Повернення після перерви, тиждень ', "Back after a break, week ") + back.k + LL(' з ', " of ") + back.N + ': ';
     var nOf = function (s) { return s.load === null || s.load === undefined || s.load === '' ? null : Number(s.load); };
     if (ex.type === 'amrap') {
       for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: null });
-      out.note = head + 'скільки зможете, але без відмови — запас 3–4.';
+      out.note = head + LL('скільки зможете, але без відмови — запас 3–4.', "as many as you can, but not to failure — RIR 3–4.");
       return out;
     }
     var heavy = ex.type === 'db' || ex.type === 'mach' || (ex.type === 'time' && ex.load) || ex.type === 'dbopt';
@@ -137,7 +140,7 @@ var ENGINE = (function () {
       /* без ваги (власна вага, петля, час, «без гантелі»): той самий варіант і рівень, нижня межа повторень */
       var Lb = null; ps.forEach(function (s) { var v = nOf(s); if (v !== null && (Lb === null || v > Lb)) Lb = v; });
       for (i = 0; i < nSets; i++) out.sets.push({ load: Lb, reps: min });
-      out.note = head + 'той самий ' + (ex.type === 'band' ? 'опір' : 'варіант') + ', нижня межа ' + (ex.type === 'time' ? 'часу' : 'повторень') + ', запас 3–4.';
+      out.note = head + LL('той самий ', "same ") + (ex.type === 'band' ? LL('опір', "resistance") : LL('варіант', "variation")) + LL(', нижня межа ', ", bottom of the ") + (ex.type === 'time' ? LL('часу', "time range") : LL('повторень', "rep range")) + LL(', запас 3–4.', ", RIR 3–4.");
       return out;
     }
     var hd = ex.type === 'mach' ? 0 : (Number(handle) || 0);
@@ -152,7 +155,7 @@ var ENGINE = (function () {
       if (rl !== null && rl > x && rl <= L && rs.reps >= min) x = rl;
       out.sets.push({ load: x, reps: Math.max(min, Math.min(max, r.reps || min)) });
     }
-    out.note = head + (back.kind === 'short' ? 'вага на ≈ 20 % менша' : '≈ ' + back.pct + ' % колишньої ваги') + ', ' + (ex.type === 'time' ? 'той самий час' : 'ті самі повторення') + ', запас 3–4.';
+    out.note = head + (back.kind === 'short' ? LL('вага на ≈ 20 % менша', "weight ≈ 20% lower") : '≈ ' + back.pct + LL(' % колишньої ваги', " % of your previous weight")) + ', ' + (ex.type === 'time' ? LL('той самий час', "same time") : LL('ті самі повторення', "same reps")) + LL(', запас 3–4.', ", RIR 3–4.");
     return out;
   }
   /* Підказка на сьогодні за правилами прогресії програми. back — повернення після перерви (comeback), інакше нічого. */
@@ -170,7 +173,7 @@ var ENGINE = (function () {
     if (ex.type === 'amrap') {
       var bestA = 0; if (last) last.forEach(function (s) { if (s.reps > bestA) bestA = s.reps; });
       fill(null, bestA ? bestA + 1 : null);
-      out.note = 'Скільки зможете, запас 2' + (bestA ? ' · минулого разу найкраще ' + bestA : '');
+      out.note = LL('Скільки зможете, запас 2', "As many as you can, 2 RIR") + (bestA ? LL(' · минулого разу найкраще ', " · best last time: ") + bestA : '');
       return out;
     }
     if (!last) {
@@ -178,9 +181,9 @@ var ENGINE = (function () {
       /* стартова вага — не більша за межу набору й кратна кроку дисків (інакше її не зібрати) */
       if (startLoad !== null && (ex.type === 'db' || ex.type === 'mach' || ex.type === 'time')) startLoad = Math.max(0, Math.floor(Math.min(startLoad, cap) / STEP + 1e-9) * STEP);
       fill(startLoad, max);
-      var aim = ex.type === 'time' ? max + ' с' : max + ' повторень';
-      out.note = startLoad === null ? 'Перший раз: ' + aim + ' із запасом 2–3' + (ex.type === 'dbopt' ? ', без гантелі' : '') + '; важко — легший варіант.'
-        : 'Перший раз: підберіть ' + (ex.type === 'band' ? 'опір' : 'вагу') + ', щоб ' + aim + ' давались із запасом 2–3.';
+      var aim = ex.type === 'time' ? max + LL(' с', " sec") : max + LL(' повторень', " reps");
+      out.note = startLoad === null ? LL('Перший раз: ', "First time: ") + aim + LL(' із запасом 2–3', " with 2–3 in reserve") + (ex.type === 'dbopt' ? LL(', без гантелі', ", no dumbbell") : '') + LL('; важко — легший варіант.', "; too hard — use an easier variation.")
+        : LL('Перший раз: підберіть ', "First time: pick a ") + (ex.type === 'band' ? LL('опір', "resistance") : LL('вагу', "weight")) + LL(', щоб ', " so ") + aim + LL(' давались із запасом 2–3.', " leave 2–3 in reserve.");
       return out;
     }
     var loads = last.map(function (s) { return s.load === undefined ? null : s.load; });
@@ -195,44 +198,44 @@ var ENGINE = (function () {
 
     if (deload) {
       fill(Lmax, min);
-      out.note = 'Легкий тиждень: та сама вага (або на крок нижча), запас 3–4.';
+      out.note = LL('Легкий тиждень: та сама вага (або на крок нижча), запас 3–4.', "Deload week: same weight (or one step lower), RIR 3–4.");
       return out;
     }
     /* повернення позаду — знову як до перерви: ті самі вага й повторення, далі прогресія як звично */
     if (base.hold) {
       for (i = 0; i < nSets; i++) { var h0 = last[i] || last[last.length - 1]; out.sets.push({ load: h0.load === undefined ? null : h0.load, reps: Math.max(min, Math.min(max, h0.reps || min)) }); }
-      out.note = 'Повернення після перерви позаду: вага й повторення — як до перерви.';
+      out.note = LL('Повернення після перерви позаду: вага й повторення — як до перерви.', "Comeback after the break is done: weight and reps — same as before the break.");
       return out;
     }
 
     if (ex.type === 'band') {
-      if (allTop) { fill(Lmax, min); out.note = 'Верхня межа взята: відступіть далі від дверей або +1 рівень.'; }
-      else { for (i = 0; i < nSets; i++) out.sets.push({ load: Lmax, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = 'Той самий опір, +1 повторення.'; }
+      if (allTop) { fill(Lmax, min); out.note = LL('Верхня межа взята: відступіть далі від дверей або +1 рівень.', "Top of the range reached: step farther from the door or go up 1 level."); }
+      else { for (i = 0; i < nSets; i++) out.sets.push({ load: Lmax, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = LL('Той самий опір, +1 повторення.', "Same resistance, +1 rep."); }
       return out;
     }
     if (ex.type === 'bw') {
-      if (allTop) { fill(null, max); out.note = 'Верхня межа взята: переходьте на складніший варіант.'; }
-      else { for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = '+1 повторення.'; }
+      if (allTop) { fill(null, max); out.note = LL('Верхня межа взята: переходьте на складніший варіант.', "Top of the range reached: move to a harder variation."); }
+      else { for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = LL('+1 повторення.', "+1 rep."); }
       return out;
     }
     if (ex.type === 'time') {
       if (allTop) {
-        if (ex.load && Lmax !== null) { var nl = Math.min(cap, Lmax + STEP); fill(nl, min); out.note = nl > Lmax ? 'Верхня межа взята: +2,5 кг.' : 'Вага максимальна: довше або повільніше.'; }
-        else { fill(Lmax, max); out.note = 'Верхня межа взята: складніший варіант.'; }
-      } else { for (i = 0; i < nSets; i++) out.sets.push({ load: Lmax, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 5) }); out.note = '+5 секунд.'; }
+        if (ex.load && Lmax !== null) { var nl = Math.min(cap, Lmax + STEP); fill(nl, min); out.note = nl > Lmax ? LL('Верхня межа взята: +2,5 кг.', "Top of the range reached: +2.5 kg.") : LL('Вага максимальна: довше або повільніше.', "Max weight: go longer or slower."); }
+        else { fill(Lmax, max); out.note = LL('Верхня межа взята: складніший варіант.', "Top of the range reached: harder variation."); }
+      } else { for (i = 0; i < nSets; i++) out.sets.push({ load: Lmax, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 5) }); out.note = LL('+5 секунд.', "+5 seconds."); }
       return out;
     }
     /* db і dbopt */
     if (ex.type === 'dbopt' && Lmax === null) {
-      if (allTop) { fill(0, min); out.note = 'Без ваги вже легко: візьміть гриф без дисків в іншу руку.'; }
-      else { for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = '+1 повторення.'; }
+      if (allTop) { fill(0, min); out.note = LL('Без ваги вже легко: візьміть гриф без дисків в іншу руку.', "Bodyweight is easy now: hold a bare handle (no plates) in your other hand."); }
+      else { for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = LL('+1 повторення.', "+1 rep."); }
       return out;
     }
     if (allTop) {
       var step = (ex.big && last.every(function (s) { return s.reps >= max + 2; })) ? 2 * STEP : STEP;
       var newL = Math.round(Math.min(cap, Lmax + step) * 100) / 100;  // крок 4,5 чи 6,8 — без хвостів 18,099999
-      if (newL === Lmax) { fill(Lmax, max); out.note = 'Вага максимальна: темп 4 с, пауза внизу, +1 підхід або одна рука / нога.'; }
-      else { fill(newL, min); out.note = 'Верхня межа взята: +' + String(Math.round((newL - Lmax) * 100) / 100).replace('.', ',') + (ex.type === 'mach' ? ' кг.' : ' кг на гантель.'); }
+      if (newL === Lmax) { fill(Lmax, max); out.note = LL('Вага максимальна: темп 4 с, пауза внизу, +1 підхід або одна рука / нога.', "Max weight: 4-sec tempo, pause at the bottom, +1 set, or one arm / leg."); }
+      else { fill(newL, min); out.note = LL('Верхня межа взята: +', "Top of the range reached: +") + dec(Math.round((newL - Lmax) * 100) / 100) + (ex.type === 'mach' ? LL(' кг.', " kg.") : LL(' кг на гантель.', " kg per dumbbell.")); }
       return out;
     }
     /* Змішані підходи: на новій вазі менше нижньої межі — перший підхід нова вага, решта стара;
@@ -245,13 +248,13 @@ var ENGINE = (function () {
       var keep = weak > 0 ? Math.max(1, strong) : strong + 1;
       if (keep >= nSets) {
         for (i = 0; i < nSets; i++) out.sets.push({ load: Lmax, reps: min });
-        out.note = 'Усі підходи — на новій вазі.';
+        out.note = LL('Усі підходи — на новій вазі.', "All sets at the new weight.");
       } else {
         for (i = 0; i < nSets; i++) {
           var r0 = last[i] || last[last.length - 1];
           out.sets.push(i < keep ? { load: Lmax, reps: min } : { load: prevL, reps: Math.min(max, (r0.reps || min) + 1) });
         }
-        out.note = 'Змішані підходи: ' + keep + ' — нова вага, решта — попередня.';
+        out.note = LL('Змішані підходи: ', "Mixed sets: ") + keep + LL(' — нова вага, решта — попередня.', " at the new weight, the rest at the previous one.");
       }
       return out;
     }
@@ -260,7 +263,7 @@ var ENGINE = (function () {
       var L = (ref.load === null || ref.load === undefined || ref.load === '') ? Lmax : Number(ref.load);
       out.sets.push({ load: L, reps: Math.min(max, (ref.reps || min) + 1) });
     }
-    out.note = 'Та сама вага, +1 повторення в кожному підході.';
+    out.note = LL('Та сама вага, +1 повторення в кожному підході.', "Same weight, +1 rep in every set.");
     return out;
   }
 
@@ -306,7 +309,7 @@ var ENGINE = (function () {
   /* Тиждень за датою (понеділок, YYYY-MM-DD). */
   /* Привітання за годиною на годиннику телефона (місцевий час): ніч 23:00–4:59, ранок 5:00–11:59, день 12:00–17:59, вечір 18:00–22:59.
      До 3.12.2 ночі не було — о 2-й ночі писало «Доброго ранку». */
-  function greeting(h) { return h >= 23 || h < 5 ? 'Доброї ночі' : h < 12 ? 'Доброго ранку' : h < 18 ? 'Доброго дня' : 'Доброго вечора'; }
+  function greeting(h) { return h >= 23 || h < 5 ? LL('Доброї ночі', "Good evening") : h < 12 ? LL('Доброго ранку', "Good morning") : h < 18 ? LL('Доброго дня', "Good afternoon") : LL('Доброго вечора', "Good evening"); }
   function weekKey(dateStr) {
     var d = new Date(dateStr + 'T12:00:00');
     var day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day);
@@ -364,18 +367,18 @@ var ENGINE = (function () {
   /* Диски на кожен бік з урахуванням набору: dbCount гантелей заряджаються однаково. */
   function plates(load, inv, dbCount, cap) {
     inv = inv || INV; cap = cap || 20;
-    if (load === null || load === undefined || load === '') return { ok: true, side: [], text: 'без гантелі' };
+    if (load === null || load === undefined || load === '') return { ok: true, side: [], text: LL('без гантелі', "no dumbbell") };
     load = Number(load);
-    if (load === 0) return { ok: true, side: [], text: 'лише гриф' };
-    if (load > cap) return { ok: false, side: [], text: 'понад межу ' + cap + ' кг на гриф' };
+    if (load === 0) return { ok: true, side: [], text: LL('лише гриф', "handle only") };
+    if (load > cap) return { ok: false, side: [], text: LL('понад межу ', "over the limit of ") + cap + LL(' кг на гриф', " kg per handle") };
     /* рахуємо в чвертях кілограма, щоб не було похибок заокруглення */
     var per = Math.round(load * 2), sizes = [[5, 20], [2.5, 10], [1.25, 5]], side = [], k = 2 * (dbCount || 1);
     sizes.forEach(function (z) {
       var avail = Math.floor((inv[z[0]] || 0) / k);
       while (avail > 0 && per >= z[1]) { side.push(z[0]); per -= z[1]; avail--; }
     });
-    if (per > 0) return { ok: false, side: side, text: 'не зібрати з вашого набору' };
-    return { ok: true, side: side, text: side.map(function (x) { return String(x).replace('.', ','); }).join(' + ') };
+    if (per > 0) return { ok: false, side: side, text: LL('не зібрати з вашого набору', "can’t be made with your plates") };
+    return { ok: true, side: side, text: side.map(function (x) { return dec(x); }).join(' + ') };
   }
   /* Розминка для головних вправ з гантелями — за схемою програми (наприклад, 1 × 12 з половинною вагою).
      mstep — крок тренажера в залі людини (machStep); без нього — типовий крок тренажера. */
@@ -411,17 +414,17 @@ var ENGINE = (function () {
   }
   /* Підказка за темпом: схуднення −0,5…−1 кг/тиж; швидше за 1 кг — +200 ккал; 2 тижні стоїть — −200 ккал. Підтримка — ±0,25 кг/тиж. */
   function foodAdvice(food, trend) {
-    if (!trend || trend.rate === null) return { k: 'wait', text: 'Для підказки потрібні зважування за 2 тижні.' };
+    if (!trend || trend.rate === null) return { k: 'wait', text: LL('Для підказки потрібні зважування за 2 тижні.', "A tip needs 2 weeks of weigh-ins.") };
     var r = trend.rate;
     if (food.goal === 'loss') {
-      if (r < -1) return { k: 'more', text: 'Худнете швидше за 1 кг на тиждень — додайте ≈ 200 ккал на день.' };
-      if (r > -0.2) return { k: 'less', text: 'Вага стоїть 2 тижні — заберіть ≈ 200 ккал на день.' };
-      if (r > -0.5) return { k: 'slow', text: 'Худнете повільніше за план (−0,5…−1 кг на тиждень). Якщо так ще тиждень — заберіть ≈ 200 ккал.' };
-      return { k: 'ok', text: 'Темп у нормі (−0,5…−1 кг на тиждень) — нічого не міняйте.' };
+      if (r < -1) return { k: 'more', text: LL('Худнете швидше за 1 кг на тиждень — додайте ≈ 200 ккал на день.', "You’re losing more than 1 kg a week — add ≈ 200 kcal a day.") };
+      if (r > -0.2) return { k: 'less', text: LL('Вага стоїть 2 тижні — заберіть ≈ 200 ккал на день.', "Weight hasn’t moved in 2 weeks — cut ≈ 200 kcal a day.") };
+      if (r > -0.5) return { k: 'slow', text: LL('Худнете повільніше за план (−0,5…−1 кг на тиждень). Якщо так ще тиждень — заберіть ≈ 200 ккал.', "You’re losing slower than planned (−0.5…−1 kg a week). If it stays that way another week, cut ≈ 200 kcal.") };
+      return { k: 'ok', text: LL('Темп у нормі (−0,5…−1 кг на тиждень) — нічого не міняйте.', "Rate is on track (−0.5…−1 kg a week) — don’t change anything.") };
     }
-    if (r > 0.25) return { k: 'less', text: 'Вага росте — заберіть ≈ 150–200 ккал на день.' };
-    if (r < -0.25) return { k: 'more', text: 'Вага падає — додайте ≈ 150–200 ккал на день.' };
-    return { k: 'ok', text: 'Вага стабільна — калорії підходять.' };
+    if (r > 0.25) return { k: 'less', text: LL('Вага росте — заберіть ≈ 150–200 ккал на день.', "Weight is going up — cut ≈ 150–200 kcal a day.") };
+    if (r < -0.25) return { k: 'more', text: LL('Вага падає — додайте ≈ 150–200 ккал на день.', "Weight is dropping — add ≈ 150–200 kcal a day.") };
+    return { k: 'ok', text: LL('Вага стабільна — калорії підходять.', "Weight is stable — your calories are right.") };
   }
   /* Рекорди вправи: найкращий розрахунковий максимум, найважчий підхід, найбільший обсяг за тренування, повторення на кожній вазі. */
   function records(ex, histAll, handle) {
@@ -514,7 +517,7 @@ var ENGINE = (function () {
       list.splice(a + 1, 0, B);
       list[a].ss = { g: '', k: 1, pair: pr[1] }; list[a + 1].ss = { g: '', k: 2, pair: pr[0] };
     });
-    var letters = 'АБВГДЕ', li = 0;
+    var letters = LL('АБВГДЕ', "ABCDEF"), li = 0;
     list.forEach(function (x, i) { if (x.ss && x.ss.k === 1) { x.ss.g = letters[li]; list[i + 1].ss.g = letters[li]; li++; } });
     return list;
   }

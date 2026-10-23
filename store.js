@@ -1,3 +1,4 @@
+var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Дані: журнал — localStorage (ключ версії 1, дані переносяться), фото — IndexedDB. Усе лише в цьому телефоні. */
 var STORE = (function () {
   /* Акаунти на одному телефоні: реєстр (імена, замок) і окремий журнал кожного.
@@ -7,7 +8,7 @@ var STORE = (function () {
   function readReg() {
     try { var r = JSON.parse(localStorage.getItem(REG) || 'null'); if (r && Array.isArray(r.list)) return r; } catch (e) { /* немає */ }
     var r0 = { v: 1, list: [], last: null };
-    try { if (localStorage.getItem(LEGACY)) { r0.list.push({ id: 'a1', name: 'Мій акаунт', created: Date.now() }); r0.last = 'a1'; writeReg(r0); } } catch (e) { /* немає сховища */ }
+    try { if (localStorage.getItem(LEGACY)) { r0.list.push({ id: 'a1', name: LL('Мій акаунт', "My account"), created: Date.now() }); r0.last = 'a1'; writeReg(r0); } } catch (e) { /* немає сховища */ }
     return r0;
   }
   function writeReg(r) { try { localStorage.setItem(REG, JSON.stringify(r)); return true; } catch (e) { return false; } }
