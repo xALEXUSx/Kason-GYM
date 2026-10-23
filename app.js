@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.19.0';
+  const VERSION = '3.19.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -115,6 +115,12 @@ window.APP_START = () => {
   const MI = (k, v) => (v === null ? v : k === 'weight' ? BWin(v) : isLb() ? Math.round(v * 2.54 * 10) / 10 : v);
   const MU = (k, lb) => (k === 'weight' ? ((lb === undefined ? isLb() : lb) ? 'lb' : LL('кг', 'kg')) : (lb === undefined ? isLb() : lb) ? 'in' : LL('см', 'cm'));
   const PLATES = (lb) => (lb ? ['10', '5', '2.5'] : ['5', '2.5', '1.25']);  // розміри дисків набору, від більшого
+  /* гриф (з 3.19.1, слово Alexа 23.10: «вага грифа … варто змінити на грами і щоб програма правильно враховувала грамовку»):
+     у кг-профілі поле — у грамах (як на кухонних вагах), зберігається в кг (рушій: у руках = гантелей × (гриф + диски));
+     0 — без грифа, інакше 50–10 000 г: «0,5» чи «2» — це кілограми в полі грамів, тож помилка, а не гриф на пів грама. У фунтах — lb, 0–25. */
+  const gripOk = (g) => g !== null && g !== undefined && isFinite(g) && Math.abs(g - Math.round(g)) < 1e-6 && (Math.round(g) === 0 || (g >= 50 && g <= 10000));
+  const gripTo = (h, toLb) => (toLb ? Math.round((Number(h) || 0) * ENGINE.LB * 2) / 2 : Math.round((Number(h) || 0) / ENGINE.LB * 100) / 100);  // кг → lb до 0,5; lb → кг до 10 г
+  const GRIP_ERR = () => LL('Вага грифа — у грамах: 0 або від 50 до 10 000 (0,5 кг — це 500)', 'Handle weight is in grams: 0 or 50 to 10,000 (0.5 kg is 500)');
   const QINV = (lb) => (lb ? ['qIL0', 'qIL1', 'qIL2'] : ['qI5', 'qI25', 'qI125']);  // поля дисків анкети: у кг — колишні id (їхні підказки в tips.js)
   /* поле зросту в «Харчуванні» у фунтах: підпис і підказка — дюйми (у кг — як було, підказка з tips.js) */
   const lbH = (t) => (isLb() ? t.replace(/Зріст, см|Height, cm/, LL('Зріст, дюймів', 'Height, in')).replace('id="meH"', `id="meH" data-tip="${esc(LL('Ваш зріст у дюймах — потрібен для розрахунку калорій.', 'Your height in inches — needed to calculate calories.'))}"`) : t);
@@ -325,7 +331,7 @@ window.APP_START = () => {
       if (ex.type === 'mach') x.load = snap(Number(x.load) * f, (ex.step || 5) * (toLb ? 2 : 1));
       else if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) x.load = snap(Number(x.load) * f, step);
     }));
-    p.inv = inv; p.handle = Math.round((Number(p.handle) || 0) * f * 2) / 2; p.units = v;
+    p.inv = inv; p.handle = gripTo(p.handle, toLb); p.units = v;
     if (DB.active === 'me' && DB.custom && DB.custom.answers) { DB.custom.answers.units = v; DB.custom.answers.inv = Object.assign({}, inv); DB.custom.answers.handle = p.handle; }
     save(); location.reload();
   }
@@ -347,7 +353,7 @@ window.APP_START = () => {
       const p = P(); if (!ui.q.a.inv) {  // набір з поточного профілю — у розмірах одиниць анкети (ті самі кількості), гриф — перерахований
         const lb = ui.q.a.units === 'lb', plb = !!(p && p.units === 'lb'), src = p ? p.inv : { 5: 4, 2.5: 8, 1.25: 4 }, from = PLATES(plb), to = PLATES(lb), h = p ? p.handle : 1;
         ui.q.a.inv = {}; to.forEach((k, i) => { ui.q.a.inv[k] = Number(src[from[i]]) || 0; });
-        ui.q.a.handle = plb === lb ? h : Math.round(h * (lb ? ENGINE.LB : 1 / ENGINE.LB) * 2) / 2;
+        ui.q.a.handle = plb === lb ? h : gripTo(h, lb);
       }
     }
     return ui.q;
@@ -358,7 +364,7 @@ window.APP_START = () => {
     if (v('qName') !== undefined) a.name = v('qName').trim();
     const lb = a.units === 'lb';
     ['age', 'height', 'weight'].forEach((k) => { const x = v('q' + k); if (x !== undefined) a[k] = k === 'height' ? HDin(num(x), lb) : k === 'weight' ? BWin(num(x), lb) : num(x); });  // зріст і вага — завжди метрично
-    if (v('qHandle') !== undefined) a.handle = num(v('qHandle'));
+    if (v('qHandle') !== undefined) { const x = num(v('qHandle')); a.handle = x === null ? null : lb ? x : x / 1000; }  // кг-профіль: поле в грамах
     PLATES(lb).forEach((k, i) => { const x = v(QINV(lb)[i]); if (x !== undefined) a.inv[k] = num(x); });
   }
   function qErrors(step) {
@@ -366,7 +372,7 @@ window.APP_START = () => {
     QFIELDS[step].forEach((k) => { if (e[k]) out[k] = TR(e[k]); });
     if (a.units === 'lb') { if (out.height) out.height = LL('Зріст — від 51 до 86 дюймів', 'Height — 51 to 86 in'); if (out.weight) out.weight = LL('Вага — від 89 до 440 lb', 'Weight — 89 to 440 lb'); }  // межі 130–220 см і 40–200 кг після перерахунку
     if (step === 'equip' && a.equip.indexOf('db') >= 0) {
-      if (!(a.handle >= 0 && a.handle <= (a.units === 'lb' ? 25 : 10))) out.handle = a.units === 'lb' ? LL('Вага грифа — від 0 до 25 lb', "Handle weight must be between 0 and 25 lb") : LL('Вага грифа — від 0 до 10 кг', "Handle weight must be between 0 and 10 kg");
+      if (a.units === 'lb' ? !(a.handle >= 0 && a.handle <= 25) : !gripOk(a.handle === null || a.handle === undefined ? null : a.handle * 1000)) out.handle = a.units === 'lb' ? LL('Вага грифа — від 0 до 25 lb', "Handle weight must be between 0 and 25 lb") : GRIP_ERR();
       if (PLATES(a.units === 'lb').some((k) => !(a.inv[k] >= 0 && a.inv[k] <= 40 && Number.isInteger(a.inv[k])))) out.inv = LL('Кількість дисків — ціле число від 0 до 40', "Number of plates must be a whole number from 0 to 40");
       else if (!(PLATES(a.units === 'lb').reduce((t, k) => t + (a.inv[k] || 0), 0) > 0)) out.inv = LL('Вкажіть, скільки дисків є', "Enter how many plates you have");
       else if (!ENGINE.capOf(a.inv)) out.inv = LL('Потрібна хоча б пара однакових дисків — по одному на кожен бік грифа', "You need at least one pair of matching plates — one for each side of the handle");
@@ -397,7 +403,7 @@ window.APP_START = () => {
       body = `${LL(`<h1>Що є вдома</h1><p class="muted small">Можна обрати кілька. Для тяг (спина) потрібні гантелі, петля або блок.</p>
       <div class="pick">`, `<h1>What you have at home</h1><p class="muted small">Pick all that apply. For rows (back), you need dumbbells, a resistance band, or a cable machine.</p>
       <div class="pick">`)}${opt('qEquip', 'db', LL('Гантелі з дисками', "Plate-loaded dumbbells"), LL('розбірні: гриф + диски', "adjustable: handle + plates"), db)}${opt('qEquip', 'band', LL('Петля-еспандер', "Resistance band"), LL('резинка з кріпленням до дверей', "band with a door anchor"), a.equip.indexOf('band') >= 0)}</div>${err('equip')}
-      ${db ? `${LL(`<div class="card"><b>Ваші гантелі</b>`, `<div class="card"><b>Your dumbbells</b>`)}${numIn('qHandle', a.units === 'lb' ? LL('Вага одного грифа без дисків, lb', 'Weight of one handle without plates, lb') : LL('Вага одного грифа без дисків, кг', "Weight of one handle without plates, kg"), a.handle, 'decimal')}${err('handle')}${LL(`
+      ${db ? `${LL(`<div class="card"><b>Ваші гантелі</b>`, `<div class="card"><b>Your dumbbells</b>`)}${(a.units === 'lb' ? numIn('qHandle', LL('Вага одного грифа без дисків, lb', 'Weight of one handle without plates, lb'), a.handle, 'decimal') : numIn('qHandle', LL('Вага одного грифа без дисків, г', 'Weight of one handle without plates, g'), a.handle === null || a.handle === undefined ? a.handle : a.handle * 1000, 'numeric'))}${err('handle')}${LL(`
         <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>`, `
         <label class="f">Total plates for both dumbbells</label><div class="grid3"><div>`)}${PLATES(a.units === 'lb').map((k, i) => numIn(QINV(a.units === 'lb')[i], fmt(k) + ' ' + MU('weight', a.units === 'lb'), a.inv[k], undefined, a.units === 'lb' ? invTip(k, i) : '')).join('</div><div>')}</div></div>${err('inv')}</div>` : ''}${LL(`
       <h2>Тренажери вдома</h2><p class="muted small">Ті самі вправи, що в залі: історія й рекорди спільні, вагу застосунок рахує окремо для дому й залу. Додати чи прибрати можна будь-коли: «Більше» → «Обладнання вдома».</p>
@@ -2145,7 +2151,7 @@ window.APP_START = () => {
         <label class="f">Дні тренувань</label><div class="row">`, `</select>
         <label class="f">Workout days</label><div class="row">`)}${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${p.draft ? LL('<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>', "<p class=\"tiny muted\">Questionnaire, days, and week can be changed after you finish the workout.</p>") : ''}</div>
       ${eqCard(p)}
-      ${hasDb ? `${KG(LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`))}${fmt(p.handle)}${LL(`">
+      ${hasDb ? `${isLb() ? KG(LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`)) : LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, г</label><input inputmode="numeric" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, g</label><input inputmode="numeric" id="handleIn" value="`)}${fmt(isLb() ? p.handle : p.handle * 1000)}${LL(`">
         <label class="f">`, `">
         <label class="f">`)}${LL('Диски на обидві гантелі: ', 'Plates for both dumbbells: ')}${PLATES(isLb()).map(fmt).join(' · ')} ${MU('weight')}${LL(' (штук)', ' (count)')}</label><div class="grid3">${PLATES(isLb()).map((k, i) => `<input inputmode="numeric" data-inv="${k}"${isLb() ? ` data-tip="${esc(invTip(k, i))}"` : ''} value="${p.inv[k] || 0}">`).join('')}${LL(`</div>
         <p class="tiny muted">Крок ваги зараз: `, `"></div>
@@ -2172,7 +2178,11 @@ window.APP_START = () => {
       const w = Number(e.target.value), pw = G().perWeek || 3, base = cp.cycle === 1 ? (w - 1) * pw : 12 * pw + (cp.cycle - 2) * 8 * pw + (w - 5) * pw;
       p.offset = base - p.sessions.length; save(); toast(LL('Наступне тренування — тиждень ', "Next workout — week ") + w + (cp.cycle > 1 ? LL(' · цикл ', " · cycle ") + cp.cycle : ''));
     };
-    if (hasDb) document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > (isLb() ? 25 : 10)) { toast(isLb() ? LL('Вага грифа — від 0 до 25 lb', 'Handle weight — 0 to 25 lb') : LL('Вага грифа — від 0 до 10 кг', "Handle weight — 0 to 10 kg")); e.target.value = fmt(p.handle); return; } p.handle = v; syncAnswers({ handle: v }); save(); toast(LL('Збережено', "Saved")); };
+    if (hasDb) document.getElementById('handleIn').onchange = (e) => {  // кг-профіль — грами (з 3.19.1)
+      const x = num(e.target.value), lb = isLb();
+      if (lb ? (x === null || x < 0 || x > 25) : !gripOk(x)) { toast(lb ? LL('Вага грифа — від 0 до 25 lb', 'Handle weight — 0 to 25 lb') : GRIP_ERR()); e.target.value = fmt(lb ? p.handle : p.handle * 1000); return; }
+      const v = lb ? x : x / 1000; p.handle = v; syncAnswers({ handle: v }); save(); toast(LL('Збережено', "Saved"));
+    };
     app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); syncAnswers({ inv: Object.assign({}, p.inv) }); save(); rMore(); }; });
     app.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { S()[el.dataset.set] = el.checked; save(); if (el.dataset.set === 'haptics' && el.checked) haptic(); }; });
     document.getElementById('restoreIn').onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
@@ -2311,7 +2321,7 @@ window.APP_START = () => {
       qRead(); const a = qState().a, v = b.dataset.v === 'lb' ? 'lb' : 'kg';
       if (v !== a.units) {  // диски тієї самої кількості — у розмірах нових одиниць; гриф — перерахований
         const from = PLATES(a.units === 'lb'), to = PLATES(v === 'lb'), inv = {}; to.forEach((k, i) => { inv[k] = (a.inv || {})[from[i]]; }); a.inv = inv;
-        if (typeof a.handle === 'number') a.handle = Math.round(a.handle * (v === 'lb' ? ENGINE.LB : 1 / ENGINE.LB) * 2) / 2;
+        if (typeof a.handle === 'number') a.handle = gripTo(a.handle, v === 'lb');
         a.units = v;
       }
       return rOnboard();
