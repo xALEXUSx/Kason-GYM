@@ -7,6 +7,21 @@ var GEN = (function () {
 
   /* ---------- анкета: усі поля обовʼязкові ---------- */
   var GOALS = { loss: 'Схуднути', muscle: 'Набрати мʼязи', health: 'Сила й здоровʼя', posture: 'Спина й осанка' };
+  /* кілька цілей (з 3.19.0, слово Alexа 23.10: «потрібно надавати обрати декілька варіантів … тільки те що логічне»):
+     «Схуднути» й «Набрати мʼязи» — разом (рекомпозиція: менше жиру й більше мʼязів); «Спина й осанка» — з будь-якою;
+     «Сила й здоровʼя» — без перших двох: її калорії підтримки й обʼєм 6–12 підходів суперечать дефіциту, надлишку й обʼєму 10–20.
+     Несумісна мета в анкеті — неактивна кнопка (слово Alexа 23.10). */
+  var GOAL_CLASH = { loss: ['health'], muscle: ['health'], health: ['loss', 'muscle'], posture: [] };
+  /* цілі анкети — у сталому порядку GOALS; анкети до 3.19.0 мали одну мету в полі goal */
+  function goalsOf(a) {
+    a = a || {};
+    var g = Array.isArray(a.goals) ? a.goals : (a.goal ? [a.goal] : []);
+    return Object.keys(GOALS).filter(function (k) { return g.indexOf(k) >= 0; });
+  }
+  /* назва цілей: перша — з великої, решта — з малої, через кому («Схуднути, набрати мʼязи») */
+  function goalText(a) {
+    return goalsOf(a).map(function (g, i) { var t = GOALS[g]; return i ? t.charAt(0).toLowerCase() + t.slice(1) : t; }).join(', ');
+  }
   var EQUIP = { db: 'Гантелі з дисками', band: 'Петля-еспандер (резинка з кріпленням до дверей)' };
   /* Тренажери вдома — те саме обладнання, що в залі: ті самі вправи, тож історія й рекорди спільні з залом (вагу застосунок
      підказує з разів на тому самому місці — app.js, histAt).
@@ -44,7 +59,9 @@ var GEN = (function () {
     if (!(age >= 16 && age <= 85)) e.age = 'Вік — від 16 до 85';
     if (!(h >= 130 && h <= 220)) e.height = 'Зріст — від 130 до 220 см';
     if (!(w >= 40 && w <= 200)) e.weight = 'Вага — від 40 до 200 кг';
-    if (!GOALS[a.goal]) e.goal = 'Оберіть мету';
+    var gs = goalsOf(a);
+    if (!gs.length) e.goal = 'Оберіть мету';
+    else if (gs.some(function (g) { return GOAL_CLASH[g].some(function (x) { return gs.indexOf(x) >= 0; }); })) e.goal = '«Сила й здоровʼя» не поєднується зі схудненням і набором мʼязів';
     if (a.level !== 'new' && a.level !== 'exp') e.level = 'Оберіть досвід';
     if (!PLACES[a.place]) e.place = 'Оберіть, де тренуєтесь';
     var eq = a.equip || [];
@@ -165,6 +182,7 @@ var GEN = (function () {
 
   function build(a) {
     var sex = a.sex === 'f' ? 'f' : 'm', src = sex === 'f' ? 'her' : 'him', alt = sex === 'f' ? 'him' : 'her';
+    var goals = goalsOf(a), hasG = function (g) { return goals.indexOf(g) >= 0; };  // кілька цілей (з 3.19.0)
     /* старі анкети (до 3.9) місця не мали — це вдома */
     var place = PLACES[a.place] ? a.place : 'home', home = place !== 'gym';
     var has = { db: home && (a.equip || []).indexOf('db') >= 0, band: home && (a.equip || []).indexOf('band') >= 0, gym: place !== 'home' };
@@ -183,7 +201,7 @@ var GEN = (function () {
     var ex = {}, coachFrom = {}, T = {}, ts = templates(src), ta = templates(alt);
     var badDef = function (p, id) { return lim.some(function (l) { return ((AVOID_DEF[l] || {})[p] || []).indexOf(id) >= 0; }); };
     /* для мети «мʼязи» руки — повноцінні вправи: беремо варіант без позначки «за бажанням» */
-    var mainArms = function (p, id) { return a.goal === 'muscle' && /за бажанням/.test(PROGRAMS[p].ex[id].name); };
+    var mainArms = function (p, id) { return hasG('muscle') && /за бажанням/.test(PROGRAMS[p].ex[id].name); };
     [alt, src].forEach(function (p) {
       Object.keys(PROGRAMS[p].ex).forEach(function (id) {
         var e = PROGRAMS[p].ex[id], n = needs(e);
@@ -220,7 +238,7 @@ var GEN = (function () {
           used[pick] = true; slots[w][slot[0]] = pick;
           var t = T[pick], it = { ex: pick, sets: t.sets, min: t.min, max: t.max, rest: t.rest };
           if (older || heart) it.sets = Math.min(it.sets, 3);
-          if ((slot[0] === 'arms' && a.goal !== 'muscle') || (perWeek >= 4 && (slot[0] === 'arms' || slot[0] === 'tri'))) it.optional = true;
+          if ((slot[0] === 'arms' && !hasG('muscle')) || (perWeek >= 4 && (slot[0] === 'arms' || slot[0] === 'tri'))) it.optional = true;
           if (/за бажанням/.test(ex[pick].name)) it.optional = true;  // назва вже каже «за бажанням» — так і показуємо
           items.push(it);
         });
@@ -231,7 +249,7 @@ var GEN = (function () {
     var slotEx = {}, slotGym = {};
     var workouts = home ? build1(HFULL, homeOk, slotEx) : {}, gymWorkouts = has.gym ? build1(GFULL, gymOk, slotGym) : null;
     /* досвідченим із гантелями й петлею, 3 дні, без обмежень — з тижня 5 спліт Д1–Д3 (як у програмі з гантелями) */
-    var split = !novice && perWeek === 3 && has.db && has.band && !has.gym && !has.mach && !lim.length && (a.goal === 'muscle' || a.goal === 'loss') && !older;
+    var split = !novice && perWeek === 3 && has.db && has.band && !has.gym && !has.mach && !lim.length && (hasG('muscle') || hasG('loss')) && !older;
     if (split) ['D1', 'D2', 'D3'].forEach(function (w) {
       var Pw = PROGRAMS.him.workouts[w];
       workouts[w] = { title: Pw.title, items: Pw.items.filter(function (it) { return ex[it.ex]; }).map(function (it) {
@@ -242,7 +260,7 @@ var GEN = (function () {
       }) };
     });
 
-    var goalTxt = GOALS[a.goal] || '';
+    var goalTxt = goalText(a);
     var dayTxt = (a.days || []).slice().sort(function (x, y) { return ((x + 6) % 7) - ((y + 6) % 7); }).map(function (d) { return (DAYS.filter(function (x) { return x[0] === d; })[0] || [0, ''])[1].toLowerCase(); }).join(' / ');
     var rirHard = heart ? 'запас 3' : (back ? 'запас 2' : 'запас 1–2');
     var prog = {
@@ -253,7 +271,7 @@ var GEN = (function () {
       days: (a.days || []).slice(), sex: sex, askReady: back,
       ready: { swap: back ? { rdl: 'bridge' } : {} },
       myoFrom: (heart || older) ? 0 : 5,
-      tests: older || a.goal === 'posture',
+      tests: older || hasG('posture'),
       gymWarm: has.gym ? (shortWarm ? GYM_WARM_SHORT : GYM_WARM).slice() : null,
       warm: (has.db || has.gym || has.mach) ? PROGRAMS.him.warm : PROGRAMS.her.warm, heavy: Number(a.weight) >= 100,
       week: function (wk) {
@@ -284,19 +302,24 @@ var GEN = (function () {
         return { phase: 'Фаза 3 · інтенсивність', rir: rirHard, text: 'Опускання 3–4 с, пауза внизу. Техніка важливіша за вагу.' + (this.myoFrom ? ' Дроп-сет за бажанням — у базових вправах (в ізоляції вже є міо-підхід): після останнього підходу «⋯ Ще» → «Дроп-сет»' + (back ? ', не для вправ на поперек' : '') + '.' : '') + ss };
       },
       /* осанка щодня: без еспандера — без розведення петлі (решта вправ — без обладнання) */
-      daily: [].concat(back ? [PROGRAMS.him.daily[0]] : [], a.goal === 'posture' ? [has.band ? PROGRAMS.her.daily[0] : Object.assign({}, PROGRAMS.her.daily[0], { label: 'Осанка 5 хв (підборіддя, ангел, розтяжки)' })] : [], [{ id: 'walk', label: 'Ходьба 30–45 хв або 7–10 тис. кроків' }]),
+      daily: [].concat(back ? [PROGRAMS.him.daily[0]] : [], hasG('posture') ? [has.band ? PROGRAMS.her.daily[0] : Object.assign({}, PROGRAMS.her.daily[0], { label: 'Осанка 5 хв (підборіддя, ангел, розтяжки)' })] : [], [{ id: 'walk', label: 'Ходьба 30–45 хв або 7–10 тис. кроків' }]),
       posture: PROGRAMS.her.posture.filter(function (r) { return has.band || !/петл/i.test(r[0] + r[2]); }),
       testsHow: PROGRAMS.her.testsHow,
       food: food(a),
-      guide: guides(has, back, a.goal, sex, ex, !(heart || older), [workouts, gymWorkouts || {}], home, shortWarm)
+      guide: guides(has, back, hasG('posture'), sex, ex, !(heart || older), [workouts, gymWorkouts || {}], home, shortWarm)
     };
     return prog;
   }
 
   function food(a) {
     var base = { water: a.sex === 'f' ? '2–2,5 л' : '2,5–3 л', notes: PROGRAMS.him.food.notes.slice(0, 1).concat(['Білок — мʼясо, риба, яйця, сир, бобові; по порції в кожному прийомі їжі.', 'Сон — 7–9 годин.']) };
-    if (a.goal === 'loss') return Object.assign(base, { goal: 'loss', deficit: 0.2, protein: [1.6, 2], basis: 'target' });
-    if (a.goal === 'muscle') return Object.assign(base, { goal: 'gain', deficit: -0.1, protein: [1.6, 2.2], basis: 'current' });
+    var gs = goalsOf(a), loss = gs.indexOf('loss') >= 0, muscle = gs.indexOf('muscle') >= 0;
+    /* схуднути й набрати мʼязи разом (рекомпозиція, з 3.19.0): дефіцит удвічі менший, ніж для схуднення, — великий дефіцит гальмує
+       приріст мʼязів (метааналіз Murphy, Koehler, Scand J Med Sci Sports 2022); білок — як для набору (1,6–2,2 г/кг, Iraki та ін. 2019),
+       від цільової ваги, як для схуднення; темп — до 0,5 % ваги на тиждень (нижня межа Helms та ін. 2014) — engine.foodAdvice */
+    if (loss && muscle) return Object.assign(base, { goal: 'recomp', deficit: 0.1, protein: [1.6, 2.2], basis: 'target' });
+    if (loss) return Object.assign(base, { goal: 'loss', deficit: 0.2, protein: [1.6, 2], basis: 'target' });
+    if (muscle) return Object.assign(base, { goal: 'gain', deficit: -0.1, protein: [1.6, 2.2], basis: 'current' });
     return Object.assign(base, { goal: 'maintain', deficit: 0, protein: [1.4, 1.8], basis: 'current' });
   }
   /* Тексти з базових програм — без прив'язки до конкретного набору (еспандер T15, гантелі «гриф + 20») і до родини.
@@ -382,7 +405,7 @@ var GEN = (function () {
       .concat(['Вправи, що найбільше навантажують поперек чи згинають хребет під вагою (румунська тяга, шраги, фермерська прогулянка, тяга в нахилі, пуловер, скручування), у програму не входять.'])
       .concat(src.slice(src.indexOf('#Правило болю'))) };
   }
-  function guides(has, back, goal, sex, ex, myo, lists, home, shortWarm) {
+  function guides(has, back, posture, sex, ex, myo, lists, home, shortWarm) {
     /* пункти про грижі й питання про спину — лише тим, хто позначив спину */
     var clean = function (g) {
       if (!g) return g;
@@ -414,13 +437,13 @@ var GEN = (function () {
     if (has.db) out.push(pick('him', 'gear'));
     if (has.band) { var g = pick('her', 'gear'); if (g && !has.db) out.push(g); else if (g) out.push({ id: 'gear2', title: g.title, items: g.items }); }
     if (has.gym || has.mach) out.push({ id: 'gymgear', title: 'Тренажери й блоки', items: GYM_GEAR.slice() });
-    if (goal === 'posture') out.push(pick('her', 'posture'));
+    if (posture) out.push(pick('her', 'posture'));
     var pr = pick(has.db || noKit ? 'him' : 'her', 'prog');
     if (noKit) pr = { id: 'prog', title: pr.title, items: pr.items.map(function (x) { return Object.prototype.hasOwnProperty.call(GYM_PROG, x) ? GYM_PROG[x] : x; }).filter(function (x) { return x !== null; }) };
     out.push(pr);
     return out.filter(Boolean);
   }
 
-  return { VER: VER, GOALS: GOALS, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
+  return { VER: VER, GOALS: GOALS, GOAL_CLASH: GOAL_CLASH, goalsOf: goalsOf, goalText: goalText, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
 })();
 if (typeof module !== 'undefined') module.exports = GEN;

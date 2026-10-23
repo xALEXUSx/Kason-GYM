@@ -31,8 +31,9 @@ var ACC = (function () {
         return '<button type="button" data-acc="' + esc(a.id) + '">' + tile(a.name) + '<span><b>' + esc(a.name) + '</b><span class="small muted">' + esc((a.sub && typeof I18N !== 'undefined' ? I18N.tr(a.sub) : a.sub) || (a.id === 'a1' ? LL('Наявні тренування', "Existing workouts") : LL('Програму ще не складено', "No program yet"))) + '</span></span></button>';
       }).join('') + LL('</div><p class="tiny muted">Дані зберігаються лише в цьому телефоні.</p>', "</div><p class=\"tiny muted\">Data is stored only on this phone.</p>");
   }
-  /* стерти користувача й почати з анкети */
-  function wipe(id) { return STORE.remove(id).then(function () { ss(OK, null); ss('trening_pick', null); location.reload(); }); }
+  /* стерти користувача й почати з анкети; це був останній користувач — знову вибір мови (до 3.19.0 мова лишалась від стертого:
+     слово Alexа 23.10 «видалив данні та почав реєстрацію заново чомусь знову не пропонує вибрати мову») */
+  function wipe(id) { return STORE.remove(id).then(function () { ss(OK, null); ss('trening_pick', null); if (!STORE.accounts().length && typeof I18N !== 'undefined' && I18N.forget) I18N.forget(); location.reload(); }); }
 
   /* ---------- запуск ---------- */
   function boot() {

@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.18.0';
+  const VERSION = '3.19.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -342,7 +342,7 @@ window.APP_START = () => {
   function qState() {
     if (!ui.q) {
       const acc = STORE.account(STORE.current) || {}, old = DB.custom && DB.custom.answers;
-      ui.q = { step: 0, err: false, edit: !!old, a: old ? JSON.parse(JSON.stringify(old)) : { name: acc.name && !isNewAcc(acc.name) ? acc.name : '', equip: [], limits: [], days: [], agree: false, units: I18N.lang === 'en' ? 'lb' : 'kg' } };
+      ui.q = { step: 0, err: false, edit: !!old, a: old ? JSON.parse(JSON.stringify(old)) : { name: acc.name && !isNewAcc(acc.name) ? acc.name : '', goals: [], equip: [], limits: [], days: [], agree: false, units: I18N.lang === 'en' ? 'lb' : 'kg' } };
       if (!ui.q.a.units) ui.q.a.units = 'kg';  // відповіді до 3.18.0 — у кілограмах
       const p = P(); if (!ui.q.a.inv) {  // набір з поточного профілю — у розмірах одиниць анкети (ті самі кількості), гриф — перерахований
         const lb = ui.q.a.units === 'lb', plb = !!(p && p.units === 'lb'), src = p ? p.inv : { 5: 4, 2.5: 8, 1.25: 4 }, from = PLATES(plb), to = PLATES(lb), h = p ? p.handle : 1;
@@ -376,8 +376,8 @@ window.APP_START = () => {
   function rOnboard() {
     const q = qState(), a = q.a, QS = qSteps(a), step = QS[q.step], errs = q.err ? qErrors(step) : {};
     /* кілька відповідей (обладнання, здоровʼя) — з галочкою */
-    const opt = (act, v, label, sub, on) => { const m = act === 'qLimit' || act === 'qEquip';
-      return `<button type="button" class="qopt${m ? ' multi' : ''}${on ? ' on' : ''}" data-act="${act}" data-v="${v}" ${m ? `role="checkbox" aria-checked="${on}"` : `aria-pressed="${on}"`}><b>${label}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</button>`; };
+    const opt = (act, v, label, sub, on, dis) => { const m = act === 'qLimit' || act === 'qEquip' || act === 'qGoal';  // dis — причина, чому варіант зараз недоступний
+      return `<button type="button" class="qopt${m ? ' multi' : ''}${on ? ' on' : ''}${dis ? ' dis' : ''}" data-act="${act}" data-v="${v}" ${m ? `role="checkbox" aria-checked="${on}"` : `aria-pressed="${on}"`}${dis ? ` aria-disabled="true" data-tip="${esc(dis)}"` : ''}><b>${label}</b>${dis ? `<span class="small muted">${esc(dis)}</span>` : sub ? `<span class="small muted">${sub}</span>` : ''}</button>`; };
     const err = (k) => (errs[k] ? `<p class="qerr">${esc(errs[k])}</p>` : '');
     const numIn = (id, label, val, mode, tip) => `<label class="f" for="${id}">${label}</label><input id="${id}"${tip ? ` data-tip="${esc(tip)}"` : ''} inputmode="${mode || 'numeric'}" autocomplete="off" value="${val === null || val === undefined || isNaN(val) ? '' : fmt(val)}">`;
     let body = '';
@@ -389,7 +389,8 @@ window.APP_START = () => {
     else if (step === 'body') body = `${LL(`<h1>Про вас</h1><p class="muted small">Потрібно, щоб розрахувати навантаження й харчування.</p>
       `, `<h1>About you</h1><p class="muted small">We need this to calculate your training load and nutrition.</p>
       `)}<div class="seg" style="margin:4px 0 10px"><button type="button" class="${a.units !== 'lb' ? 'on' : ''}" data-act="qUnits" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${a.units === 'lb' ? 'on' : ''}" data-act="qUnits" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>${numIn('qage', LL('Вік, років', "Age, years"), a.age)}${err('age')}${numIn('qheight', a.units === 'lb' ? LL('Зріст, дюймів', 'Height, in') : LL('Зріст, см', "Height, cm"), HD(a.height, a.units === 'lb'), undefined, a.units === 'lb' ? LL('Зріст у дюймах — для норми калорій.', 'Height in inches — for your calorie target.') : '')}${err('height')}${numIn('qweight', a.units === 'lb' ? LL('Вага, lb', 'Weight, lb') : LL('Вага, кг', "Weight, kg"), BW(a.weight, a.units === 'lb'), 'decimal', a.units === 'lb' ? LL('Вага у фунтах — для навантаження й норми білка.', 'Weight in pounds — for your training load and protein target.') : '')}${err('weight')}`;
-    else if (step === 'goal') body = `${LL(`<h1>Ваша мета</h1><div class="pick">`, `<h1>Your goal</h1><div class="pick">`)}${[['loss', LL('Схуднути', "Lose weight"), LL('менше жиру, більше сил', "less fat, more energy")], ['muscle', LL('Набрати мʼязи', "Build muscle"), LL('більше обʼєму й сили', "more size and strength")], ['health', LL('Сила й здоровʼя', "Strength and health"), LL('міцне тіло без крайнощів', "a strong body, no extremes")], ['posture', LL('Спина й осанка', "Back and posture"), LL('рівна спина, менше болю від сидіння', "a straight back, less pain from sitting")]].map(([v, l, d]) => opt('qGoal', v, l, d, a.goal === v)).join('')}</div>${err('goal')}`;
+    else if (step === 'goal') { const gs = GEN.goalsOf(a), why = (v) => (gs.indexOf(v) >= 0 || !GEN.GOAL_CLASH[v].some((x) => gs.indexOf(x) >= 0) ? '' : v === 'health' ? LL('не поєднується зі схудненням і набором мʼязів', "can’t be combined with losing weight or building muscle") : LL('не поєднується з «Сила й здоровʼя»', "can’t be combined with “Strength and health”"));
+      body = `${LL(`<h1>Ваша мета</h1><p class="muted small">Можна кілька. «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів; «Спина й осанка» — з будь-якою.</p><div class="pick">`, `<h1>Your goals</h1><p class="muted small">You can pick more than one. “Lose weight” and “Build muscle” together means less fat and more muscle; “Back and posture” goes with any goal.</p><div class="pick">`)}${[['loss', LL('Схуднути', "Lose weight"), LL('менше жиру, більше сил', "less fat, more energy")], ['muscle', LL('Набрати мʼязи', "Build muscle"), LL('більше обʼєму й сили', "more size and strength")], ['health', LL('Сила й здоровʼя', "Strength and health"), LL('міцне тіло без крайнощів', "a strong body, no extremes")], ['posture', LL('Спина й осанка', "Back and posture"), LL('рівна спина, менше болю від сидіння', "a straight back, less pain from sitting")]].map(([v, l, d]) => opt('qGoal', v, l, d, gs.indexOf(v) >= 0, why(v))).join('')}</div>${err('goal')}`; }
     else if (step === 'level') body = `${LL(`<h1>Досвід тренувань</h1><div class="pick">`, `<h1>Training experience</h1><div class="pick">`)}${opt('qLevel', 'new', LL('Новачок', "Beginner"), LL('або перерва понад пів року', "or a break of more than six months"), a.level === 'new')}${opt('qLevel', 'exp', LL('Тренуюсь регулярно', "I train regularly"), LL('пів року й більше без перерв', "six months or more without a break"), a.level === 'exp')}</div>${err('level')}`;
     else if (step === 'equip') {
       const db = a.equip.indexOf('db') >= 0, mk = Object.keys(GEN.MACH), allM = mk.every((k) => a.equip.indexOf(k) >= 0);
@@ -420,7 +421,7 @@ window.APP_START = () => {
         <li><span>Імʼя</span><b>`, `<h1>Almost done</h1><div class="card"><ul class="list">
         <li><span>Name</span><b>`)}${esc(a.name)}${LL(`</b></li><li><span>Вік · зріст · вага</span><b>`, `</b></li><li><span>Age · height · weight</span><b>`)}${fmt(a.age)} · ${fmt(HD(a.height, a.units === 'lb'))} ${MU('height', a.units === 'lb')} · ${fmt(BW(a.weight, a.units === 'lb'))}${(a.units === 'lb' ? (t) => ENGINE.unitize('lb', t) : (t) => t)(LL(` кг</b></li>
         <li><span>Мета</span><b>`, ` kg</b></li>
-        <li><span>Goal</span><b>`))}${esc(GEN.GOALS[a.goal] || '')}${LL(`</b></li><li><span>Де</span><b>`, `</b></li><li><span>Where</span><b>`)}${esc((GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `${LL(`<li><span>Обладнання вдома</span><b>`, `<li><span>Home equipment</span><b>`)}${esc(kitText(a.equip))}</b></li>`}${LL(`
+        <li><span>Goal</span><b>`))}${esc(TR(GEN.goalText(a)))}${LL(`</b></li><li><span>Де</span><b>`, `</b></li><li><span>Where</span><b>`)}${esc(TR(GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `${LL(`<li><span>Обладнання вдома</span><b>`, `<li><span>Home equipment</span><b>`)}${esc(kitText(a.equip))}</b></li>`}${LL(`
         <li><span>Здоровʼя</span><b>`, `
         <li><span>Health</span><b>`)}${lim.length ? lim.map((x) => ({ back: LL('спина', "back"), knees: LL('коліна', "knees"), shoulders: LL('плечі', "shoulders"), heart: LL('тиск/серце', "blood pressure/heart"), pregnant: LL('вагітність', "pregnancy") }[x])).join(', ') : LL('без обмежень', "no limitations")}${LL(`</b></li>
         <li><span>Дні</span><b>`, `</b></li>
@@ -676,7 +677,7 @@ window.APP_START = () => {
   const L = (kind, seed) => (hard() ? COACH.line(kind, G().sex, seed) + ' ' : '');
   /* сценарій тренера: у власній програмі — з тієї програми, звідки взято вправу */
   /* орієнтир обʼєму: мʼязи (10–20 підходів) чи сила й тонус (6–12) */
-  const volHi = () => DB.active === 'him' || (G().custom && DB.custom && DB.custom.answers.goal === 'muscle');
+  const volHi = () => DB.active === 'him' || (G().custom && DB.custom && GEN.goalsOf(DB.custom.answers).indexOf('muscle') >= 0);
   const script = (exId) => {
     const g = G(), sc = COACH.get((g.coachFrom && g.coachFrom[exId]) || DB.active, exId);
     /* спину в анкеті не позначено — «Чого не робити» без згадки про грижу */
@@ -1257,10 +1258,12 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`${LL(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>🎯 Кілька цілей</b><div class="small muted">В анкеті можна позначити кілька: «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів (невеликий дефіцит, більше білка); «Спина й осанка» — з будь-якою. «Сила й здоровʼя» — окремо від схуднення й набору мʼязів: несумісна мета стає неактивною. Обмеження здоровʼя діють завжди, хоч які цілі обрано.</div></li>
         <li style="display:block"><b>⚖️ Кілограми або фунти</b><div class="small muted">В анкеті й у «Більше» → «Одиниці»: кг і см або фунти й дюйми. Набір дисків у фунтах — 10 · 5 · 2,5 lb. Перемкнули — вага тренувань переводиться й округлюється до ваших дисків; вага тіла й заміри просто показуються в нових одиницях.</div></li>
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">`, `<div class="sp"><b>What the app can do</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
       <ul class="list">
+        <li style="display:block"><b>🎯 Several goals</b><div class="small muted">In the questionnaire you can check more than one: “Lose weight” and “Build muscle” together means less fat and more muscle (a small deficit, more protein); “Back and posture” goes with any goal. “Strength and health” stays separate from losing weight and building muscle: a goal that clashes is grayed out. Health limits always apply, whatever goals you choose.</div></li>
         <li style="display:block"><b>⚖️ Kilograms or pounds</b><div class="small muted">In the questionnaire and in “More” → “Units”: kg and cm, or pounds and inches. Plates in pounds — 10 · 5 · 2.5 lb. When you switch, workout weights are converted and rounded to your plates; body weight and measurements simply display in the new units.</div></li>
         <li style="display:block"><b>↩ Coming back after a break</b><div class="small muted">Haven’t trained for 2 weeks or more? The app lowers your weights automatically: after a break of up to a month, the first week is ≈ 20% lighter; after a longer one (or 2+ weeks if you’re 60 or older), the first week is a third of your previous weight, then more each week, back to your previous weight in half the length of the break. No failure, myo-reps, or drop sets.</div></li>
         <li style="display:block"><b>🔔 Reminders</b><div class="small muted">`)}${TX(LL('«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.', "“More” → “Reminders”: on workout days, a notification at the time you choose, plus a “1” badge on the app icon until you start your workout. Works in the app opened from the Home Screen icon."), LL('«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, поки тренування не почато. Працює і в Chrome, і в застосунку з іконки.', "“More” → “Reminders”: on workout days, a notification at the time you choose until you start your workout. Works both in Chrome and in the app opened from the icon."))}${LL(`</div></li>
@@ -1988,7 +1991,9 @@ window.APP_START = () => {
       const wAns = Number(((DB.custom || {}).answers || {}).weight) || null, wNow = wMeas || wAns;
       const nu = ENGINE.nutrition(food, me, wNow);
       const tr = ENGINE.weightTrend(wts), adv = ENGINE.foodAdvice(food, tr);
-      const goalTxt = food.goal === 'loss' ? LL('мета — менше жиру, більше мʼязів: дефіцит ≈ ', "goal — less fat, more muscle: deficit ≈ ") + Math.round(food.deficit * 100) + LL(' % від витрат', " % of TDEE") : LL('мета — сила й тонус: калорії на рівні підтримки, без дієт', "goal — strength and tone: maintenance calories, no dieting");
+      const goalTxt = food.goal === 'loss' ? LL('мета — менше жиру, мʼязи зберегти: дефіцит ≈ ', "goal — lose fat, keep your muscle: deficit ≈ ") + Math.round(food.deficit * 100) + LL(' % від витрат', " % of TDEE")
+        : food.goal === 'recomp' ? LL('мета — менше жиру й більше мʼязів одночасно: невеликий дефіцит ≈ ', "goal — lose fat and build muscle at the same time: a small deficit of ≈ ") + Math.round(food.deficit * 100) + LL(' % від витрат', " % of TDEE")
+        : food.goal === 'gain' ? LL('мета — набрати мʼязи: надлишок ≈ ', "goal — build muscle: a surplus of ≈ ") + Math.round(-food.deficit * 100) + LL(' % від витрат', " % of TDEE") : LL('мета — сила й тонус: калорії на рівні підтримки, без дієт', "goal — strength and tone: maintenance calories, no dieting");
       body = `${lbH(LL(`<div class="card"><p class="small muted">Дані лише в цьому телефоні. Вага береться із «Замірів» (середня за 7 днів).</p>
         <div class="grid2"><div><label class="f">Зріст, см</label><input inputmode="numeric" id="meH" value="`, `<div class="card"><p class="small muted">Data stays on this phone only. Weight comes from “Measurements” (7-day average).</p>
         <div class="grid2"><div><label class="f">Height, cm</label><input inputmode="numeric" id="meH" value="`))}${me.height ? HD(me.height) : ''}${LL(`"></div><div><label class="f">Вік, років</label><input inputmode="numeric" id="meA" value="`, `"></div><div><label class="f">Age, years</label><input inputmode="numeric" id="meA" value="`)}${me.age || ''}"></div></div>
@@ -2336,8 +2341,15 @@ window.APP_START = () => {
     /* під час тренування анкета не змінюється: нова програма скасувала б незавершене тренування */
     if (act === 'qEdit') { if (P() && P().draft) return; ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
     /* анкета */
-    if (act === 'qSex' || act === 'qGoal' || act === 'qLevel' || act === 'qPlace') {
-      qRead(); const a = qState().a; a[{ qSex: 'sex', qGoal: 'goal', qLevel: 'level', qPlace: 'place' }[act]] = b.dataset.v;
+    if (act === 'qGoal') {  // кілька цілей (з 3.19.0); несумісна з обраною — неактивна: натиск лише пояснює
+      qRead(); const a = qState().a, v = b.dataset.v, gs = GEN.goalsOf(a);
+      if (!GEN.GOALS[v]) return;
+      if (gs.indexOf(v) < 0 && GEN.GOAL_CLASH[v].some((x) => gs.indexOf(x) >= 0)) { toast(v === 'health' ? LL('«Сила й здоровʼя» не поєднується зі схудненням і набором мʼязів — спершу зніміть їх', "“Strength and health” can’t be combined with losing weight or building muscle — uncheck those first") : LL('Не поєднується з «Сила й здоровʼя» — спершу зніміть її', "Can’t be combined with “Strength and health” — uncheck it first")); return; }
+      a.goals = gs.indexOf(v) >= 0 ? gs.filter((x) => x !== v) : GEN.goalsOf({ goals: gs.concat([v]) }); a.goal = a.goals[0];  // goal — перша мета, для копій до 3.19.0
+      haptic(); return rOnboard();
+    }
+    if (act === 'qSex' || act === 'qLevel' || act === 'qPlace') {
+      qRead(); const a = qState().a; a[{ qSex: 'sex', qLevel: 'level', qPlace: 'place' }[act]] = b.dataset.v;
       if (a.sex === 'm') a.limits = a.limits.filter((x) => x !== 'pregnant');
       haptic(); return rOnboard();
     }

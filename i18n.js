@@ -76,6 +76,8 @@ var I18N = (function () {
     return e;
   }
   function add(d) { for (var k in d) if (Object.prototype.hasOwnProperty.call(d, k)) EN[k] = d[k]; }
+  /* забути вибір мови: після видалення останнього користувача наступний запуск знову спитає мову (з 3.19.0) */
+  function forget() { try { localStorage.removeItem(KEY); } catch (e) { return false; } chosen = false; return true; }
   function set(v) { if (v !== 'en' && v !== 'uk') return false; try { localStorage.setItem(KEY, v); } catch (e) { return false; } chosen = true; return true; }
   /* перекладена копія даних: рядки — через словник, функції — їхні результати, масиви й обʼєкти — копії; оригінал не міняється */
   function deep(x, depth) {
@@ -98,7 +100,7 @@ var I18N = (function () {
   }
   return {
     get lang() { return lang; }, get chosen() { return chosen; },
-    L: L, tr: tr, add: add, set: set, view: view,
+    L: L, tr: tr, add: add, set: set, forget: forget, view: view,
     locale: function () { return lang === 'en' ? 'en-US' : 'uk-UA'; },
     missing: function () { return Object.keys(miss); },
     size: function () { return Object.keys(EN).length; },

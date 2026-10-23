@@ -438,10 +438,23 @@ var ENGINE = (function () {
     var days = (tl - new Date(prev.d + 'T12:00:00').getTime()) / 864e5;
     return { rate: round1((last.v - prev.v) / (days / 7)), now: last.v, then: prev.v, days: Math.round(days) };
   }
-  /* Підказка за темпом: схуднення −0,5…−1 кг/тиж; швидше за 1 кг — +200 ккал; 2 тижні стоїть — −200 ккал. Підтримка — ±0,25 кг/тиж. */
+  /* Підказка за темпом: схуднення −0,5…−1 кг/тиж; швидше за 1 кг — +200 ккал; 2 тижні стоїть — −200 ккал. Підтримка — ±0,25 кг/тиж.
+     З 3.19.0: набір мʼязів — +0,25…0,5 % ваги на тиждень (Iraki та ін. 2019, новачки й середній рівень); до 3.19.0 набір ішов гілкою
+     підтримки — і на +0,3 кг/тиж радив «заберіть». Рекомпозиція (схуднути + мʼязи) — до −0,5 % на тиждень (нижня межа Helms та ін. 2014):
+     швидше — +150–200 ккал; вага стоїть чи повільно йде — норма (жир іде, мʼязи ростуть — дивитися талію); росте — −150–200 ккал. */
   function foodAdvice(food, trend) {
     if (!trend || trend.rate === null) return { k: 'wait', text: LL('Для підказки потрібні зважування за 2 тижні.', "A tip needs 2 weeks of weigh-ins.") };
-    var r = trend.rate;
+    var r = trend.rate, pct = trend.now > 0 ? r / trend.now * 100 : null;  // темп у % ваги на тиждень
+    if (food.goal === 'gain' && pct !== null) {
+      if (pct > 0.5) return { k: 'less', text: LL('Набираєте швидше за 0,5 % ваги на тиждень — більше піде в жир: заберіть ≈ 150–200 ккал на день.', "You’re gaining more than 0.5% of your weight a week — more of it goes to fat: cut ≈ 150–200 kcal a day.") };
+      if (pct < 0.25) return { k: 'more', text: LL('Набираєте повільніше за план (+0,25…0,5 % ваги на тиждень) — додайте ≈ 150–200 ккал на день.', "You’re gaining slower than planned (+0.25…0.5% of your weight a week) — add ≈ 150–200 kcal a day.") };
+      return { k: 'ok', text: LL('Темп набору в нормі (+0,25…0,5 % ваги на тиждень) — нічого не міняйте.', "Your rate of gain is on track (+0.25…0.5% of your weight a week) — don’t change anything.") };
+    }
+    if (food.goal === 'recomp' && pct !== null) {
+      if (pct < -0.5) return { k: 'more', text: LL('Худнете швидше за 0,5 % ваги на тиждень — мʼязам бракує енергії: додайте ≈ 150–200 ккал на день.', "You’re losing more than 0.5% of your weight a week — your muscles are short on energy: add ≈ 150–200 kcal a day.") };
+      if (r > 0.25) return { k: 'less', text: LL('Вага росте — заберіть ≈ 150–200 ккал на день.', "Weight is going up — cut ≈ 150–200 kcal a day.") };
+      return { k: 'ok', text: LL('Вага стоїть або повільно йде — для «менше жиру й більше мʼязів» це норма. Стежте за талією в «Замірах».', "Your weight is steady or dropping slowly — that’s normal when losing fat and building muscle. Keep an eye on your waist in “Measurements.”") };
+    }
     if (food.goal === 'loss') {
       if (r < -1) return { k: 'more', text: LL('Худнете швидше за 1 кг на тиждень — додайте ≈ 200 ккал на день.', "You’re losing more than 1 kg a week — add ≈ 200 kcal a day.") };
       if (r > -0.2) return { k: 'less', text: LL('Вага стоїть 2 тижні — заберіть ≈ 200 ккал на день.', "Weight hasn’t moved in 2 weeks — cut ≈ 200 kcal a day.") };
