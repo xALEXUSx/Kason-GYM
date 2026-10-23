@@ -11,7 +11,8 @@ var KITCHEN = (function () {
     f: { palm: { p: 22, c: 2, f: 4, kcal: 130 }, fist: { p: 1.5, c: 5, f: 0, kcal: 25 }, cup: { p: 3, c: 22, f: 1, kcal: 110 }, thumb: { p: 2, c: 2, f: 8, kcal: 90 } }
   };
   var HAND_KEYS = ['palm', 'fist', 'cup', 'thumb'];
-  /* вода, л на день: те саме, що генератор програми (food.water) — чоловіки 2,5–3, жінки 2–2,5; у день тренування — верхня межа */
+  /* вода, л на день: те саме, що генератор програми (food.water) — чоловіки 2,5–3, жінки 2–2,5; у день тренування — верхня межа.
+     З 3.21.2 — лише запасна норма, коли немає ваги чи віку для особистої (waterNeed) */
   var WATER = { m: [2.5, 3], f: [2, 2.5] };
   var Q_RANK = { exact: 0, label: 1, measure: 2, hand: 3 };
   var BY = {};
@@ -119,10 +120,36 @@ var KITCHEN = (function () {
     return { need: need, list: list.slice(0, limit || 4) };
   }
 
-  /* вода: норма на сьогодні, мл. vol — свій обʼєм на звичайний день (з 3.21.0, налаштування «Кухні»); без нього — норма програми
-     (чоловіки 2,5 л, жінки 2 л). День тренування — ще +0,5 л (як у програмі: 2,5–3 / 2–2,5 л). */
-  function waterTarget(sex, training, vol) {
-    var w = WATER[sex === 'f' ? 'f' : 'm'], base = vol > 0 ? vol : w[0] * 1000;
+  /* особиста норма води (з 3.21.2; слово Alexа 23.10: «особиста норма води за рівнянням Yamada 2022 (вага, стать, вік, активність як у
+     калоріях, +0,5 л у день тренування)»). Yamada Y. та ін., «Variation in human water turnover associated with environmental and lifestyle
+     factors», Science 2022; 378: 909–915 (5 604 людини з 23 країн, обмін води виміряно ізотопами), рівняння 1:
+     обмін (мл/добу) = 1076·PAL + 14,34·вага(кг) + 374,9·стать (чоловік — 1) + 5,823·вологість(%) + 1070·спортсмен + 104,6·HDI + 0,4726·висота(м)
+       − 0,3529·вік² + 24,78·вік − 19,66·T + 1,865·T² − 713,1.
+     Умови — як у прикладах статті (помірні): 10 °C, вологість 50 %, висота 0, країна з високим HDI (0), не професійний спортсмен;
+     PAL 1,45 — той самий, що в калоріях (engine.nutrition: tdee = bmr × 1,45). Питво: з їжею й питвом надходить ~85 % обміну (решта — вода
+     обміну речовин і з повітря, та сама стаття), з них ~20 % — з їжею (EFSA 2010: 20–30 %; NASEM 2004: питво ≈ 81 %) → питво = 0,68 обміну.
+     Округлення — до 50 мл; не менше 2 л чоловікам і 1,6 л жінкам (WATER_MIN). Немає ваги чи віку — null (тоді — норма програми). Перевірка — усі 4 приклади статті: 3,2 · 2,7 · 7,3 · 6,8 л обміну (test_engine). */
+  var WATER_PAL = 1.45;
+  /* нижня межа питва (контрольний аудит 24.10): рівняння описує, скільки людина обмінює, а не скільки їй треба — з віком обмін падає, а літні
+     люди частіше зневоднюються (слабша спрага — та сама стаття); ESPEN (Volkert та ін., «ESPEN guideline on clinical nutrition and hydration
+     in geriatrics», Clin Nutr 2019): літнім жінкам — щонайменше 1,6 л напоїв на день, чоловікам — 2,0 л; це ж EFSA для дорослих (2 / 2,5 л з
+     усіх джерел × 0,8 питва). Без межі 70-річному чоловікові 70 кг вийшло б 1,6 л, легкій літній жінці — 0,8 л */
+  var WATER_MIN = { m: 2000, f: 1600 };
+  /* обмін води, мл/добу — рівняння 1 повністю; o: { sex, weight, age, pal, temp (°C), hum (%), athlete (0/1), hdi (0 — високий), alt (м) } */
+  function waterTurnover(o) {
+    var t = o.temp === undefined ? 10 : o.temp, h = o.hum === undefined ? 50 : o.hum, a = o.age;
+    return 1076 * (o.pal || WATER_PAL) + 14.34 * o.weight + 374.9 * (o.sex === 'f' ? 0 : 1) + 5.823 * h + 1070 * (o.athlete ? 1 : 0) + 104.6 * (o.hdi || 0) + 0.4726 * (o.alt || 0)
+      - 0.3529 * a * a + 24.78 * a + 1.865 * t * t - 19.66 * t - 713.1;
+  }
+  function waterNeed(sex, weight, age) {
+    var w = Number(weight), a = Number(age);
+    if (!(w >= 30 && w <= 300) || !(a >= 14 && a <= 100)) return null;
+    return Math.max(WATER_MIN[sex === 'f' ? 'f' : 'm'], Math.round(waterTurnover({ sex: sex, weight: w, age: a }) * 0.85 * 0.8 / 50) * 50);
+  }
+  /* норма на день, мл: свій обʼєм на звичайний день (vol, «Налаштування кухні», з 3.21.0) → особиста (rec, waterNeed, з 3.21.2) → норма
+     програми (чоловіки 2,5 л, жінки 2 л); у день тренування — ще 0,5 л (як у програмі: 2,5–3 / 2–2,5 л) */
+  function waterTarget(sex, training, vol, rec) {
+    var w = WATER[sex === 'f' ? 'f' : 'm'], base = vol > 0 ? vol : rec > 0 ? rec : w[0] * 1000;
     return Math.round(base + (training ? (w[1] - w[0]) * 1000 : 0));
   }
   var hm = function (s) { var m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
@@ -258,6 +285,6 @@ var KITCHEN = (function () {
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
-    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
+    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
 })();
 if (typeof module !== 'undefined') module.exports = KITCHEN;

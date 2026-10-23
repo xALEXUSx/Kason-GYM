@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.21.1';
+  const VERSION = '3.21.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -1714,9 +1714,9 @@ window.APP_START = () => {
         next: wo ? wo.title + ' · ' + plural(wo.items.length, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises")) : '', done: trainedToday() ? today() : '', test: !!test };
       body.on = !!r.on;
       /* вода (з 3.20.0): розклад на день тренування й на звичайний, склянка, випите сьогодні — сервер пропускає склянки, які вже відмічено */
-      const sx = ksex(), mk = (tr) => KITCHEN.waterPlan(kw.first, kw.last, KITCHEN.waterTarget(sx, tr, kw.vol), kw.glass, tr && r.on ? (r.time || '18:00') : null);
+      const sx = ksex(), wr = kWRec(), mk = (tr) => KITCHEN.waterPlan(kw.first, kw.last, KITCHEN.waterTarget(sx, tr, kw.vol, wr), kw.glass, tr && r.on ? (r.time || '18:00') : null);
       const wl = kday(kWaterDay()).wl || [];  // з 3.21.1 — норма на день і час останньої відмітки: сервер рахує склянку на черзі так само (push.js waterTurn)
-      body.water = kw.water ? { on: true, glass: kw.glass, rest: mk(false), train: mk(true), tr: { rest: KITCHEN.waterTarget(sx, false, kw.vol), train: KITCHEN.waterTarget(sx, true, kw.vol) },
+      body.water = kw.water ? { on: true, glass: kw.glass, rest: mk(false), train: mk(true), tr: { rest: KITCHEN.waterTarget(sx, false, kw.vol, wr), train: KITCHEN.waterTarget(sx, true, kw.vol, wr) },
         done: { date: kWaterDay(), ml: kday(kWaterDay()).water || 0, at: wl.length ? wl[wl.length - 1].t : '' }, wake: kw.first, cross: kWaterCross() } : { on: false };  // день води — від підйому (нічна зміна)
       const res = await fetch(COACH_URL + '/push/sub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       return res.ok;
@@ -2042,6 +2042,9 @@ window.APP_START = () => {
     k.set = Object.assign({ meals: 4, glass: 350, wake: '07:00', bed: '23:00', water: false }, k.set || {});
     /* з 3.21.0 — перша й остання склянка свої; хто налаштовував підйом і сон — той самий розклад: перша через 15 хв після підйому, остання за 2 год до сну */
     if (!k.set.first || !k.set.last) { const t = KITCHEN.waterTimes(k.set.wake, k.set.bed, 2000, 1000); k.set.first = k.set.first || t[0].t; k.set.last = k.set.last || t[t.length - 1].t; }
+    /* з 3.21.2 (раз): до особистої норми поле «Скільки пити» заповнювалось нормою програми й «Зберегти» записувало її як свою — така
+       (2,5 л чоловікам, 2 л жінкам) стає особистою; інше число — свій вибір людини, лишається */
+    if (k.set.wv !== 2) { if (k.set.vol === ((G() || {}).sex === 'f' ? 2000 : 2500)) k.set.vol = null; k.set.wv = 2; }
     return k;
   }
   const kday = (d) => kit().days[d] || { items: [], water: 0 };
@@ -2146,7 +2149,7 @@ window.APP_START = () => {
     const water = `<div class="card"><div class="sp"><b>${LL('Вода', 'Water')}</b><span class="small muted">${fmt((wday.water || 0) / 1000)} ${LL('з', 'of')} ${fmt(wTarget / 1000)}${LL(' л', ' L')}</span></div>
       ${wg.icons}<p class="tiny muted" style="margin:0 0 8px">${wg.line}</p>${tu ? `<p class="small" style="margin:0 0 8px">${kTurnTxt(tu)}</p>` : ''}${dp && dp.items.length ? `<p class="tiny muted" style="margin:0 0 8px">${LL('Сьогодні: ', 'Today: ')}${kPlanTxt(dp.items)}</p>` : ''}
       <div class="row"><button type="button" class="pri" style="flex:1" data-act="kWater" data-v="1">+ ${tu ? kGlW(tu.p) : LL('склянка', 'glass')}</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="0.5" aria-label="${LL('пів склянки', 'half a glass')}">+ ½</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="-1" aria-label="${LL('прибрати останню відмітку', 'remove the last entry')}">−</button></div>
-      <p class="tiny muted">${LL('Ваш план: ', 'Your plan: ')}${fmt(KITCHEN.waterTarget(sx, false, k.set.vol) / 1000)}${LL(' л на день', ' L a day')}${k.set.vol ? '' : LL(' (норма програми)', ' (program target)')}${LL(', у день тренування — +0,5 л', ', +0.5 L on training days')}${wTrain ? LL(' (сьогодні)', ' (today)') : ''}; ${kIntakesTxt(glass, wTrain)} ${LL('(склянка — ', '(a glass is ')}${glass}${LL(' мл), з ', ' ml), from ')}${k.set.first}${LL(' до ', ' to ')}${k.set.last}. ${LL('Пропустили — наступні прийоми більші, до 0,8 л за раз; не вміщається — додатковий прийом, останній перед сном не збільшуємо, поки є куди. Змінити — «Налаштування кухні».', 'Missed one — the next drinks get bigger, up to 0.8 L at once; if it doesn’t fit, an extra drink is added, and the last one before bed stays as is while there’s room elsewhere. Change it in “Kitchen settings.”')}</p>
+      <p class="tiny muted">${LL('Ваш план: ', 'Your plan: ')}${fmt(KITCHEN.waterTarget(sx, false, k.set.vol, kWRec()) / 1000)}${LL(' л на день', ' L a day')}${k.set.vol ? LL(' (своє', ' (your own') + (kWRec() ? LL('; рекомендовано ', '; recommended ') + fmt(kWRec() / 1000) + LL(' л', ' L') : '') + ')' : kWRec() ? LL(' (рекомендовано за вагою, статтю й віком)', ' (recommended for your weight, sex and age)') : LL(' (норма програми)', ' (program target)')}${LL(', у день тренування — +0,5 л', ', +0.5 L on training days')}${wTrain ? LL(' (сьогодні)', ' (today)') : ''}; ${kIntakesTxt(glass, wTrain)} ${LL('(склянка — ', '(a glass is ')}${glass}${LL(' мл), з ', ' ml), from ')}${k.set.first}${LL(' до ', ' to ')}${k.set.last}. ${LL('Пропустили — наступні прийоми більші, до 0,8 л за раз; не вміщається — додатковий прийом, останній перед сном не збільшуємо, поки є куди. Змінити — «Налаштування кухні».', 'Missed one — the next drinks get bigger, up to 0.8 L at once; if it doesn’t fit, an extra drink is added, and the last one before bed stays as is while there’s room elsewhere. Change it in “Kitchen settings.”')}</p>
       ${wd !== d ? `<p class="tiny muted">${LL('Нічна зміна: вода рахується від першої склянки о ', 'Night shift: water counts from your first glass at ')}${k.set.first}.</p>` : ''}${kHeartNote()}${kWaterRemindHtml()}</div>`;
     /* вага для норми (з 3.21.0, слово Alexа 23.10: «Прибери поле ваги з «Кухні»: лиши рядок, від якої ваги рахується норма (із «Замірів»), і пораду за темпом»):
        зважування — лише в «Тіло → Заміри» (до 3.21.0 тут було друге поле для тієї самої ваги); тут — від якої ваги норма, порада за темпом і перехід у «Заміри» */
@@ -2197,7 +2200,17 @@ window.APP_START = () => {
     return { n, done, left, icons, line };
   }
   /* норма води на день (мл): свій обʼєм або норма програми; день тренування — +0,5 л */
-  const kWTarget = (d) => KITCHEN.waterTarget(ksex(), kTrain(d), kit().set.vol);
+  /* особиста норма води на звичайний день, мл (з 3.21.2, KITCHEN.waterNeed — рівняння Yamada 2022): вага для норми — та сама, що в калоріях
+     (середня за 7 днів «Замірів» або з анкети), стать, вік; немає ваги чи віку — null (норма програми) */
+  const kWRec = () => { const N = kNorm(); return KITCHEN.waterNeed(ksex(), N.wNow, N.me.age); };
+  const kWTarget = (d) => KITCHEN.waterTarget(ksex(), kTrain(d), kit().set.vol, kWRec());
+  /* звідки норма — словами: «Рекомендовано вам: 2,2 л на звичайний день, 2,7 л у день тренування — за вагою 90 кг, статтю й віком …» */
+  function kRecTxt() {
+    const N = kNorm(), rec = kWRec();
+    if (!rec) return LL('Зараз — норма програми: ', 'For now — the program target: ') + fmt(KITCHEN.waterTarget(ksex(), false) / 1000) + LL(' л на день, у день тренування +0,5 л. Особиста норма зʼявиться, коли будуть вага й вік.', ' L a day, +0.5 L on training days. Your personal target appears once your weight and age are set.');
+    return LL('Рекомендовано вам: ', 'Recommended for you: ') + fmt(rec / 1000) + LL(' л на звичайний день, ', ' L on a regular day, ') + fmt((rec + 500) / 1000) + LL(' л у день тренування — за вагою ', ' L on a training day — based on your weight of ') + fmt(BW(N.wNow)) + ' ' + MU('weight') + LL(', статтю й віком ', ', sex and age ') + N.me.age +
+      LL(' (обмін води з дослідження 5 604 людей, Science 2022, без води з їжі; не менше 2 л чоловікам і 1,6 л жінкам — настанова ESPEN). У спеку й при сильному поті пийте більше; при тиску чи серці — скільки скаже лікар.', ' (water turnover from a study of 5,604 people, Science 2022, minus water from food; at least 2 L for men and 1.6 L for women — ESPEN guideline). Drink more in hot weather or when you sweat a lot; with blood pressure or heart conditions, follow your doctor.');
+  }
   /* розклад води на день: норма програми, склянка, підйом і сон з налаштувань; у день тренування — ще за 1,5 год до нього (час нагадування про тренування) */
   function kWaterTimes(d) {
     const k = kit(), train = kTrain(d), r = S().remind || {};
@@ -2224,7 +2237,7 @@ window.APP_START = () => {
   /* прийомів на день і порції — для налаштувань: «4 прийоми по 2 склянки» (у день тренування — свої) */
   const kIntWhy = (g) => LL('Звичайний день: ', 'Regular day: ') + kIntakesTxt(g, false) + LL('; день тренування: ', '; training day: ') + kIntakesTxt(g, true) + '.';
   function kIntakesTxt(glass, train) {
-    const k = kit(), t = KITCHEN.waterTarget(ksex(), train, k.set.vol), tt = KITCHEN.waterPlan(k.set.first, k.set.last, t, glass, null);
+    const k = kit(), t = KITCHEN.waterTarget(ksex(), train, k.set.vol, kWRec()), tt = KITCHEN.waterPlan(k.set.first, k.set.last, t, glass, null);
     const ps = KITCHEN.waterDayPlan(tt, t, glass, 0, '', tt[0].t).items.map((x) => x.h / 2), lo = Math.min.apply(null, ps), hi = Math.max.apply(null, ps);
     return plural(ps.length, LL('прийом', 'drink'), LL('прийоми', 'drinks'), LL('прийомів', 'drinks')) + LL(' по ', ' of ') + (lo === hi ? kGlW(hi) : kGlN(lo) + '–' + kGlW(hi));
   }
@@ -2515,7 +2528,8 @@ window.APP_START = () => {
       <label class="f">${LL('Прийомів їжі на день', 'Meals per day')}</label><div class="seg">${[3, 4, 5].map((n) => `<button type="button" class="${k.set.meals === n ? 'on' : ''}" data-act="kSetMeals" data-v="${n}">${n}</button>`).join('')}</div>
       <label class="f">${LL('Склянка води, мл', 'Glass of water, ml')}</label><div class="seg">${[250, 300, 350, 500].map((n) => `<button type="button" class="${k.set.glass === n ? 'on' : ''}" data-act="kSetGlass" data-v="${n}">${n}</button>`).join('')}</div>
       <p class="tiny muted" id="kInt">${kIntWhy(k.set.glass)}</p>
-      <label class="f">${LL('Скільки пити на день, л', 'How much to drink a day, L')}</label><input inputmode="decimal" id="kVol" value="${fmt(KITCHEN.waterTarget(ksex(), false, k.set.vol) / 1000)}">
+      <label class="f">${LL('Скільки пити на день, л', 'How much to drink a day, L')}</label><input inputmode="decimal" id="kVol" value="${fmt(KITCHEN.waterTarget(ksex(), false, k.set.vol, kWRec()) / 1000)}" data-v0="${fmt(KITCHEN.waterTarget(ksex(), false, k.set.vol, kWRec()) / 1000)}">
+      <p class="tiny muted" id="kRec">${esc(kRecTxt())}</p>${kWRec() ? `<button type="button" class="sm ghost" data-act="kVolRec">${LL('Як рекомендовано', 'As recommended')}</button>` : ''}
       <div class="grid2"><div><label class="f">${LL('Перша склянка о', 'First glass at')}</label><input type="time" id="kFirst" value="${k.set.first}"></div><div><label class="f">${LL('Остання склянка о', 'Last glass at')}</label><input type="time" id="kLast" value="${k.set.last}"></div></div>
       <p class="tiny muted">${LL('Решту застосунок рахує сам: 4 прийоми на день рівно між першою й останньою склянкою (більше — лише коли норма не вміщається по 0,8 л за раз); склянка — щоб рахувати порції без грамів; у день тренування — ще 0,5 л і прийом за 1,5 год до тренування (час — з нагадувань). Остання — краще за 1–2 год до сну, щоб не прокидатись уночі.', 'The app works out the rest: 4 drinks a day, evenly between the first and the last glass (more only if your amount doesn’t fit at 0.8 L at once); the glass size just lets you count portions without measuring; on training days, 0.5 L more and a drink 1.5 hours before the workout (time from reminders). Best to have the last one 1–2 hours before bed so you don’t wake up at night.')}</p>
       <button type="button" class="pri wide" data-act="kSetSave">${LL('Зберегти', 'Save')}</button>`);
@@ -2574,10 +2588,10 @@ window.APP_START = () => {
       /* план води (з 3.21.1, слово Alexа 23.10: «передай тренеру план води (літри, склянки, перша й остання)»): ті самі числа, що на «Кухні»
          й головній — тренер їх не рахує (жива перевірка 23.10: рахував сам і помилився); у день тренування — уже з +0,5 л; прийоми дня й
          прийом на черзі — як у нагадуваннях; воду не відмічено — лише розклад, без «пропущено» й «доганяємо» (не висновок, що людина не пила) */
-      const wd = kWaterDay(), wt = kWTarget(wd), ks = kit().set, wb = KITCHEN.waterTarget(sx, false, ks.vol), wg = kGlasses(wt, wml, ks.glass), tt = kWaterTimes(wd);
+      const wd = kWaterDay(), wt = kWTarget(wd), ks = kit().set, wr = kWRec(), wb = KITCHEN.waterTarget(sx, false, ks.vol, wr), wg = kGlasses(wt, wml, ks.glass), tt = kWaterTimes(wd);
       const base = KITCHEN.waterDayPlan(tt, wt, ks.glass, 0, '', tt[0].t), dp = kDayPlan(), tu = dp && dp.turn;
       out.push(LL('Кухня сьогодні — план води (людина задає його в «Кухня» → «Налаштування кухні»): ', 'Kitchen today — water plan (the person sets it in Kitchen → “Kitchen settings”): ') + fmt(wt / 1000) + LL(' л на сьогодні', ' L for today') +
-        (ks.vol ? LL(' (свій обʼєм ', ' (their own amount ') : LL(' (норма програми ', ' (program norm ')) + fmt(wb / 1000) + LL(' л на день', ' L a day') + (wt > wb ? LL(' + ', ' + ') + fmt((wt - wb) / 1000) + LL(' л, бо сьогодні день тренування', ' L because today is a training day') : '') + ')' +
+        (ks.vol ? LL(' (свій обʼєм ', ' (their own amount ') : wr ? LL(' (особиста норма — рівняння Yamada 2022 за вагою, статтю й віком: ', ' (personal target — Yamada 2022 equation from weight, sex and age: ') : LL(' (норма програми ', ' (program norm ')) + fmt(wb / 1000) + LL(' л на день', ' L a day') + (wt > wb ? LL(' + ', ' + ') + fmt((wt - wb) / 1000) + LL(' л, бо сьогодні день тренування', ' L because today is a training day') : '') + ')' +
         LL('; склянка ', '; glass ') + ks.glass + LL(' мл; ', ' ml; ') + plural(base.items.length, LL('прийом', 'drink'), LL('прийоми', 'drinks'), LL('прийомів', 'drinks')) + ': ' + kPlanTxt(base.items) + (kWaterCross() ? LL(' (через північ)', ' (past midnight)') : '') +
         (wml ? '; ' + (wml < wt ? LL('випито ', 'drank ') + kGlW(Math.min(wg.done, wg.n)) + LL(', залишилось ', ', ') + kGlW(wg.left) + LL(' (', ' left (') + fmt(Math.max(0, wt - wml) / 1000) + LL(' л)', ' L)') +
           (dp ? LL('; з урахуванням випитого: ', '; adjusted for what they drank: ') + kPlanTxt(dp.items) : '') : LL('норму води на сьогодні виконано', 'today’s water goal is done')) : '') +
@@ -3106,21 +3120,24 @@ window.APP_START = () => {
     /* прийоми й склянка — одразу, але без перемальовування шторки: набране в полях зросту, віку й часу не губиться */
     if (act === 'kSetMeals') { const n = Number(b.dataset.v); if ([3, 4, 5].indexOf(n) < 0) return; kit().set.meals = n; save(); sheetEl.querySelectorAll('[data-act="kSetMeals"]').forEach((x) => x.classList.toggle('on', Number(x.dataset.v) === n)); return; }
     if (act === 'kSetGlass') { const n = Number(b.dataset.v); if ([250, 300, 350, 500].indexOf(n) < 0) return; kit().set.glass = n; save(); if (kit().set.water) remindSync(false); sheetEl.querySelectorAll('[data-act="kSetGlass"]').forEach((x) => x.classList.toggle('on', Number(x.dataset.v) === n)); const ki = document.getElementById('kInt'); if (ki) ki.textContent = kIntWhy(n); return; }
+    if (act === 'kVolRec') { const k = kit(), rec = kWRec(); if (!rec) return; k.set.vol = null; save(); if (k.set.water) remindSync(false); const v = document.getElementById('kVol'); if (v) { v.value = fmt(rec / 1000); v.dataset.v0 = v.value; } toast(LL('Норма води — як рекомендовано', 'Water target — as recommended')); return; }
     if (act === 'kSetSave') {
       const p = P(), h = HDin(num(document.getElementById('meH').value)), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? BWin(num(document.getElementById('meT').value)) : null;
       if (h !== null && (h < 130 || h > 220)) { toast(isLb() ? LL('Зріст — від 51 до 86 дюймів', 'Height — 51 to 86 in') : LL('Зріст — від 130 до 220 см', "Height — 130 to 220 cm")); return; }
       if (a !== null && (a < 16 || a > 85)) { toast(LL('Вік — від 16 до 85', "Age — 16 to 85")); return; }
       if (te !== null && (te < 35 || te > 250)) { toast(isLb() ? LL('Цільова вага — від 78 до 551 lb', 'Target weight — 78 to 551 lb') : LL('Цільова вага — від 35 до 250 кг', "Target weight — 35 to 250 kg")); return; }
-      const wf = document.getElementById('kFirst').value, wl = document.getElementById('kLast').value, ok = (x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(x || ''), vol = num(document.getElementById('kVol').value);
+      const wf = document.getElementById('kFirst').value, wl = document.getElementById('kLast').value, ok = (x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(x || ''), vEl = document.getElementById('kVol'), vol = num(vEl.value);
+      const vSame = vEl.value.trim() === (vEl.dataset.v0 || '');  // поле води не чіпали (контрольний аудит 24.10: зміна віку в тому ж «Зберегти» не робить норму «своєю»)
       if (!ok(wf) || !ok(wl) || wf === wl) { toast(LL('Вкажіть час першої й останньої склянки', 'Enter the times of your first and last glass')); return; }
       if (((kHM(wl) - kHM(wf) + 1440) % 1440) < 120) { toast(LL('Між першою й останньою склянкою — щонайменше 2 год', 'Leave at least 2 hours between the first and last glass')); return; }
-      if (vol === null || vol < 1 || vol > 5) { toast(LL('Скільки пити — від 1 до 5 л на день', 'Amount — 1 to 5 L a day')); return; }
+      if (!vSame && (vol === null || vol < 1 || vol > 5)) { toast(LL('Скільки пити — від 1 до 5 л на день', 'Amount — 1 to 5 L a day')); return; }
       /* з 3.21.1: не більше 0,8 л на годину (здорові нирки в спокої виводять 0,8–1 л) — у день тренування, коли пити найбільше */
       const wMax = KITCHEN.waterTarget(ksex(), true, Math.round(vol * 1000)), wSpan = (kHM(wl) - kHM(wf) + 1440) % 1440;
       if (wMax / wSpan * 60 > KITCHEN.WATER_RATE) { toast(LL('Забагато води за короткий час: понад 0,8 л на годину. Між першою й останньою склянкою — щонайменше ', 'Too much water in too little time: over 0.8 L an hour. Leave at least ') + Math.ceil(wMax / KITCHEN.WATER_RATE) + LL(' год або менше на день', ' hours between the first and last glass, or drink less a day')); return; }
       p.me = Object.assign({}, p.me || {}, { height: h, age: a, target: te });
       const sa = {}; if (h !== null) sa.height = h; if (a !== null) sa.age = a; if (Object.keys(sa).length) syncAnswers(sa);
-      const k = kit(); k.set.first = wf; k.set.last = wl; k.set.vol = Math.round(vol * 1000);  // з 3.21.0 — свій план води (обʼєм — на звичайний день)
+      const k = kit(), ml = Math.round(vol * 1000), def = KITCHEN.waterTarget(ksex(), false, null, kWRec());
+      k.set.first = wf; k.set.last = wl; if (!vSame) k.set.vol = Math.abs(ml - def) < 25 ? null : ml;  // з 3.21.0 — свій план води; з 3.21.2 — не змінене поле лишає рекомендовану норму (вона йде за вагою)
       save(); closeSheet(); toast(LL('Збережено', "Saved")); if (k.set.water) remindSync(false); return view === 'kitchen' ? rKitchen() : render();
     }
     if (act === 'kNewProd') return kNewProd();
@@ -3141,7 +3158,9 @@ window.APP_START = () => {
       const m = MEAS.find((x) => x[0] === b.dataset.m), v = MI(m[0], num(document.getElementById('measIn').value));  // введене в одиницях профілю → метрично
       if (v === null || v < m[3] || v > m[4]) { toast(LL('Перевірте число', "Check the number")); return; }
       const arr = p.body[m[0]] = p.body[m[0]] || [], t = today(), k = arr.findIndex((q) => q.d === t);
-      if (k >= 0) arr[k].v = v; else arr.push({ d: t, v }); save(); closeSheet(); toast(LL('Збережено', "Saved")); return rBody();
+      if (k >= 0) arr[k].v = v; else arr.push({ d: t, v }); save(); closeSheet(); toast(LL('Збережено', "Saved"));
+      if (m[0] === 'weight' && kit().set.water) remindSync(false);  // з 3.21.2: норма води йде за вагою — нагадування теж (контрольний аудит 24.10)
+      return rBody();
     }
     if (act === 'photo') {
       const id = Number(b.dataset.id); const img = b.querySelector('img');
