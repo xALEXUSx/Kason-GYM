@@ -48,7 +48,7 @@ var ENGINE = (function () {
     var out = [];
     (profile.sessions || []).forEach(function (s) {
       var sets = (s.sets || []).filter(function (x) { return x.ex === exId && x.reps > 0 && (kind === 'all' ? x.type !== 'W' : isWork(x)); });
-      if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, place: s.place, sets: sets });  // place — де було (дім / зал)
+      if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, back: s.back || 0, place: s.place, sets: sets });  // place — де було (дім / зал); back — частка ваги тренування повернення після перерви
     });
     return out;
   }
@@ -60,10 +60,11 @@ var ENGINE = (function () {
      найменша різниця між різними вагами, якщо всі різниці їй кратні (±0,15 кг — перераховані з фунтів таблички).
      Крок, не кратний типовому (2,5 замість 5, 4,5 замість 5), — з 2 різних ваг; грубіший кратний (5 замість 2,5) —
      лише з 3 і більше (дві ваги можуть бути просто стрибком на два кроки) і не на великих вправах: там застосунок сам
-     дає подвійний крок, тож 40 → 50 → 60 — ще не доказ кроку 10. Від 1,25 до 20 кг; інакше — типовий крок. */
+     дає подвійний крок, тож 40 → 50 → 60 — ще не доказ кроку 10. Від 1,25 до 20 кг; інакше — типовий крок.
+     Тренування повернення після перерви не рахуються: їхню вагу підбирає застосунок частками від колишньої (25 → 5 → 15 — не крок 10). */
   function machStep(ex, hist) {
     var def = ex.step || 5, seen = {};
-    (hist || []).forEach(function (h) { (h.sets || []).forEach(function (s) { var v = Number(s.load); if (s.type !== 'W' && v > 0) seen[Math.round(v * 10)] = 1; }); });
+    (hist || []).forEach(function (h) { if (h.back) return; (h.sets || []).forEach(function (s) { var v = Number(s.load); if (s.type !== 'W' && v > 0) seen[Math.round(v * 10)] = 1; }); });
     var xs = Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
     if (xs.length < 2) return def;
     var d = [], i;
@@ -76,14 +77,93 @@ var ENGINE = (function () {
     if (mult && (xs.length < 3 || ex.big)) return def;
     return g;
   }
-  /* Підказка на сьогодні за правилами прогресії програми. */
-  function suggest(prog, exId, item, nSets, hist, handle, deload, stepIn) {
+  /* ---------- повернення після перерви ----------
+     Правила — Stronger by Science «Detraining» (Г. Нукольс; мета-аналіз Bosquet 2013):
+     перерва коротша за місяць — «як довгий легкий тиждень»: вага на ≈ 20 % менша, далі — як звично;
+     довша — 1-й тиждень ≈ третина колишньої ваги з тими самими підходами й повтореннями, без відмови (запас 3–4 і більше),
+     далі щотижня більше; до колишньої ваги — за половину тривалості перерви.
+     Молодші «можуть дозволити собі» близько місяця без тренувань, старші (60+, у джерелі — 60–65+) — близько двох тижнів:
+     для них довге правило — вже з двох тижнів. Перерва — від 14 днів без жодного тренування (пропущений тиждень — ще ні).
+     Перерва понад пів року рахується як пів року (в анкеті вона вже «новачок»): повернення — 13 тижнів, темп — як у новачка.
+     Між 1-м тижнем і колишньою вагою — рівні щотижневі кроки (джерело радить 2-й тиждень «помацати» вагу із запасом 5,
+     застосунок цього не бачить — бере рівний крок; узяли важче й упорались — наступного разу не менше за це). */
+  function dayDiff(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5); }
+  function comeback(sessions, todayStr, age) {
+    var seen = {};
+    (sessions || []).forEach(function (x) { if (x && /^\d{4}-\d{2}-\d{2}$/.test(x.date || '') && x.date <= todayStr) seen[x.date] = 1; });
+    var ds = Object.keys(seen).sort();
+    if (!ds.length) return null;
+    if (ds[ds.length - 1] < todayStr) ds.push(todayStr);  // сьогодні — день наступного тренування
+    var older = Number(age) >= 60;
+    for (var i = ds.length - 1; i >= 1; i--) {
+      var off = dayDiff(ds[i - 1], ds[i]) - 1;  // днів без тренування
+      if (off < 14) continue;
+      var since = ds[i], k = Math.floor(dayDiff(since, todayStr) / 7) + 1, b;
+      if (off < (older ? 14 : 30)) b = { kind: 'short', N: 1, f: 0.8 };
+      else { var N = Math.max(2, Math.ceil(Math.min(off, 182) / 7 / 2)); b = { kind: 'long', N: N, f: Math.round((1 / 3 + (2 / 3) * (k - 1) / N) * 100) / 100 }; }
+      if (k > b.N) return null;  // остання перерва вже позаду (раніші — тим паче)
+      b.off = off; b.pre = ds[i - 1]; b.since = since; b.k = k; b.pct = Math.round(b.f * 100);
+      return b;
+    }
+    return null;
+  }
+  /* База підказки: останнє тренування вправи; якщо воно — повернення, а до перерви було сильніше — те, що до перерви
+     (після повернення — «далі як звично» від колишньої ваги). hold — так, підказка «як до перерви». */
+  function baseOf(ex, hist, handle) {
+    if (!hist.length) return { sets: null };
+    var t = hist[hist.length - 1];
+    if (!t.back) return { sets: t.sets };
+    for (var j = hist.length - 2; j >= 0; j--) if (!hist[j].back) return bestOf(ex, hist[j].sets, handle) > bestOf(ex, t.sets, handle) ? { sets: hist[j].sets, hold: true } : { sets: t.sets };
+    return { sets: t.sets };
+  }
+  /* Підказка тренування повернення: від останнього тренування до перерви (не тренування повернення — воно вже легше). */
+  function backSuggest(ex, item, nSets, hist, handle, STEP, cap, back) {
+    var pre = null, ret = null, i;
+    for (i = hist.length - 1; i >= 0 && !pre; i--) if (hist[i].date <= back.pre && !hist[i].back) pre = hist[i];
+    for (i = hist.length - 1; i >= 0 && !pre; i--) if (hist[i].date <= back.pre) pre = hist[i];
+    if (!pre) return null;  // до перерви цієї вправи не було — звичайна підказка
+    for (i = hist.length - 1; i >= 0; i--) if (hist[i].date >= back.since && hist[i].date > back.pre) { ret = hist[i]; break; }
+    var min = item.min, max = item.max, out = { sets: [], note: '' }, ps = pre.sets;
+    var head = back.kind === 'short' ? 'Перший тиждень після перерви: ' : 'Повернення після перерви, тиждень ' + back.k + ' з ' + back.N + ': ';
+    var nOf = function (s) { return s.load === null || s.load === undefined || s.load === '' ? null : Number(s.load); };
+    if (ex.type === 'amrap') {
+      for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: null });
+      out.note = head + 'скільки зможете, але без відмови — запас 3–4.';
+      return out;
+    }
+    var heavy = ex.type === 'db' || ex.type === 'mach' || (ex.type === 'time' && ex.load) || ex.type === 'dbopt';
+    var anyLoad = ps.some(function (s) { return nOf(s) !== null; });
+    if (!heavy || !anyLoad) {
+      /* без ваги (власна вага, петля, час, «без гантелі»): той самий варіант і рівень, нижня межа повторень */
+      var Lb = null; ps.forEach(function (s) { var v = nOf(s); if (v !== null && (Lb === null || v > Lb)) Lb = v; });
+      for (i = 0; i < nSets; i++) out.sets.push({ load: Lb, reps: min });
+      out.note = head + 'той самий ' + (ex.type === 'band' ? 'опір' : 'варіант') + ', нижня межа ' + (ex.type === 'time' ? 'часу' : 'повторень') + ', запас 3–4.';
+      return out;
+    }
+    var hd = ex.type === 'mach' ? 0 : (Number(handle) || 0);
+    for (i = 0; i < nSets; i++) {
+      var r = ps[i] || ps[ps.length - 1], L = nOf(r);
+      if (L === null) { out.sets.push({ load: null, reps: Math.max(min, Math.min(max, r.reps || min)) }); continue; }
+      /* частка — від усієї ваги снаряда (гантель — разом із грифом), назад у диски на гриф; донизу на крок дисків чи тренажера */
+      var x = back.f * (hd + L) - hd;
+      x = Math.max(0, Math.round(Math.floor(Math.min(x, cap) / STEP + 1e-9) * STEP * 100) / 100);
+      /* у попередньому тренуванні повернення взяли важче й упорались — не менше за те (до колишньої ваги) */
+      var rs = ret && (ret.sets[i] || ret.sets[ret.sets.length - 1]), rl = rs ? nOf(rs) : null;
+      if (rl !== null && rl > x && rl <= L && rs.reps >= min) x = rl;
+      out.sets.push({ load: x, reps: Math.max(min, Math.min(max, r.reps || min)) });
+    }
+    out.note = head + (back.kind === 'short' ? 'вага на ≈ 20 % менша' : '≈ ' + back.pct + ' % колишньої ваги') + ', ' + (ex.type === 'time' ? 'той самий час' : 'ті самі повторення') + ', запас 3–4.';
+    return out;
+  }
+  /* Підказка на сьогодні за правилами прогресії програми. back — повернення після перерви (comeback), інакше нічого. */
+  function suggest(prog, exId, item, nSets, hist, handle, deload, stepIn, back) {
     var ex = prog.ex[exId];
     /* тренажер чи блок: крок — з ваг людини на ньому (machStep), межа — власна; гантелі — крок дисків і межа набору */
     var STEP = ex.type === 'mach' ? machStep(ex, hist) : (stepIn || 2.5), cap = ex.type === 'mach' ? (ex.cap || 300) : (prog.cap || 20);
     var min = item.min, max = item.max;
     var out = { sets: [], note: '' };
-    var last = hist.length ? hist[hist.length - 1].sets : null;
+    if (back && back.f) { var bs = backSuggest(ex, item, nSets, hist, handle, STEP, cap, back); if (bs) return bs; }
+    var base = baseOf(ex, hist, handle), last = base.sets;
     var i;
     function fill(load, reps) { for (i = 0; i < nSets; i++) out.sets.push({ load: load, reps: reps }); }
 
@@ -116,6 +196,12 @@ var ENGINE = (function () {
     if (deload) {
       fill(Lmax, min);
       out.note = 'Легкий тиждень: та сама вага (або на крок нижча), запас 3–4.';
+      return out;
+    }
+    /* повернення позаду — знову як до перерви: ті самі вага й повторення, далі прогресія як звично */
+    if (base.hold) {
+      for (i = 0; i < nSets; i++) { var h0 = last[i] || last[last.length - 1]; out.sets.push({ load: h0.load === undefined ? null : h0.load, reps: Math.max(min, Math.min(max, h0.reps || min)) }); }
+      out.note = 'Повернення після перерви позаду: вага й повторення — як до перерви.';
       return out;
     }
 
@@ -185,9 +271,9 @@ var ENGINE = (function () {
     return metric(ex, set, handle) > prev;
   }
 
-  /* Плато: 4+ сесій, останні 3 не перевищили найкращого до них. */
+  /* Плато: 4+ сесій (без легких і повернення), останні 3 не перевищили найкращого до них. */
   function plateau(ex, hist, handle) {
-    var h = hist.filter(function (x) { return !x.deload; });
+    var h = hist.filter(function (x) { return !x.deload && !x.back; });  // легкі тижні й повернення після перерви — легші за задумом
     if (h.length < 4) return false;
     var before = 0, recent = 0;
     h.slice(0, h.length - 3).forEach(function (x) { before = Math.max(before, bestOf(ex, x.sets, handle)); });
@@ -195,9 +281,9 @@ var ENGINE = (function () {
     return before > 0 && recent <= before;
   }
 
-  /* Втома: у кожній з двох останніх (не легких) сесій ≥ 2 головні вправи гірші, ніж минулого разу. */
+  /* Втома: у кожній з двох останніх (не легких і не повернення) сесій ≥ 2 головні вправи гірші, ніж минулого разу. */
   function fatigue(prog, profile, handle) {
-    var ss = (profile.sessions || []).filter(function (s) { return !s.deload; });
+    var ss = (profile.sessions || []).filter(function (s) { return !s.deload && !s.back; });
     if (ss.length < 3) return false;
     function drops(idx) {
       var s = ss[idx], cnt = 0;
@@ -299,7 +385,8 @@ var ENGINE = (function () {
     if (w <= 0) return [];
     var down = function (x) { return Math.max(0, Math.round(Math.floor(x / st + 1e-9) * st * 100) / 100); };
     var out = [];
-    sc.pct.forEach(function (pc, i) { var L = down(w * pc); if (!out.length || L > out[out.length - 1].load) out.push({ load: L, reps: sc.reps[i] }); });
+    /* 0 на гантелі — сам гриф; на тренажері 0 кг не буває — такої розминки немає (легка вага повернення після перерви) */
+    sc.pct.forEach(function (pc, i) { var L = down(w * pc); if (ex.type === 'mach' && L <= 0) return; if (!out.length || L > out[out.length - 1].load) out.push({ load: L, reps: sc.reps[i] }); });
     return out;
   }
   /* Харчування: Міффлін — Сан Жеор × 1,45; мета «схуднення» — мінус дефіцит; білок — від цільової або поточної ваги. */
@@ -547,6 +634,6 @@ var ENGINE = (function () {
 
   return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
-           suggest: suggest, machStep: machStep, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
+           suggest: suggest, comeback: comeback, machStep: machStep, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
 if (typeof module !== 'undefined') module.exports = ENGINE;

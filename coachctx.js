@@ -19,7 +19,7 @@ var COACHCTX = (function () {
     var l = load(ex, s.load);
     return (k + 1) + ') ' + (TYPE[s.type] || 'робочий') + ': ' + (l ? l + ' × ' : '') + r + (s.done ? ' — зроблено' : '');
   }
-  /* Текст для моделі. o: { prog, plan, items, place, inProgress, cur: { i, j } | null, done, total } */
+  /* Текст для моделі. o: { prog, plan, items, place, inProgress, cur: { i, j } | null, done, total, back: речення про повернення після перерви | '' } */
   function text(o) {
     var prog = o.prog, plan = o.plan, out = [];
     var name = function (id) { return (prog.ex[id] || {}).name || id; };
@@ -27,6 +27,7 @@ var COACHCTX = (function () {
     out.push('Тренувань на тиждень: ' + (prog.perWeek || 3) + '. Легкі тижні: ' + (prog.deload || []).join(' і ') + '. Міо-підходи: ' + (prog.myoFrom ? 'з тижня ' + prog.myoFrom : 'немає') + '.');
     var n = plan.note || {};
     out.push('Зараз: тиждень ' + plan.week + (plan.cycle > 1 ? ', цикл ' + plan.cycle : '') + '; ' + (n.phase || '') + '; ' + (n.rir || '') + (plan.deload ? '; легкий тиждень' : '') + '. ' + (n.text || ''));
+    if (o.back) out.push('Повернення після перерви (застосунок сам зменшив вагу; до відмови не ходимо, міо й дропів немає): ' + o.back);
     var W = (o.place === 'gym' && prog.gymWorkouts ? prog.gymWorkouts : prog.workouts) || {};
     var wt = (W[o.workout] || {}).title || o.workout;
     out.push((o.inProgress ? 'Тренування триває' : 'Наступне тренування') + ': ' + wt + (o.place ? ', ' + (PLACE[o.place] || o.place) : '') + (o.inProgress && o.total ? '; зроблено ' + o.done + ' з ' + o.total + ' підходів' : '') + '.');

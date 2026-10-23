@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.13.1';
+  const VERSION = '3.14.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -408,7 +408,7 @@ window.APP_START = () => {
   function makeItem(it, ss, plan, step, o) {
     const prog = G(), p = P(), ex = prog.ex[it.ex];
     const nS = prog.setsFor(it, plan.week), hist = histAt(it.ex, o.where);
-    const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step);
+    const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step, o.back);
     const last = hist.length ? hist[hist.length - 1].sets : [];
     const sets = sug.sets.map((s, j) => { const pv = last[j] || last[last.length - 1] || null; return { type: 'N', load: s.load, reps: s.reps, rir: null, done: false, pr: [], prev: pv ? { load: pv.load, reps: pv.reps } : null, touched: false }; });
     let note = sug.note, skipped = !!it.optional;
@@ -432,12 +432,14 @@ window.APP_START = () => {
     const step = ENGINE.stepFor(p.inv);
     const ordered = ENGINE.orderItems(items, pairs);
     const present = ordered.map((o) => o.it.ex);
-    const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload;
+    /* повернення після перерви (ENGINE.comeback): вага частками від колишньої, без міо й дропів — до відмови не ходимо */
+    const back = ENGINE.comeback(p.sessions, today(), (p.me || {}).age);
+    const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload && !back;
     const list = ordered.map((o) => {
       const ra = ENGINE.readyAction(prog, o.it.ex, ready, present);
       const it = Object.assign({}, o.it); let from = null;
       if (ra && ra.act === 'swap') { from = it.ex; it.ex = ra.to; }
-      return makeItem(it, o.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from, myo, where });
+      return makeItem(it, o.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from, myo, where, back });
     });
     /* розминковий підхід — перед першою базовою вправою з вагою */
     for (const st of ENGINE.stepOrder(list)) {
@@ -445,7 +447,7 @@ window.APP_START = () => {
       const ws = ENGINE.warmups(ex, fw ? fw.load : null, step, prog.warm, isMach(ex) ? loadStep(ex, it.ex, where) : 0);
       if (ws.length) { it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); break; }
     }
-    return { n, week: plan.week, cycle: plan.cycle, workout: wid, place: where, deload: plan.deload, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
+    return { n, week: plan.week, cycle: plan.cycle, workout: wid, place: where, deload: plan.deload, back, date: today(), started: Date.now(), ready: ready || 'g', items: list, coach: { warm: false, myo: null, half: false, last: null } };
   }
   /* Текст для голосу: символи й скорочення — словами (5 хв → 5 хвилин, 20–30 с → від 20 до 30 секунд). */
   const sp = (t) => VOICE.norm(t);
@@ -685,10 +687,17 @@ window.APP_START = () => {
     el(); clearInterval(elapsedT); elapsedT = setInterval(el, 1000);
   }
   const q = (k) => `<button type="button" class="q" data-act="gl" data-k="${k}" aria-label="що це">?</button>`;
+  /* повернення після перерви — одним реченням */
+  function backText(b) {
+    if (!b) return '';
+    const off = b.off >= 14 && b.off < 60 ? plural(b.off, 'день', 'дні', 'днів') : plural(Math.round(b.off / 7), 'тиждень', 'тижні', 'тижнів');
+    return b.kind === 'short' ? `Перерва ${off}: перший тиждень вага на ≈ 20 % менша, без відмови. Далі — як звично.`
+      : `Перерва ${off}: повертаємось за ${plural(b.N, 'тиждень', 'тижні', 'тижнів')}, зараз ${b.k}-й — ≈ ${b.pct} % колишньої ваги, без відмови.`;
+  }
   function phaseBox(d) {
     const plan = ENGINE.planFor(G(), d.n);
-    return `<details class="card"><summary class="sp" style="list-style:none;cursor:pointer"><span><span class="chip a">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span> <span class="chip">${esc(plan.note.rir)}</span>${plan.deload ? ' <span class="chip w">легкий</span>' : ''}${d.ready && d.ready !== 'g' ? ' <span class="chip b">спина ' + (d.ready === 'y' ? '🟡' : '🔴') + '</span>' : ''}</span><span class="muted small">ⓘ</span></summary>
-      <p class="small"><b>${esc(plan.note.phase)}.</b> ${esc(plan.note.text)}</p></details>`;
+    return `<details class="card"><summary class="sp" style="list-style:none;cursor:pointer"><span><span class="chip a">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span> <span class="chip">${esc(d.back ? 'запас 3–4' : plan.note.rir)}</span>${d.back ? ' <span class="chip w">після перерви</span>' : plan.deload ? ' <span class="chip w">легкий</span>' : ''}${d.ready && d.ready !== 'g' ? ' <span class="chip b">спина ' + (d.ready === 'y' ? '🟡' : '🔴') + '</span>' : ''}</span><span class="muted small">ⓘ</span></summary>
+      ${d.back ? `<p class="small"><b>↩ ${esc(backText(d.back))}</b></p>` : ''}<p class="small"><b>${esc(plan.note.phase)}.</b> ${esc(plan.note.text)}</p></details>`;
   }
 
   /* --- режим «Тренер»: один крок на екрані --- */
@@ -868,7 +877,7 @@ window.APP_START = () => {
      і не у вправах з міо-підходом (ізоляція вже має свій підхід до відмови) */
   function dropOk(it) {
     const prog = G(), ex = prog.ex[it.ex], d = P().draft, plan = ENGINE.planFor(prog, d.n);
-    return !!prog.myoFrom && !ex.spine && plan.week >= 9 && plan.week <= 11 && !plan.deload && ex.type !== 'time'
+    return !!prog.myoFrom && !ex.spine && plan.week >= 9 && plan.week <= 11 && !plan.deload && !d.back && ex.type !== 'time'
       && !it.skipped && it.sets.some((x) => x.type !== 'W') && ['D', 'M'].indexOf((it.sets[it.sets.length - 1] || {}).type) < 0;  // після міо — ні: два підходи до відмови на одну вправу
   }
   function dropLoad(it) {
@@ -907,7 +916,7 @@ window.APP_START = () => {
     if (!sets.length) { if (confirm('Жодного підходу не відмічено. Закрити тренування без збереження?')) { p.draft = null; save(); stopTimer(); view = 'home'; render(); remindSync(false); } return; }
     const st = draftStats(d);
     if (st.done < st.total && !confirm('Відмічено ' + st.done + ' з ' + st.total + ' підходів. Завершити тренування?')) return;
-    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, place: d.place === 'gym' || d.place === 'home' ? d.place : undefined, deload: d.deload, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
+    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, place: d.place === 'gym' || d.place === 'home' ? d.place : undefined, deload: d.deload, back: d.back && d.back.f ? d.back.f : undefined, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList };
     p.sessions.push(sess); p.sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
     p.draft = null; save(); stopTimer(); keepAwake(false);
     ui.summary = sess.id; view = 'summary'; render(); window.scrollTo(0, 0);
@@ -1083,6 +1092,7 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.</div></li>
         <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
@@ -1129,12 +1139,12 @@ window.APP_START = () => {
     const p = P(), prog = G(), d = p.draft;
     if (d) {
       const st = draftStats(d), cs = curStep(d);
-      return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, d.n), items: d.items, workout: d.workout, place: d.place, inProgress: true, cur: cs ? { i: cs.i, j: cs.j } : null, done: st.done, total: st.total });
+      return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, d.n), items: d.items, workout: d.workout, place: d.place, inProgress: true, cur: cs ? { i: cs.i, j: cs.j } : null, done: st.done, total: st.total, back: backText(d.back) });
     }
     const last = p.sessions[p.sessions.length - 1];
     const place = prog.gymWorkouts ? (last && last.place) || 'home' : (prog.place === 'gym' ? 'gym' : 'home');
     const pv = buildDraft(null, 'g', place);
-    return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, nextN()), items: pv.items, workout: pv.workout, place: pv.place, inProgress: false });
+    return COACHCTX.text({ prog, plan: ENGINE.planFor(prog, nextN()), items: pv.items, workout: pv.workout, place: pv.place, inProgress: false, back: backText(pv.back) });
   }
   const coachIds = () => Object.keys(G().ex).filter((id) => !G().ex[id].retired);
   function askStateText() {
@@ -1568,9 +1578,9 @@ window.APP_START = () => {
     app.innerHTML = `<div class="brand">${MARK}<b>Тренування</b></div><p class="muted small" style="margin-top:4px">${new Date().toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}" data-act="radio" aria-label="радіо">${ICON.radio}</button></div></div>
       ${alerts()}
       ${d ? `<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">${esc(woTitle(d.workout))} · ${draftStats(d).done}/${draftStats(d).total} підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>` : ''}
-      <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з ${prog.perWeek || 3}</span>${plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
-        <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
-        <p class="small" style="opacity:.92">${esc(plan.note.phase)}</p>
+      <div class="card hero"><div class="row"><span class="chip">Тиждень ${plan.week}${plan.cycle > 1 ? ' · цикл ' + plan.cycle : ''}</span><span class="chip">${plan.slot + 1} з ${prog.perWeek || 3}</span>${pv.back ? '<span class="chip">після перерви</span>' : plan.deload ? '<span class="chip">легкий тиждень</span>' : ''}</div>
+        <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, 'вправа', 'вправи', 'вправ')} · ≈ ${est} хв${warmMin ? ' + розминка ' + warmMin + ' хв' : ''} · ${esc(pv.back ? 'запас 3–4' : plan.note.rir)}${nd ? ' · за планом ' + nd : ''}</p>
+        <p class="small" style="opacity:.92">${pv.back ? '↩ ' + esc(backText(pv.back)) : esc(plan.note.phase)}</p>
         ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
       ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
       ${S().tour.v4 ? '' : '<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
@@ -1941,8 +1951,10 @@ window.APP_START = () => {
   function doSwap(i, to) {
     const p = P(), d = p.draft, old = d.items[i], prog = G(), plan = ENGINE.planFor(prog, d.n);
     const base = { ex: to, sets: workCount(old), min: old.min, max: old.max, rest: old.rest };
-    const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload;
-    const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: old.from || old.ex, myo, where: d.place });
+    const myo = !!prog.myoFrom && plan.week >= prog.myoFrom && !plan.deload && !d.back;
+    /* повернули на вправу з програми — це вже не заміна (раніше писало «Замість „Присідання до крісла“» про саму себе) */
+    const from = old.from || old.ex;
+    const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: from === to ? null : from, myo, where: d.place, back: d.back || null });
     nw.skipped = false; d.items[i] = nw; save(); closeSheet(); rWorkout();
     talk('Заміна. ' + prog.ex[to].name + '.');
   }
