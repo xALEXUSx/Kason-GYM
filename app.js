@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.15.0';
+  const VERSION = '3.16.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -70,6 +70,17 @@ window.APP_START = () => {
   const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1, gen: 0, help: false, warn: false, photo: null };  // photo — фото до наступного питання { b64, src }
   const LIVE = { ws: null, ready: null, turn: null, prog: '' };
   const PLAY = { t: 0, srcs: [] };
+  /* телефон: Android чи iPhone — лише для підказок «як встановити / дозволити» (поведінка застосунку однакова, кроки різні).
+     Ні те, ні те (компʼютер) — підказки iPhone. TX(айфон, андроїд) — текст для цього телефона. */
+  const PLAT = { android: /Android/i.test(navigator.userAgent || '') };
+  const TX = (ios, android) => (PLAT.android ? android : ios);
+  /* Android (Chrome): кнопка «Установити» — системне віконце встановлення; немає події — підказка через меню Chrome */
+  let installEv = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEv = e; if (!document.body.classList.contains('sheet') && (view === 'home' || view === 'more')) render(); });
+  window.addEventListener('appinstalled', () => { installEv = null; });
+  const installNote = (head) => TX(`<div class="note w small"><b>${head}:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>`,
+    installEv ? `<div class="note w small sp"><span><b>${head}</b> — відкриватиметься з іконки на весь екран.</span><button type="button" class="sm pri" data-act="install">Установити</button></div>`
+      : `<div class="note w small"><b>${head}:</b> Chrome → меню ⋮ → «Додати на головний екран» (або «Установити застосунок») і відкривайте з іконки.</div>`);
 
   /* ---------- утиліти ---------- */
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1094,7 +1105,7 @@ window.APP_START = () => {
     openSheet(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
-        <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.</div></li>
+        <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">${TX('«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.', '«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, поки тренування не почато. Працює і в Chrome, і в застосунку з іконки.')}</div></li>
         <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
         <li style="display:block"><b>📷 Фото тренеру</b><div class="small muted">У чаті тренера — кнопка з камерою: сфотографуйте тренажер, гантелі чи табличку тренажера й запитайте — тренер скаже, що це і як воно у вашій програмі.</div></li>
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
@@ -1150,7 +1161,7 @@ window.APP_START = () => {
   }
   const coachIds = () => Object.keys(G().ex).filter((id) => !G().ex[id].retired);
   function askStateText() {
-    if (ASK.st === 'mic') return '<b>Зараз iPhone спитає дозвіл на мікрофон — натисніть «Дозволити».</b>';
+    if (ASK.st === 'mic') return '<b>Зараз ' + TX('iPhone', 'телефон') + ' спитає дозвіл на мікрофон — натисніть «Дозволити».</b>';
     if (ASK.st === 'rec') { const s = Math.floor((Date.now() - ASK.t0) / 1000); return `<b>Слухаю… 0:${pad(s)}</b> · торкніться, щоб надіслати`; }
     if (ASK.st === 'think') return '<b>Думаю…</b>';
     if (ASK.st === 'talk') return '<b>Говорю…</b> · торкніться, щоб зупинити';
@@ -1159,12 +1170,14 @@ window.APP_START = () => {
     return ASK.chat.length ? 'Торкніться, щоб уточнити.' : 'Торкніться й запитайте: програма, вага, техніка, застосунок.';
   }
   /* мікрофон заборонено — прості кроки, як дозволити (віконце iPhone більше не зʼявиться само) */
-  const MIC_HELP = '<div class="note w" id="askHelp"><b>Дозвольте мікрофон — один раз</b><ol class="small" style="margin:6px 0 4px;padding-left:20px">' +
-    '<li>Відкрийте «Параметри» iPhone.</li><li>«Програми» → «Safari» → «Мікрофон» → «Запитувати» (на старіших iOS — одразу «Safari» → «Мікрофон»).</li>' +
-    '<li>Повністю закрийте цей застосунок і відкрийте знову, торкніться 🎙 — iPhone спитає дозвіл, натисніть «Дозволити».</li></ol>' +
+  const MIC_HELP = () => '<div class="note w" id="askHelp"><b>Дозвольте мікрофон — один раз</b><ol class="small" style="margin:6px 0 4px;padding-left:20px">' +
+    TX('<li>Відкрийте «Параметри» iPhone.</li><li>«Програми» → «Safari» → «Мікрофон» → «Запитувати» (на старіших iOS — одразу «Safari» → «Мікрофон»).</li>' +
+      '<li>Повністю закрийте цей застосунок і відкрийте знову, торкніться 🎙 — iPhone спитає дозвіл, натисніть «Дозволити».</li>',
+      '<li>Chrome → меню ⋮ → «Налаштування» → «Налаштування сайтів» → «Мікрофон».</li><li>Знайдіть цей сайт у списку заблокованих і дозвольте мікрофон.</li>' +
+      '<li>Поверніться сюди й торкніться 🎙 — телефон спитає дозвіл, натисніть «Дозволити».</li>') + '</ol>' +
     '<div class="small muted">Поки що можна написати питання нижче.</div><button type="button" class="sm" data-act="askMic">Спробувати ще раз</button></div>';
   function askChatHtml() {
-    const help = ASK.help ? MIC_HELP : '';
+    const help = ASK.help ? MIC_HELP() : '';
     if (!ASK.chat.length) return help + `<div class="askex">${ASK_EX.map((q) => `<button type="button" class="chip" data-act="askEx" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     const last = ASK.chat.length - 1;
     return ASK.chat.map((t, k) => `<div class="bub q">${t.img ? `<img class="qimg" src="${t.img.src}" alt="фото до питання">` : ''}${esc(t.q)}</div>` + (t.a
@@ -1514,12 +1527,13 @@ window.APP_START = () => {
   function remindCard() {
     const r = S().remind || {}, ds = trainDays(), standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     let body;
-    if (!pushOk()) body = `<p class="small muted">${standalone ? 'Нагадування потрібен iOS 16.4 або новіший.' : 'Нагадування працюють, коли застосунок відкрито з іконки на початковому екрані (Safari → «Поділитися» → «На початковий екран»).'}</p>`;
-    else if (Notification.permission === 'denied') body = '<div class="note w small"><b>Сповіщення заборонено.</b> Увімкнути: «Параметри» iPhone → «Сповіщення» → «Тренування» → «Дозволити сповіщення».</div>';
-    else if (r.on) body = `<p class="small"><b>✓ Увімкнено</b> · ${ds.length ? dayNames(ds) : 'дні тренувань'}, якщо ще не тренувались. Значок «1» на іконці — поки сьогодні не почали тренування.</p>
+    /* значок «1» на іконці — лише iPhone (iOS 16.4+, застосунок з іконки); Chrome на Android значків-цифр не вміє (MDN, setAppBadge) */
+    if (!pushOk()) body = `<p class="small muted">${TX(standalone ? 'Нагадування потрібен iOS 16.4 або новіший.' : 'Нагадування працюють, коли застосунок відкрито з іконки на початковому екрані (Safari → «Поділитися» → «На початковий екран»).', 'Цей браузер не вміє нагадувань — відкрийте застосунок у Chrome.')}</p>`;
+    else if (Notification.permission === 'denied') body = '<div class="note w small"><b>Сповіщення заборонено.</b> Увімкнути: ' + TX('«Параметри» iPhone → «Сповіщення» → «Тренування» → «Дозволити сповіщення».', '«Налаштування» Android → «Додатки» → «Тренування» (або Chrome, якщо відкриваєте в браузері) → «Сповіщення» → увімкнути.') + '</div>';
+    else if (r.on) body = `<p class="small"><b>✓ Увімкнено</b> · ${ds.length ? dayNames(ds) : 'дні тренувань'}, якщо ще не тренувались.${TX(' Значок «1» на іконці — поки сьогодні не почали тренування.', '')}</p>
       <label class="f" for="remindTime">Час нагадування</label><input type="time" id="remindTime" value="${esc(r.time || '18:00')}" step="300">
       <div class="row" style="gap:8px;margin-top:10px"><button type="button" class="sm" data-act="remindTest">Надіслати пробне</button><button type="button" class="sm ghost" data-act="remindOff">Вимкнути</button></div>`;
-    else body = `<p class="small muted">Сповіщення в дні тренувань (${ds.length ? dayNames(ds) : 'за планом'}) в обраний час і значок «1» на іконці, поки сьогодні не почали тренування. iPhone один раз спитає дозвіл — натисніть «Дозволити».</p>
+    else body = `<p class="small muted">Сповіщення в дні тренувань (${ds.length ? dayNames(ds) : 'за планом'}) в обраний час${TX(' і значок «1» на іконці', '')}, поки сьогодні не почали тренування. ${TX('iPhone', 'Телефон')} один раз спитає дозвіл — натисніть «Дозволити».</p>
       <button type="button" class="pri wide" data-act="remindOn">Увімкнути нагадування</button>`;
     return `<h2>Нагадування</h2><div class="card">${body}</div>`;
   }
@@ -1531,7 +1545,7 @@ window.APP_START = () => {
       ${cur ? `<div class="card rnow"><div class="sp"><div><b>${esc(cur.name)}</b><div class="small muted">${esc(cur.genre)} · ${stTxt}</div></div>
         <div class="row" style="flex-wrap:nowrap">${st === 'playing' || st === 'loading' ? '<button type="button" class="ic" data-act="rpause" aria-label="пауза">⏸</button>' : '<button type="button" class="ic" data-act="rresume" aria-label="грати">▶</button>'}<button type="button" class="ic" data-act="rstop" aria-label="вимкнути">✕</button></div></div></div>` : ''}
       ${groups.map((g) => `<h3 class="rg">${esc(g.g)}</h3><div class="rlist">${g.list.map((x) => `<button type="button" class="rst${cur && cur.id === x.id ? ' on' : ''}" data-act="rplay" data-id="${x.id}"><b>${esc(x.name)}</b><span class="small muted">${esc(x.genre)}</span></button>`).join('')}</div>`).join('')}
-      ${RADIO.routed === false ? '<div class="note small">На цьому телефоні браузер не дає змінювати гучність радіо (вада Safari) — поки говорить тренер, музика на мить вимикається і одразу повертається.</div>' : ''}
+      ${RADIO.routed === false ? '<div class="note small">На цьому телефоні браузер не дає змінювати гучність радіо' + TX(' (вада Safari)', '') + ' — поки говорить тренер, музика на мить вимикається і одразу повертається.</div>' : ''}
       <label class="f">Коли говорить тренер, радіо тихіше на</label>
       <div class="seg">${[[0.7, '30 %'], [0.5, '50 %'], [0.3, '70 %']].map(([v, l]) => `<button type="button" class="${R.duck === v ? 'on' : ''}" data-act="rduck" data-v="${v}">${l}</button>`).join('')}</div>
       <p class="tiny muted">Притишення плавне, звук повертається, щойно тренер замовк. Що радять науковці: улюблена енергійна музика зі швидким темпом (120+ ударів на хвилину) покращує настрій і трохи — результат, а втома відчувається менше. Найкраще працює та, яку обираєте самі, — тому можна вмикати й свою з іншого застосунку. Радіо потребує інтернету.</p>`);
@@ -1600,7 +1614,7 @@ window.APP_START = () => {
     if (prog.tests && [1, 4, 8, 12].indexOf(wk) >= 0 && !(p.body.tests || []).some((t) => Date.now() - tms(t.d) < 21 * 864e5)) out.push('<div class="note w">Цього тижня — тести готовності до старіння: «Тіло» → «Тести».</div>');
     if (p.sessions.length >= 3 && (!DB.lastBackup || Date.now() - tms(DB.lastBackup) > 14 * 864e5)) out.push('<div class="note w">Резервної копії не було понад 2 тижні — «Більше» → «Зберегти резервну копію».</div>');
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    if (!standalone && !p.sessions.length) out.push('<div class="note w small"><b>Спершу встановіть:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте з іконки. В іконки й у Safari окремі сховища.</div>');
+    if (!standalone && !p.sessions.length) out.push(installNote('Спершу встановіть'));
     return out.join('');
   }
   function rHome() {
@@ -1866,12 +1880,12 @@ window.APP_START = () => {
     const sw = (k, l, d) => `<label class="sw"><span>${l}<div class="tiny muted">${d}</div></span><input type="checkbox" data-set="${k}"${S()[k] ? ' checked' : ''}></label>`;
     const seg = (key, opts, cur) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
     const vl = VOICE.list();
-    const voiceBox = !VOICE.supported ? '<div class="note w small">Цей браузер не вміє озвучувати текст. На iPhone голос працює в Safari й у встановленому застосунку.</div>'
-      : !vl.length ? '<div class="note w small"><b>Українського голосу не знайдено.</b> На iPhone: Параметри → Доступність → розділ про озвучення вмісту (англ. Spoken Content) → Голоси → Українська — завантажте голос і перезапустіть застосунок.</div>'
+    const voiceBox = !VOICE.supported ? '<div class="note w small">Цей браузер не вміє озвучувати текст. ' + TX('На iPhone голос працює в Safari й у встановленому застосунку.', 'На Android голос працює в Chrome й у встановленому застосунку.') + '</div>'
+      : !vl.length ? '<div class="note w small"><b>Українського голосу не знайдено.</b> ' + TX('На iPhone: Параметри → Доступність → розділ про озвучення вмісту (англ. Spoken Content) → Голоси → Українська — завантажте голос і перезапустіть застосунок.', 'На Android: «Налаштування» → «Спеціальні можливості» → «Синтез мовлення» (або «Перетворення тексту в мовлення») → система Google → встановіть українську й перезапустіть застосунок. Назви пунктів у різних телефонів трохи різні.') + '</div>'
       : `<label class="f">Голос</label><select id="voiceSel">${vl.map((v) => `<option value="${esc(v.uri)}"${v.uri === V.uri ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`;
     app.innerHTML = `<h1>Більше</h1>
       ${accountCard()}
-      ${standalone ? '' : '<div class="note w small"><b>Встановіть як застосунок:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>'}
+      ${standalone ? '' : installNote('Встановіть як застосунок')}
       ${remindCard()}
       <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">${hasDb ? 'вага й диски' : 'вага'}, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
         ${packBox()}
@@ -1884,7 +1898,7 @@ window.APP_START = () => {
         <p class="tiny muted">Голос звучить, коли застосунок відкритий і екран увімкнений («Не гасити екран» нижче). Не чути — перевірте гучність і перемикач беззвучного режиму.</p></div>
       <h2>Музика</h2><div class="card"><div class="sp"><div><b>Радіо для тренувань</b><div class="small muted">${RADIO.cur ? esc(RADIO.cur.name) + ' · ' + ({ playing: 'грає', loading: 'підключаюся', paused: 'пауза', error: 'не відповідає' }[RADIO.state] || '') : RADIO.STATIONS.length + ' станцій: денс, хіти, українські, рок, метал, драм-н-бейс'}</div></div><button type="button" class="sm pri" data-act="radio">Відкрити</button></div></div>
       <h2>Тренування</h2><div class="card"><label class="f">Екран тренування</label>${seg('mode', [['coach', 'Тренер · крок за кроком'], ['list', 'Список вправ']], S().mode)}
-        ${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', 'на iPhone з iOS 18+, якщо підтримується')}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
+        ${sw('sound', 'Звук таймера', 'сигнал, коли відпочинок скінчився')}${sw('haptics', 'Вібровідгук', TX('на iPhone з iOS 18+, якщо підтримується', 'коротка вібрація на дотиках'))}${sw('awake', 'Не гасити екран', 'під час тренування')}</div>
       <h2>Програма</h2><div class="card">${progCard()}
         <button type="button" class="wide" style="margin-top:10px" data-act="qEdit"${p.draft ? ' disabled' : ''}>${DB.custom ? 'Змінити анкету й оновити програму' : 'Скласти програму за анкетою'}</button>
         <label class="f">Наступне тренування — тиждень</label><select id="weekSel"${p.draft ? ' disabled' : ''}>${wks.map((w) => `<option value="${w}"${w === curWeek ? ' selected' : ''}>${w}${cp.cycle > 1 ? ' · цикл ' + cp.cycle : ''}</option>`).join('')}</select>
@@ -1899,7 +1913,7 @@ window.APP_START = () => {
         <button type="button" class="pri wide" data-act="backup">Зберегти резервну копію</button><p></p>
         <label class="btn" style="display:block;text-align:center">Відновити з копії<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label><p></p>
         <button type="button" class="wide" data-act="csv">Вивантажити таблицю (CSV)</button></div>
-      <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації й реклами: ваші дані не залишають телефон. Голос тренера — записані фрази; збережені в телефоні, вони працюють без інтернету. Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.</p></div>`;
+      <h2>Про застосунок</h2><div class="card"><p class="small muted">Версія ${VERSION} · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації й реклами: ваші дані не залишають телефон. Голос тренера — записані фрази; збережені в телефоні, вони працюють без інтернету. ${TX('Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.', 'Health Connect і віджети веб-застосункам на Android недоступні.')}</p></div>`;
     document.getElementById('voiceOn').onchange = (e) => { V.on = e.target.checked; save(); if (V.on) { VOICE.unlock(); talk('Голос увімкнено.'); } else { VOICE.stop(); VOICEPACK.stop(); } };
     document.getElementById('voiceSilent').onchange = (e) => { V.silent = e.target.checked; save(); audioMode(); };
     const vs = document.getElementById('voiceSel'); if (vs) vs.onchange = () => { V.uri = vs.value; save(); talk('Так звучить цей голос.'); };
@@ -2031,6 +2045,7 @@ window.APP_START = () => {
     if (act === 'askEx') return askSend({ text: b.dataset.v || '' });
     if (act === 'askSay') return askSpeak(Number(b.dataset.i), true);
     if (act === 'askNew') { askHush(); liveClose(); ASK.chat = []; ASK.photo = null; ASK.st = 'idle'; ASK.msg = ''; ASK.help = false; return askDraw(); }
+    if (act === 'install') { const ev = installEv; installEv = null; if (ev) { try { ev.prompt(); ev.userChoice.finally(() => render()); } catch (e) { render(); } } else render(); return; }
     if (act === 'askPhoto') { const fi = document.getElementById('askFile'); if (fi) fi.click(); return; }  // у тому самому дотику — інакше iPhone не відкриє камеру
     if (act === 'askPhotoDel') { ASK.photo = null; return askDraw(); }
     if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
@@ -2246,6 +2261,19 @@ window.APP_START = () => {
       caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== 'trening-voices').map((k) => caches.delete(k)))).then(() => location.reload());
     }
   })();
+  /* лише вертикально (слово Alexа 23.10: «тільки вертикальна версія»). Android, застосунок з іконки, — повертати не дає сам
+     (manifest «orientation: portrait», Chrome 39+); Safari на iPhone цього не вміє (ні orientation у маніфесті, ні lock() — MDN) —
+     тож телефон боком: заслінка «Поверніть телефон вертикально». Телефон — менша сторона екрана < 600 (планшети не чіпаємо);
+     бік — з screen.orientation (Chrome, iOS 16.4+) чи window.orientation (старіші iOS) І вікно ширше, ніж вище: одна ознака ненадійна
+     (емулятор браузера звітує «боком» про вертикальний телефон; клавіатура робить вікно низьким, але бік тоді «прямо»); невідомо — не заважаємо. */
+  function phoneSideways(type, angle, sw, sh, vw, vh) {
+    const side = type ? String(type).indexOf('landscape') === 0 : typeof angle === 'number' ? Math.abs(angle) === 90 : false, m = Math.min(sw || 0, sh || 0);
+    return side && vw > vh && m > 0 && m < 600;
+  }
+  function rotSync() { document.body.classList.toggle('rot', phoneSideways(screen.orientation && screen.orientation.type, window.orientation, screen.width, screen.height, window.innerWidth, window.innerHeight)); }
+  if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', rotSync);
+  window.addEventListener('orientationchange', rotSync); window.addEventListener('resize', rotSync);
+  rotSync();
   /* iOS «присипляє» звук після згортання — будь-який дотик його будить */
   document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
@@ -2253,5 +2281,5 @@ window.APP_START = () => {
   render();
   initPacks();
   badgeSync(); setTimeout(() => remindSync(false), 1500);  // підписка iPhone могла злетіти — тихо поновити й оновити розклад
-  window.__app = { askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
+  window.__app = { PLAT, phoneSideways, rotSync, get installEv() { return installEv; }, set installEv(v) { installEv = v; }, askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 };
