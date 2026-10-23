@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.14.0';
+  const VERSION = '3.15.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -67,7 +67,7 @@ window.APP_START = () => {
   const ui = { ob: 1, obProg: null, progTab: 'ex', progEx: null, metric: 'e1rm', range: 'all', musDays: 7, repMonth: null, bodyTab: 'm', planTab: 'w', calMonth: null, summary: null, photoPose: 'front', cmp: 50 };
   let audio = null, wakeLock = null, kp = null;
   /* голосовий тренер-співрозмовник: розмова, запис, сеанс Gemini Live, потоковий звук; gen — номер дії: нова дія глушить усі попередні */
-  const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1, gen: 0, help: false, warn: false };
+  const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1, gen: 0, help: false, warn: false, photo: null };  // photo — фото до наступного питання { b64, src }
   const LIVE = { ws: null, ready: null, turn: null, prog: '' };
   const PLAY = { t: 0, srcs: [] };
 
@@ -672,7 +672,8 @@ window.APP_START = () => {
     list: '<svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
     coach: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
     radio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
-    mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>'
+    mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>',
+    cam: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'
   };
   function wbar(d, prog, st) {
     const list = S().mode === 'list';
@@ -1095,6 +1096,7 @@ window.APP_START = () => {
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.</div></li>
         <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
+        <li style="display:block"><b>📷 Фото тренеру</b><div class="small muted">У чаті тренера — кнопка з камерою: сфотографуйте тренажер, гантелі чи табличку тренажера й запитайте — тренер скаже, що це і як воно у вашій програмі.</div></li>
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
         <li style="display:block"><b>⬇ Дроп-сет і розминка за станом</b><div class="small muted">У фазі 3 (тижні 9–11) — «⋯ Ще» → «Дроп-сет»: одразу після останнього підходу, без відпочинку, легше (на тренажері — фіксатор на 1–2 кроки нижче). Розминка: без обмежень, до 55 років і до 100 кг — 3 хв (тіло розігріває перший легкий підхід), інакше — повні 10 хв.</div></li>
@@ -1153,6 +1155,7 @@ window.APP_START = () => {
     if (ASK.st === 'think') return '<b>Думаю…</b>';
     if (ASK.st === 'talk') return '<b>Говорю…</b> · торкніться, щоб зупинити';
     if (ASK.st === 'err') return `<span class="bad">${esc(ASK.msg)}</span>`;
+    if (ASK.photo) return '<b>Фото додано</b> — запитайте голосом, напишіть або просто «Надіслати».';
     return ASK.chat.length ? 'Торкніться, щоб уточнити.' : 'Торкніться й запитайте: програма, вага, техніка, застосунок.';
   }
   /* мікрофон заборонено — прості кроки, як дозволити (віконце iPhone більше не зʼявиться само) */
@@ -1164,7 +1167,7 @@ window.APP_START = () => {
     const help = ASK.help ? MIC_HELP : '';
     if (!ASK.chat.length) return help + `<div class="askex">${ASK_EX.map((q) => `<button type="button" class="chip" data-act="askEx" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>`;
     const last = ASK.chat.length - 1;
-    return ASK.chat.map((t, k) => `<div class="bub q">${esc(t.q)}</div>` + (t.a
+    return ASK.chat.map((t, k) => `<div class="bub q">${t.img ? `<img class="qimg" src="${t.img.src}" alt="фото до питання">` : ''}${esc(t.q)}</div>` + (t.a
       ? `<div class="bub a">${esc(t.a)}${t.done ? `<div><button type="button" class="sm ghost" data-act="askSay" data-i="${k}" aria-label="прослухати відповідь">▶ Прослухати</button></div>` : ''}</div>`
       : k === last && (ASK.st === 'think' || ASK.st === 'talk') ? '<div class="bub a muted">…</div>' : '')).join('') + help;
   }
@@ -1176,14 +1179,44 @@ window.APP_START = () => {
     mic.className = 'mic' + (ASK.st === 'rec' ? ' rec' : ASK.st === 'think' || ASK.st === 'mic' ? ' busy' : '');
     mic.setAttribute('aria-label', ASK.st === 'rec' ? 'надіслати питання' : ASK.st === 'talk' ? 'зупинити відповідь' : 'говорити');
     const nw = document.getElementById('askNew'); if (nw) nw.hidden = !ASK.chat.length;
+    const ph = document.getElementById('askPh');
+    if (ph) { ph.hidden = !ASK.photo; ph.innerHTML = ASK.photo ? `<img src="${ASK.photo.src}" alt="фото до питання"><button type="button" class="sm ghost" data-act="askPhotoDel" aria-label="прибрати фото">✕ Прибрати</button>` : ''; }
   }
   function askSheet() {
     openSheet(`<div class="sp"><b>Запитати тренера</b><div class="row" style="gap:6px;flex-wrap:nowrap"><button type="button" class="sm ghost" id="askNew" data-act="askNew" hidden>Нова розмова</button><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div></div>
       <div class="chat" id="askChat"></div>
       <div class="askbar"><button type="button" class="mic" id="askMic" data-act="askMic" aria-label="говорити">${ICON.mic}</button><div class="small" id="askState" aria-live="polite"></div></div>
-      <div class="row askrow"><input id="askText" type="text" maxlength="600" placeholder="Або напишіть питання" enterkeyhint="send" autocomplete="off"><button type="button" class="sm" data-act="askSend">Надіслати</button></div>`);  // пояснення про дані — потім окремим посиланням (слово Alexа 23.10), не в чаті
+      <div class="askph" id="askPh" hidden></div>
+      <div class="row askrow"><button type="button" class="ic" data-act="askPhoto" aria-label="додати фото">${ICON.cam}</button><input id="askFile" type="file" accept="image/*" hidden><input id="askText" type="text" maxlength="600" placeholder="Або напишіть питання" enterkeyhint="send" autocomplete="off"><button type="button" class="sm" data-act="askSend">Надіслати</button></div>`);  // пояснення про дані — потім окремим посиланням (слово Alexа 23.10), не в чаті
+    const fi = document.getElementById('askFile');
+    fi.addEventListener('change', () => { const f = fi.files && fi.files[0]; fi.value = ''; if (f) askPhotoLoad(f); });
     const inp = document.getElementById('askText');
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); askSend({ text: inp.value }); } });
+    askDraw();
+  }
+  /* фото до питання (з 3.15.0, слово Alexа 23.10: «Так, будуй фото в чаті тренера»): камера чи галерея iPhone → до 1024 px по довшому боку,
+     JPEG — Gemini бачить тренажер, табличку чи вправу, а запит легкий для мобільного інтернету. Фото живе лише в цій розмові (памʼять
+     застосунку): ні в телефоні, ні на сервері не зберігається; йде разом із питанням до Gemini. */
+  const PHOTO_Q = 'Що на фото і як це стосується моєї програми?';
+  async function askPhotoLoad(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const W = img.naturalWidth, H = img.naturalHeight; if (!(W > 0 && H > 0)) throw new Error('розмір');
+      let side = 1024, b64 = '', src = '';
+      for (const q of [0.82, 0.65, 0.5]) {
+        const k = Math.min(1, side / Math.max(W, H)), c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(W * k)); c.height = Math.max(1, Math.round(H * k));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        src = c.toDataURL('image/jpeg', q); b64 = src.slice(src.indexOf(',') + 1);
+        if (b64.length <= 900000) break;
+        side = 768;
+      }
+      if (!/^\/9j\//.test(b64)) throw new Error('не JPEG');
+      ASK.photo = { b64, src };
+      if (ASK.st === 'err') { ASK.st = 'idle'; ASK.msg = ''; }
+    } catch (e) { ASK.photo = null; ASK.st = 'err'; ASK.msg = 'Не вдалося відкрити фото — спробуйте інше.'; }
+    finally { URL.revokeObjectURL(url); }
     askDraw();
   }
   /* тиша: зупинити все, що говорить чи грає (і все, що ще в дорозі, — через новий номер дії) */
@@ -1269,7 +1302,7 @@ window.APP_START = () => {
     return btoa(bin);
   }
   function askSend(o) {
-    const q = String(o.text || '').trim().slice(0, 600);
+    const q = String(o.text || '').trim().slice(0, 600) || (ASK.photo ? PHOTO_Q : '');  // лише фото — тренер каже, що на ньому
     if (!q || ASK.st === 'think' || ASK.st === 'rec' || ASK.st === 'mic') return;
     ensureAudio(); VOICEPACK.unlock();
     const inp = document.getElementById('askText'); if (inp) inp.value = '';
@@ -1292,21 +1325,24 @@ window.APP_START = () => {
     askHush();
     /* попередня відповідь ще йшла — її обриваємо (текст лишається з «…» і кнопкою «Прослухати»), нова розмова з Live, щоб шматки не змішались */
     if (LIVE.turn) { const pt = LIVE.turn.t; if (pt) { pt.a = String(pt.a).replace(/\s+/g, ' ').trim() + (pt.a ? ' …' : ''); pt.done = !!pt.a; } liveClose(); }
-    const g = ASK.gen, t = { q, a: '', pcm: [], done: false, heard: false };
+    const g = ASK.gen, t = { q, a: '', pcm: [], done: false, heard: false, img: ASK.photo || null };
+    ASK.photo = null;
     ASK.chat.push(t); ASK.st = 'think'; ASK.msg = ''; ASK.help = false; askDraw();
     let ok = false;
     try { ok = await liveTurn(t, g); } catch (e) { ok = false; }
     if (ok || g !== ASK.gen) return;
     liveClose(); t.a = ''; t.pcm = [];
     const prog = G();
-    const j = await post('/ask', { text: q, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: x.q, a: x.a })) }, 32000);
+    const j = await post('/ask', { text: q, image: t.img ? t.img.b64 : undefined, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: qText(x), a: x.a })) }, 32000);
     if (g !== ASK.gen) return;
-    if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
+    if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); if (t.img && !ASK.photo) ASK.photo = t.img; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
     t.a = j.a; t.done = true; ASK.st = 'idle'; askDraw();
     if (!S().voice.on) return;
     ASK.st = 'talk'; ASK.i = ASK.chat.indexOf(t); askDraw();
     sysSay(sp(t.a), 'відповідь тренера — системним голосом (запасний шлях)'); askWaitQuiet(ASK.i, g);
   }
+  /* питання в історії розмови — текстом; фото раніших питань не пересилаємо (відповідь тренера вже каже, що на ньому) */
+  const qText = (x) => x.q + (x.img ? ' (до питання було фото)' : '');
   /* ---------- Gemini Live: одноразовий токен із сервера, голос — потоком ---------- */
   function liveOpen() {
     if (LIVE.ready) return LIVE.ready;
@@ -1349,10 +1385,11 @@ window.APP_START = () => {
         /* програма — у першому питанні розмови й щоразу, як змінилась (зроблені підходи, інший тиждень) */
         if (prog !== LIVE.prog) {
           turns.push({ role: 'user', parts: [{ text: 'МОЯ ПРОГРАМА ЗАРАЗ (найвищий пріоритет):\n' + prog }] }, { role: 'model', parts: [{ text: 'Бачу твою програму. Відповідаю за нею.' }] });
-          if (!LIVE.prog) ASK.chat.slice(0, -1).slice(-6).forEach((x) => { if (x.a) turns.push({ role: 'user', parts: [{ text: x.q }] }, { role: 'model', parts: [{ text: x.a }] }); });
+          if (!LIVE.prog) ASK.chat.slice(0, -1).slice(-6).forEach((x) => { if (x.a) turns.push({ role: 'user', parts: [{ text: qText(x) }] }, { role: 'model', parts: [{ text: x.a }] }); });
           LIVE.prog = prog;
         }
-        turns.push({ role: 'user', parts: [{ text: t.q }] });
+        /* фото — частиною питання (inlineData у clientContent; кадр realtimeInput.video Live не бачить — стенд tools/photo_test.mjs 23.10) */
+        turns.push({ role: 'user', parts: (t.img ? [{ inlineData: { mimeType: 'image/jpeg', data: t.img.b64 } }] : []).concat([{ text: t.q }]) });
         const k = () => ASK.chat.indexOf(t);
         LIVE.turn = {
           t,
@@ -1583,7 +1620,7 @@ window.APP_START = () => {
         <p class="small" style="opacity:.92">${pv.back ? '↩ ' + esc(backText(pv.back)) : esc(plan.note.phase)}</p>
         ${d ? '' : '<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>'}</div>
       ${S().tour.tips ? '' : '<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>'}
-      ${S().tour.v4 ? '' : '<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
+      ${S().tour.v4 ? '' : '<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>'}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), 'тиждень')}</div>
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}`;
@@ -1993,7 +2030,9 @@ window.APP_START = () => {
     if (act === 'askSend') { const inp = document.getElementById('askText'); return askSend({ text: inp ? inp.value : '' }); }
     if (act === 'askEx') return askSend({ text: b.dataset.v || '' });
     if (act === 'askSay') return askSpeak(Number(b.dataset.i), true);
-    if (act === 'askNew') { askHush(); liveClose(); ASK.chat = []; ASK.st = 'idle'; ASK.msg = ''; ASK.help = false; return askDraw(); }
+    if (act === 'askNew') { askHush(); liveClose(); ASK.chat = []; ASK.photo = null; ASK.st = 'idle'; ASK.msg = ''; ASK.help = false; return askDraw(); }
+    if (act === 'askPhoto') { const fi = document.getElementById('askFile'); if (fi) fi.click(); return; }  // у тому самому дотику — інакше iPhone не відкриє камеру
+    if (act === 'askPhotoDel') { ASK.photo = null; return askDraw(); }
     if (act === 'rplay') { ensureAudio(); VOICE.unlock(); S().radio.id = b.dataset.id; save(); RADIO.play(b.dataset.id, audio); return radioSheet(); }
     if (act === 'rpause') { RADIO.pause(); return; }
     if (act === 'rresume') { ensureAudio(); RADIO.resume(); return; }
