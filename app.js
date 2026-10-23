@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.16.0';
+  const VERSION = '3.16.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -1485,7 +1485,12 @@ window.APP_START = () => {
   function badgeSync() {
     try {
       if (!('setAppBadge' in navigator) || !P()) return;
-      const todo = trainDays().indexOf(new Date().getDay()) >= 0 && !trainedToday();
+      /* значок — частина нагадувань (до 3.16.1 горів у кожен день тренувань і без нагадувань — слово Alexа 23.10: «червона крапочка
+         горить постійно, хоча повідомлень не було»): лише коли нагадування ввімкнені й дозволені, у день тренувань після часу нагадування,
+         поки сьогодні не почали тренування; інакше — знімаємо */
+      const r = S().remind || {}, now = new Date(), hm = pad(now.getHours()) + ':' + pad(now.getMinutes());
+      const on = !!r.on && typeof Notification !== 'undefined' && Notification.permission === 'granted';
+      const todo = on && trainDays().indexOf(now.getDay()) >= 0 && hm >= (r.time || '18:00') && !trainedToday();
       (todo ? navigator.setAppBadge(1) : navigator.clearAppBadge()).catch(() => {});
     } catch (e) { /* немає */ }
   }
@@ -1516,7 +1521,7 @@ window.APP_START = () => {
     badgeSync(); rMore();
   }
   async function remindOff() {
-    S().remind = Object.assign({}, S().remind, { on: false }); save();
+    S().remind = Object.assign({}, S().remind, { on: false }); save(); badgeSync();  // без нагадувань — без значка
     try {
       const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
       if (sub) { await fetch(COACH_URL + '/push/unsub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
@@ -2241,7 +2246,7 @@ window.APP_START = () => {
   app.addEventListener('change', (e) => {
     const t = e.target;
     if (t.id === 'qAgree') { qState().a.agree = t.checked; return; }
-    if (t.id === 'remindTime' && /^\d{2}:\d{2}$/.test(t.value)) { S().remind = Object.assign({}, S().remind, { time: t.value }); save(); remindSync(false).then((ok) => toast(ok ? 'Нагадування — о ' + t.value : 'Не вдалося зберегти час — перевірте інтернет')); }
+    if (t.id === 'remindTime' && /^\d{2}:\d{2}$/.test(t.value)) { S().remind = Object.assign({}, S().remind, { time: t.value }); save(); badgeSync(); remindSync(false).then((ok) => toast(ok ? 'Нагадування — о ' + t.value : 'Не вдалося зберегти час — перевірте інтернет')); }
   });
 
   /* ---------- запуск ---------- */
@@ -2261,19 +2266,10 @@ window.APP_START = () => {
       caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== 'trening-voices').map((k) => caches.delete(k)))).then(() => location.reload());
     }
   })();
-  /* лише вертикально (слово Alexа 23.10: «тільки вертикальна версія»). Android, застосунок з іконки, — повертати не дає сам
-     (manifest «orientation: portrait», Chrome 39+); Safari на iPhone цього не вміє (ні orientation у маніфесті, ні lock() — MDN) —
-     тож телефон боком: заслінка «Поверніть телефон вертикально». Телефон — менша сторона екрана < 600 (планшети не чіпаємо);
-     бік — з screen.orientation (Chrome, iOS 16.4+) чи window.orientation (старіші iOS) І вікно ширше, ніж вище: одна ознака ненадійна
-     (емулятор браузера звітує «боком» про вертикальний телефон; клавіатура робить вікно низьким, але бік тоді «прямо»); невідомо — не заважаємо. */
-  function phoneSideways(type, angle, sw, sh, vw, vh) {
-    const side = type ? String(type).indexOf('landscape') === 0 : typeof angle === 'number' ? Math.abs(angle) === 90 : false, m = Math.min(sw || 0, sh || 0);
-    return side && vw > vh && m > 0 && m < 600;
-  }
-  function rotSync() { document.body.classList.toggle('rot', phoneSideways(screen.orientation && screen.orientation.type, window.orientation, screen.width, screen.height, window.innerWidth, window.innerHeight)); }
-  if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', rotSync);
-  window.addEventListener('orientationchange', rotSync); window.addEventListener('resize', rotSync);
-  rotSync();
+  /* Поворот (слово Alexа 23.10: «зафіксувати вертикальне положення … якщо це не можливо — розблокуй»): Android, застосунок з іконки, —
+     лише вертикально (manifest «orientation: portrait», Chrome 39+); Safari на iPhone зафіксувати поворот вебзастосунку не дає
+     (ні orientation у маніфесті, ні screen.orientation.lock — MDN/BCD), тож на iPhone застосунок працює й горизонтально
+     (бічні відступи під виріз екрана — safe-area-inset-left/right). Заслінку «Поверніть телефон» 3.16.0 прибрано в 3.16.1. */
   /* iOS «присипляє» звук після згортання — будь-який дотик його будить */
   document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
@@ -2281,5 +2277,5 @@ window.APP_START = () => {
   render();
   initPacks();
   badgeSync(); setTimeout(() => remindSync(false), 1500);  // підписка iPhone могла злетіти — тихо поновити й оновити розклад
-  window.__app = { PLAT, phoneSideways, rotSync, get installEv() { return installEv; }, set installEv(v) { installEv = v; }, askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
+  window.__app = { PLAT, get installEv() { return installEv; }, set installEv(v) { installEv = v; }, askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 };

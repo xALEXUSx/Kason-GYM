@@ -1,6 +1,6 @@
 /* Робота без інтернету. Файли застосунку — спершу з мережі (щоб одразу бачити оновлення), без мережі — з кешу.
    Голоси тренера — в окремому кеші й не стираються з оновленням. */
-const CACHE = 'trening-3.16.0', VCACHE = 'trening-voices';
+const CACHE = 'trening-3.16.1', VCACHE = 'trening-voices';
 const FILES = ['./', 'index.html', 'program.js', 'engine.js', 'voice.js', 'coach.js', 'radio.js', 'voicepack.js', 'tips.js', 'charts.js', 'store.js', 'generator.js', 'coachctx.js', 'app.js', 'accounts.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'fonts/manrope-cyrillic.woff2', 'fonts/manrope-latin.woff2'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'no-cache' })))).catch(() => {}).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
