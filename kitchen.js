@@ -128,18 +128,21 @@ var KITCHEN = (function () {
   var hm = function (s) { var m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
   var pad = function (n) { return (n < 10 ? '0' : '') + n; };
   var fmtT = function (m) { m = ((Math.round(m / 5) * 5) % 1440 + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
-  /* розклад між першою (f) і останньою (l) склянкою, хвилини (l ≥ f; через північ — l > 1440): склянок n = норма ÷ склянка (вгору),
-     рівно між ними; у день тренування одна — за 1,5 год до нього (trainAt), якщо це між першою й останньою. [{ t, k: 'wake'|'train'|'' }] */
+  /* розклад між першою (f) і останньою (l) склянкою, хвилини (l ≥ f; через північ — l > 1440): прийомів n — 4 на день (з 3.21.1, слово Alexа
+     23.10: «пити 4 рази на день при умові що не пропустив прийом»; «частіше ніж 4 рази на день не можна заставляти»), більше — лише коли
+     норма не вміщається в 4 прийоми по 0,8 л (waterPortions); рівно між першою й останньою; у день тренування один — за 1,5 год до нього
+     (trainAt), якщо це між першою й останньою. [{ t, k: 'wake'|'train'|'' }] */
   function plan(f, l, target, glass, trainAt) {
-    var n = Math.max(1, Math.ceil(target / Math.max(100, glass || 350))), out = [];
+    var n = waterIntakes(target, glass), out = [];
     for (var i = 0; i < n; i++) out.push({ m: n === 1 ? f : f + (l - f) * i / (n - 1), k: i === 0 ? 'wake' : '' });
     var ta = hm(trainAt);
     if (ta !== null && n > 1) {
       var want = ta - 90; if (want < f) want += 1440;
       if (want > f && want <= l) {
         var j = 1; for (var q = 1; q < n; q++) if (Math.abs(out[q].m - want) < Math.abs(out[j].m - want)) j = q;
-        out[j] = { m: want, k: 'train' };
-        out.sort(function (a, c) { return a.m - c.m; });
+        /* з 3.21.1: перша й остання склянка — свої (налаштування людини), їх не зсуваємо; найближча — остання, то вона й стає склянкою перед тренуванням */
+        if (j === n - 1) out[j].k = 'train';
+        else { out[j] = { m: want, k: 'train' }; out.sort(function (a, c) { return a.m - c.m; }); }
       }
     }
     return out.map(function (x) { return { t: fmtT(x.m), k: x.k }; }).filter(function (x, i, a) { return !i || x.t !== a[i - 1].t; });
@@ -157,6 +160,75 @@ var KITCHEN = (function () {
     var first = w + 15;
     return plan(first, Math.max(first, b - 120), target, glass, trainAt);
   }
+
+  /* вода прийомами (з 3.21.1). Слово Alexа 23.10: «коли приходить чергове нагадування і я не випив … додаток має перерахувати для слідуючого
+     нагадування більший обєм»; «ніхто міряти грамовку не буде. потрібно додавати або пів стакана або цілий стакан»; «дати можливість самому
+     обирати обєм склянок 250/300/350/500 просто для зручності але пити 4 рази на день при умові що не пропустив прийом»; «якщо пропустив то
+     наступна більша але в рамках безпечної норми …, якщо пропустив так що пити потрібно більше норми то зміщувати графік так щоб пити потрібно
+     було частіше … але бажано на ніч не давати великий обєм якщо це графік дозволяє»; межа за раз — 0,8 л (вибір Alexа 23.10: здорові нирки
+     в спокої виводять 0,8–1 л на годину — J. Verbalis, Scientific American, «Strange but True: Drinking Too Much Water Can Kill»).
+     Порції — у половинках склянки (h = склянка ÷ 2). Той самий розрахунок — у нагадуваннях (server/src/push.js; рівність — tests/push_unit.mjs). */
+  var WATER_RATE = 800, WATER_GAP = 60;  // мл за раз (і на годину) · хв між додатковим прийомом і сусідніми
+  var halvesCap = function (glass) { return Math.max(1, Math.floor(WATER_RATE / (glass / 2) + 1e-9)); };
+  var spread = function (H, n) { var q = Math.floor(H / n), r = H - q * n, out = []; for (var i = 0; i < n; i++) out.push(q + (i < r ? 1 : 0)); return out; };
+  /* скільки прийомів на день: 4, а якщо норма не вміщається в 4 по 0,8 л (у половинках цієї склянки) — більше */
+  function waterIntakes(target, glass) { var g = Math.max(100, glass || 350); return Math.max(4, Math.ceil(Math.ceil(target / (g / 2) - 1e-9) / halvesCap(g))); }
+  /* план дня води: times — базовий розклад [{ t, k }], target і ml — мл, at — час останньої відмітки ('' — невідомо), now — 'HH:MM'.
+     Прийом зроблено: відмічено стільки, скільки за планом до нього включно, або відмічали не раніше ніж за годину до нього (і додатковий —
+     не раніше ніж за годину після останньої відмітки: не більше 0,8 л на годину). Прийом, час якого
+     настав, чекає 30 хв (вікно нагадування на сервері), далі — пропущений. Решта норми (у половинках, вгору) — на прийоми, що лишились:
+     спершу рівно; пропустили — додаток до найближчих прийомів, крім останнього, кожен до межі; не вміщається — додаткові прийоми посередині
+     між прийомами, що лишились (не ближче години до сусідніх), раніші першими, потім — перед найближчим; далі — останній; що й так не вміщається —
+     не надолужуємо.
+     → { items: [{ t, h — половинок, k: 'wake'|'train'|''|'extra', st: 'done'|'missed'|'plan', up — більше за план }], turn — перший 'plan'
+     або null: { i — номер прийому (з 1), n — прийомів сьогодні, t, k, p — склянок, ml, up, capped — решту не надолужуємо, now — час настав },
+     short — половинок, які не вмістились } */
+  function waterDayPlan(times, target, glass, ml, at, now) {
+    var n = (times || []).length; ml = Number(ml) || 0;
+    if (!n || !(target > 0) || !(glass > 0)) return null;
+    var h = glass / 2, cap = halvesCap(glass), base = spread(Math.ceil(target / h - 1e-9), n);
+    var f = hm(times[0].t), cross = times.some(function (x) { return hm(x.t) < f; });
+    var rel = function (t) { var m = hm(t); return m === null ? null : cross ? (m - f + 1440) % 1440 : m - f; };
+    var abs = function (m) { return fmtT(f + m); };
+    var r = times.map(function (x) { return rel(x.t); }), rn = rel(now), ra = rel(at), i, k, sum = 0;
+    if (rn === null) return null;
+    var c = -1; for (i = 0; i < n; i++) if (r[i] <= rn) c = i;
+    var items = [], pend = [];
+    for (i = 0; i < n; i++) {
+      sum += base[i];
+      var done = ml >= Math.min(target, sum * h) - 1e-6 || (ra !== null && ra >= r[i] - WATER_GAP), open = i > c || (i === c && rn < r[i] + 30);
+      var it = { m: r[i], t: times[i].t, h: base[i], k: times[i].k || '', st: done ? 'done' : open ? 'plan' : 'missed', up: false };
+      items.push(it); if (it.st === 'plan') pend.push(it);
+    }
+    var left = Math.max(0, Math.ceil((target - ml) / h - 1e-9)), short = 0;
+    if (!left) pend.forEach(function (x) { x.st = 'done'; });
+    else if (pend.length) {
+      var due = 0; pend.forEach(function (x) { due += x.h; });
+      if (left <= due) { var sp = spread(left, pend.length); pend.forEach(function (x, q) { x.h = sp[q]; }); }
+      else {
+        var e = left - due, add;
+        for (k = 0; k < pend.length - 1 && e > 0; k++) { add = Math.min(e, cap - pend[k].h); if (add > 0) { pend[k].h += add; pend[k].up = true; e -= add; } }
+        if (e > 0) {  // додаткові прийоми — посередині: спершу між прийомами, що лишились (наступний уже більший), потім — перед найближчим
+          var p0 = items.indexOf(pend[0]), gaps = [], extra = [];
+          for (k = 0; k + 1 < pend.length; k++) gaps.push([pend[k].m, pend[k + 1].m]);
+          if (p0 > 0) gaps.push([items[p0 - 1].m, pend[0].m]);
+          for (k = 0; k < gaps.length && e > 0; k++) {
+            var mid = Math.round((gaps[k][0] + gaps[k][1]) / 10) * 5;
+            if (mid + 30 > rn && mid - gaps[k][0] >= WATER_GAP && gaps[k][1] - mid >= WATER_GAP && (ra === null || mid - ra >= WATER_GAP)) { add = Math.min(e, cap); extra.push({ m: mid, t: abs(mid), h: add, k: 'extra', st: 'plan', up: true }); e -= add; }
+          }
+          items = items.concat(extra).sort(function (x, y) { return x.m - y.m; });
+        }
+        var last = pend[pend.length - 1];
+        if (e > 0) { add = Math.min(e, cap - last.h); if (add > 0) { last.h += add; last.up = true; e -= add; } }
+        short = e;
+      }
+    }
+    items = items.filter(function (x) { return x.st !== 'plan' || x.h > 0; });
+    var tu = null;
+    for (i = 0; i < items.length; i++) if (items[i].st === 'plan') { var x = items[i]; tu = { i: i + 1, n: items.length, t: x.t, k: x.k, p: x.h / 2, ml: Math.round(x.h * h), up: x.up, capped: short > 0, now: x.m <= rn }; break; }
+    return { items: items.map(function (x) { return { t: x.t, h: x.h, k: x.k, st: x.st, up: x.up }; }), turn: tu, short: short };
+  }
+  function waterTurn(times, target, glass, ml, at, now) { var p = waterDayPlan(times, target, glass, ml, at, now); return p && p.turn; }
 
   /* пошук звичними словами (з 3.20.1; жива перевірка 23.10: «курка» з підказки поля не знаходила нічого — у базі «Куряче філе»):
      основа слова → продукти бази. Лише для запитів від 3 літер; спершу — назви, що починаються з запиту, далі ці слова, далі решта збігів. */
@@ -186,6 +258,6 @@ var KITCHEN = (function () {
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
-    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterTimes: waterTimes, waterPlan: waterPlan, search: search, worse: worse };
+    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
 })();
 if (typeof module !== 'undefined') module.exports = KITCHEN;
