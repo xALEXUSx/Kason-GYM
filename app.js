@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.12.3';
+  const VERSION = '3.13.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -878,6 +878,7 @@ window.APP_START = () => {
     p.sessions.push(sess); p.sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
     p.draft = null; save(); stopTimer(); keepAwake(false);
     ui.summary = sess.id; view = 'summary'; render(); window.scrollTo(0, 0);
+    badgeSync(); remindSync(false);  // сьогодні вже тренувались: значок геть, нагадування сьогодні не прийде
     talk('Тренування завершено. ' + VOICE.cap(sess.mins + ' ' + VOICE.plural(sess.mins, 'хвилина', 'хвилини', 'хвилин')) + '. ' + (sess.prs ? 'Рекордів: ' + sess.prs + '. ' : '') + (hard() ? COACH.line('end', G().sex, sess.n) : 'Гарна робота!'));
   }
 
@@ -1374,6 +1375,70 @@ window.APP_START = () => {
     if (g !== ASK.gen) return;
     sysSay(sp(t.a), 'відповідь тренера — системним голосом'); askWaitQuiet(k, g);
   }
+  /* ---------- Нагадування про тренування й значок на іконці (з 3.13.0) ----------
+     Сповіщення приходить у дні тренувань в обраний час (сервер `kason-gym-coach`, Web Push; розклад — кожні 5 хв), якщо сьогодні ще
+     не тренувались. Значок «1» на іконці — поки сьогоднішнє тренування за планом не зроблено. На iPhone — лише застосунок з іконки
+     (iOS 16.4+), дозвіл — один раз «Дозволити». Підписки iPhone іноді злітають — на кожному запуску тихо поновлюємо (remindSync). */
+  const VAPID_PUBLIC = 'BKnsTFnbMRHmlcsz7_rGnaOUMspG72jcNeLL0auLEYadR9aQKqxoozL27zWTr-AG_ZyvEMG0T-azWrBCk7JS4Cc';
+  const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const trainDays = () => { const p = P(), prog = G(); return (p.days && p.days.length ? p.days : prog.days) || []; };
+  const dayNames = (ds) => ds.slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map((d) => ['нд', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'][d]).join(' / ');
+  function vapidKey() { const s = atob(VAPID_PUBLIC.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((VAPID_PUBLIC.length + 3) % 4)), u = new Uint8Array(s.length); for (let k = 0; k < s.length; k++) u[k] = s.charCodeAt(k); return u; }
+  /* значок: сьогодні день тренування й ще не тренувались — «1», інакше — прибрати */
+  function badgeSync() {
+    try {
+      if (!('setAppBadge' in navigator) || !P()) return;
+      const todo = trainDays().indexOf(new Date().getDay()) >= 0 && !P().sessions.some((s) => s.date === today());
+      (todo ? navigator.setAppBadge(1) : navigator.clearAppBadge()).catch(() => {});
+    } catch (e) { /* немає */ }
+  }
+  /* надіслати серверу підписку й розклад (дні, час, часовий пояс, наступне тренування, чи вже тренувались) */
+  async function remindSync(test) {
+    const r = S().remind; if (!r || !r.on || !pushOk() || Notification.permission !== 'granted') return false;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey() });  // злетіла — поновити
+      const p = P(), prog = G(), plan = ENGINE.planFor(prog, nextN()), wo = prog.workouts[plan.workout];
+      const body = { sub: sub.toJSON(), on: true, days: trainDays(), time: r.time || '18:00', tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Kyiv',
+        next: wo ? wo.title + ' · ' + plural(wo.items.length, 'вправа', 'вправи', 'вправ') : '', done: p.sessions.some((s) => s.date === today()) ? today() : '', test: !!test };
+      const res = await fetch(COACH_URL + '/push/sub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      return res.ok;
+    } catch (e) { return false; }
+  }
+  /* увімкнути — лише з дотику: iPhone питає дозвіл тільки у відповідь на натискання */
+  async function remindOn() {
+    if (!pushOk()) return rMore();
+    let perm = Notification.permission;
+    if (perm !== 'granted') { try { perm = await Notification.requestPermission(); } catch (e) { perm = 'denied'; } }
+    if (perm !== 'granted') return rMore();
+    S().remind = { on: true, time: (S().remind && S().remind.time) || '18:00' }; save();
+    const ok = await remindSync(true);
+    if (!ok) { S().remind.on = false; save(); }
+    toast(ok ? 'Нагадування увімкнено — пробне вже летить' : 'Не вдалося увімкнути — перевірте інтернет і спробуйте ще раз');
+    badgeSync(); rMore();
+  }
+  async function remindOff() {
+    S().remind = Object.assign({}, S().remind, { on: false }); save();
+    try {
+      const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+      if (sub) { await fetch(COACH_URL + '/push/unsub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
+    } catch (e) { /* немає */ }
+    try { if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {}); } catch (e) { /* немає */ }
+    toast('Нагадування вимкнено'); rMore();
+  }
+  function remindCard() {
+    const r = S().remind || {}, ds = trainDays(), standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    let body;
+    if (!pushOk()) body = `<p class="small muted">${standalone ? 'Нагадування потрібен iOS 16.4 або новіший.' : 'Нагадування працюють, коли застосунок відкрито з іконки на початковому екрані (Safari → «Поділитися» → «На початковий екран»).'}</p>`;
+    else if (Notification.permission === 'denied') body = '<div class="note w small"><b>Сповіщення заборонено.</b> Увімкнути: «Параметри» iPhone → «Сповіщення» → «Тренування» → «Дозволити сповіщення».</div>';
+    else if (r.on) body = `<p class="small"><b>✓ Увімкнено</b> · ${ds.length ? dayNames(ds) : 'дні тренувань'}, якщо ще не тренувались. Значок «1» на іконці — поки тренування за планом не зроблено.</p>
+      <label class="f" for="remindTime">Час нагадування</label><input type="time" id="remindTime" value="${esc(r.time || '18:00')}" step="300">
+      <div class="row" style="gap:8px;margin-top:10px"><button type="button" class="sm" data-act="remindTest">Надіслати пробне</button><button type="button" class="sm ghost" data-act="remindOff">Вимкнути</button></div>`;
+    else body = `<p class="small muted">Сповіщення в дні тренувань (${ds.length ? dayNames(ds) : 'за планом'}) в обраний час і значок «1» на іконці, поки тренування не зроблено. iPhone один раз спитає дозвіл — натисніть «Дозволити».</p>
+      <button type="button" class="pri wide" data-act="remindOn">Увімкнути нагадування</button>`;
+    return `<h2>Нагадування</h2><div class="card">${body}</div>`;
+  }
   function radioSheet() {
     const cur = RADIO.cur, st = RADIO.state, R = S().radio;
     const groups = []; RADIO.STATIONS.forEach((x) => { let g = groups.find((y) => y.g === x.g); if (!g) { g = { g: x.g, list: [] }; groups.push(g); } g.list.push(x); });
@@ -1476,6 +1541,7 @@ window.APP_START = () => {
         <div class="stat"><b>${streak}</b><span>тижнів поспіль</span></div><div class="stat"><b>${mprs}</b><span>рекордів за місяць</span></div></div>
       ${dailyCard()}`;
     tourMaybe('home');
+    badgeSync();
   }
   function otherSheet() {
     const prog = G();
@@ -1722,6 +1788,7 @@ window.APP_START = () => {
     app.innerHTML = `<h1>Більше</h1>
       ${accountCard()}
       ${standalone ? '' : '<div class="note w small"><b>Встановіть як застосунок:</b> Safari → «Поділитися» → «На початковий екран» і відкривайте лише з іконки (в іконки й у Safari окремі сховища).</div>'}
+      ${remindCard()}
       <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">${hasDb ? 'вага й диски' : 'вага'}, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"${V.on ? ' checked' : ''}></label>
         ${packBox()}
         ${packId() ? '' : voiceBox}
@@ -1942,6 +2009,9 @@ window.APP_START = () => {
     if (act === 'other') return otherSheet();
     if (act === 'startW') { VOICE.unlock(); return beginWorkout(b.dataset.w); }
     if (act === 'resume') { view = 'workout'; return render(); }
+    if (act === 'remindOn') return remindOn();
+    if (act === 'remindOff') return remindOff();
+    if (act === 'remindTest') { return remindSync(true).then((ok) => toast(ok ? 'Пробне нагадування вже летить' : 'Не вдалося — перевірте інтернет')); }
     if (act === 'dailyDone') { const t = today(), r = p.daily[t] = p.daily[t] || {}; r[b.dataset.id] = !r[b.dataset.id]; save(); haptic(); return rHome(); }
     if (act === 'jump') { const k = Number(b.dataset.k), t = today(); const r = p.daily[t] = p.daily[t] || {}; r.jumps = (r.jumps || 0) >= k ? k - 1 : k; save(); haptic(); return rHome(); }
     /* тренування */
@@ -2059,7 +2129,7 @@ window.APP_START = () => {
       const dd = Number(b.dataset.d), nd = p.days.slice(), k = nd.indexOf(dd); if (k >= 0) nd.splice(k, 1); else nd.push(dd); nd.sort();
       /* програма за анкетою — від 2 до 4 днів, як в анкеті; дні йдуть і в програму (скільки тренувань на тиждень) */
       if (DB.custom && (nd.length < 2 || nd.length > 4)) { toast('Від 2 до 4 днів на тиждень'); return; }
-      p.days = nd; syncAnswers({ days: nd }); save(); return rMore();
+      p.days = nd; syncAnswers({ days: nd }); save(); badgeSync(); remindSync(false); return rMore();  // нові дні — і в нагадування
     }
     if (act === 'backup') return backup();
     if (act === 'csv') return csv();
@@ -2068,6 +2138,7 @@ window.APP_START = () => {
   app.addEventListener('change', (e) => {
     const t = e.target;
     if (t.id === 'qAgree') { qState().a.agree = t.checked; return; }
+    if (t.id === 'remindTime' && /^\d{2}:\d{2}$/.test(t.value)) { S().remind = Object.assign({}, S().remind, { time: t.value }); save(); remindSync(false).then((ok) => toast(ok ? 'Нагадування — о ' + t.value : 'Не вдалося зберегти час — перевірте інтернет')); }
   });
 
   /* ---------- запуск ---------- */
@@ -2093,5 +2164,6 @@ window.APP_START = () => {
   if (DB.active) ENGINE.migrate(DB);
   render();
   initPacks();
+  badgeSync(); setTimeout(() => remindSync(false), 1500);  // підписка iPhone могла злетіти — тихо поновити й оновити розклад
   window.__app = { askFake: (q, a, help) => { if (q) ASK.chat.push({ q, a, pcm: [], done: true, heard: false }); ASK.help = !!help; ASK.st = 'idle'; askDraw(); }, get ASK() { return ASK; }, get PLAY() { return PLAY; }, askHush: () => askHush(), askTurn: (q) => askTurn(q), liveEnded: (k, g) => liveEnded(k, g), get DB() { return DB; }, get T() { return T; }, get missed() { return Array.from(missedSegs); }, talk: (t) => talk(t), initPacks: () => initPacks(), render: () => render(), set view(v) { view = v; } };
 };

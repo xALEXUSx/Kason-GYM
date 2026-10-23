@@ -1,6 +1,6 @@
 /* Робота без інтернету. Файли застосунку — спершу з мережі (щоб одразу бачити оновлення), без мережі — з кешу.
    Голоси тренера — в окремому кеші й не стираються з оновленням. */
-const CACHE = 'trening-3.12.3', VCACHE = 'trening-voices';
+const CACHE = 'trening-3.13.0', VCACHE = 'trening-voices';
 const FILES = ['./', 'index.html', 'program.js', 'engine.js', 'voice.js', 'coach.js', 'radio.js', 'voicepack.js', 'tips.js', 'charts.js', 'store.js', 'generator.js', 'coachctx.js', 'app.js', 'accounts.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'fonts/manrope-cyrillic.woff2', 'fonts/manrope-latin.woff2'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'no-cache' })))).catch(() => {}).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
@@ -32,4 +32,16 @@ self.addEventListener('fetch', (e) => {
     if (r.ok) { const c = r.clone(); caches.open(CACHE).then((x) => x.put(e.request, c)); }
     return r;
   }).catch(() => caches.match(e.request, { ignoreSearch: true })));
+});
+/* Нагадування про тренування (Web Push, сервер kason-gym-coach): показати сповіщення й поставити «1» на іконку;
+   торкнулися сповіщення — відкрити застосунок (або вивести вже відкритий наперед). */
+self.addEventListener('push', (e) => {
+  let m = {}; try { m = e.data ? e.data.json() : {}; } catch (x) { m = { body: e.data ? e.data.text() : '' }; }
+  const shown = self.registration.showNotification(m.title || 'Тренування', { body: m.body || '', icon: 'icon-192.png', tag: 'trening-remind', data: { url: m.url || './' } });
+  const badge = m.badge && self.navigator && self.navigator.setAppBadge ? self.navigator.setAppBadge(m.badge).catch(() => {}) : Promise.resolve();
+  e.waitUntil(Promise.all([shown, badge]));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => (cs.length ? cs[0].focus() : self.clients.openWindow((e.notification.data && e.notification.data.url) || './'))));
 });
