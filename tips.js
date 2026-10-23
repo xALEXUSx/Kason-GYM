@@ -167,6 +167,14 @@ var TIPS = (function () {
     "Змінити мову застосунку. Застосунок перезапуститься — тексти, голос і тренер перейдуть на обрану мову."
     ],
     [
+    "qUnits",
+    "Одиниці: кілограми й сантиметри чи фунти й дюйми. Набір дисків — у вибраних одиницях; змінити можна будь-коли в «Більше»."
+    ],
+    [
+    "unitsSet",
+    "Перемкнути одиниці. Вага тренувань і набір дисків перерахуються й округляться до ваших дисків; вага тіла й заміри — лише показ."
+    ],
+    [
     "install",
     "Встановити застосунок на телефон: відкриватиметься з іконки на весь екран, як звичайна програма."
     ],
@@ -1145,7 +1153,8 @@ var TIPS = (function () {
   }
   function show(hit) {
     var b = bubble(), r = hit.el.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
-    b.firstChild.textContent = TR(hit.text); b.className = 'on';
+    var tt = TR(hit.text); if (typeof window !== 'undefined' && window.__lb && window.__lb() && typeof ENGINE !== 'undefined') tt = ENGINE.lbText(tt);  // профіль у фунтах
+    b.firstChild.textContent = tt; b.className = 'on';
     var bw = b.offsetWidth, bh = b.offsetHeight, cx = r.left + r.width / 2;
     var left = Math.max(10, Math.min(W - bw - 10, cx - bw / 2));
     var above = r.top - bh - 12 > 8;

@@ -26,6 +26,7 @@ var COACHCTX = (function () {
     var name = function (id) { return (prog.ex[id] || {}).name || id; };
     out.push(LL('Версія програми: ', "Program version: ") + (prog.sex === 'f' ? LL('жіноча', "female") : LL('чоловіча', "male")) + LL(' база', " base") + (prog.custom ? LL(', індивідуальна програма за анкетою', ", custom program from the questionnaire") : ' «' + prog.title + LL('»', '”')) + (prog.sub ? ' (' + prog.sub + ')' : '') + '.');
     out.push(LL('Тренувань на тиждень: ', "Workouts per week: ") + (prog.perWeek || 3) + LL('. Легкі тижні: ', ". Deload weeks: ") + (prog.deload || []).join(LL(' і ', " and ")) + LL('. Міо-підходи: ', ". Myo-rep sets: ") + (prog.myoFrom ? LL('з тижня ', "from week ") + prog.myoFrom : LL('немає', "none")) + '.');
+    if (prog.units === 'lb') out.push(LL('Одиниці ваги: фунти (lb), диски 10 · 5 · 2,5 lb; усі ваги нижче — у фунтах.', 'Weight units: pounds (lb), plates 10 · 5 · 2.5 lb; all weights below are in pounds.'));  // з 3.18.0
     var n = plan.note || {};
     out.push(LL('Зараз: тиждень ', "Now: week ") + plan.week + (plan.cycle > 1 ? LL(', цикл ', ", cycle ") + plan.cycle : '') + '; ' + (n.phase || '') + '; ' + (n.rir || '') + (plan.deload ? LL('; легкий тиждень', "; deload week") : '') + '. ' + (n.text || ''));
     if (o.back) out.push(LL('Повернення після перерви (застосунок сам зменшив вагу; до відмови не ходимо, міо й дропів немає): ', "Back after a break (the app lowered the weights automatically; no sets to failure, no myo-reps or drop sets): ") + o.back);
@@ -50,6 +51,7 @@ var COACHCTX = (function () {
         out.push(LL('Тренування ', "Workout ") + w + ' (' + p[1] + '): ' + ws[w].items.map(function (it) { return name(it.ex) + ' ' + it.sets + '×' + reps(it); }).join('; ') + '.');
       });
     });
+    if (o.prog && o.prog.units === 'lb') out = out.map(function (l) { return String(l).replace(/кг/g, 'lb').replace(/\bkg\b/g, 'lb'); });  // програма у фунтах (з 3.18.0)
     return out.join('\n');
   }
   return { text: text };

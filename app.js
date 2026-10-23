@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.17.0';
+  const VERSION = '3.18.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -53,7 +53,8 @@ window.APP_START = () => {
     const patch = {}, me = p.me || {}, srt = (x) => (x || []).slice().sort().join();
     if (Array.isArray(p.days) && p.days.length >= 2 && p.days.length <= 4 && srt(p.days) !== srt(a.days)) patch.days = p.days.slice().sort();
     if (p.handle !== undefined && p.handle !== a.handle) patch.handle = p.handle;
-    if (p.inv && ['5', '2.5', '1.25'].some((k) => Number(p.inv[k]) !== Number((a.inv || {})[k]))) patch.inv = { 5: p.inv[5], 2.5: p.inv[2.5], 1.25: p.inv[1.25] };
+    const ks = p.units === 'lb' ? ['10', '5', '2.5'] : ['5', '2.5', '1.25'];  // набір у фунтах — свої розміри (з 3.18.0)
+    if (p.inv && ks.some((k) => Number(p.inv[k]) !== Number((a.inv || {})[k]))) patch.inv = Object.assign({}, p.inv);
     if (me.age >= 16 && me.age <= 85 && me.age !== Number(a.age)) patch.age = me.age;
     if (me.height >= 130 && me.height <= 220 && me.height !== Number(a.height)) patch.height = me.height;
     if (Object.keys(patch).length) { syncAnswers(patch); STORE.save(DB); }
@@ -99,8 +100,52 @@ window.APP_START = () => {
   const DAYS_FULL = [LL('неділю', "Sunday"), LL('понеділок', "Monday"), LL('вівторок', "Tuesday"), LL('середу', "Wednesday"), LL('четвер', "Thursday"), LL('пʼятницю', "Friday"), LL('суботу', "Saturday")];
   const P = () => DB.profiles[DB.active];
   const isNewAcc = (n) => n === 'Новий акаунт' || n === 'New account';  // назва нерозпочатого акаунта — будь-якою мовою (з 3.17.0)
+  /* одиниці (з 3.18.0, слово Alexа 23.10: «має бути і те і те, давати на вибір»): «кг · см» або «lb · in» — для профілю (p.units).
+     Вага тренувань — в одиницях профілю (диски й тренажери фізично фунтові: рушій рахує ті самі числа); вага тіла, зріст і заміри
+     зберігаються метрично (формули харчування) — показ і введення перераховуються. */
+  const isLb = () => !!(P() && P().units === 'lb');
+  const KG = (t) => (isLb() ? ENGINE.unitize('lb', t) : t);
+  const LBT = (t) => (isLb() ? ENGINE.lbText(t) : t);
+  const r1 = (x) => Math.round(x * 10) / 10;
+  const BW = (kg, lb) => (kg === null || kg === undefined || kg === '' ? kg : (lb === undefined ? isLb() : lb) ? r1(Number(kg) * ENGINE.LB) : kg);
+  const BWin = (v, lb) => (v === null || v === undefined || !(lb === undefined ? isLb() : lb) ? v : Math.round(v / ENGINE.LB * 100) / 100);
+  const HD = (cm, lb) => (cm === null || cm === undefined || cm === '' ? cm : (lb === undefined ? isLb() : lb) ? Math.round(Number(cm) / 2.54) : cm);
+  const HDin = (v, lb) => (v === null || v === undefined || !(lb === undefined ? isLb() : lb) ? v : Math.round(v * 2.54));
+  const MV = (k, v) => (k === 'weight' ? BW(v) : isLb() && v !== null && v !== undefined && v !== '' ? r1(Number(v) / 2.54) : v);
+  const MI = (k, v) => (v === null ? v : k === 'weight' ? BWin(v) : isLb() ? Math.round(v * 2.54 * 10) / 10 : v);
+  const MU = (k, lb) => (k === 'weight' ? ((lb === undefined ? isLb() : lb) ? 'lb' : LL('кг', 'kg')) : (lb === undefined ? isLb() : lb) ? 'in' : LL('см', 'cm'));
+  const PLATES = (lb) => (lb ? ['10', '5', '2.5'] : ['5', '2.5', '1.25']);  // розміри дисків набору, від більшого
+  const QINV = (lb) => (lb ? ['qIL0', 'qIL1', 'qIL2'] : ['qI5', 'qI25', 'qI125']);  // поля дисків анкети: у кг — колишні id (їхні підказки в tips.js)
+  /* поле зросту в «Харчуванні» у фунтах: підпис і підказка — дюйми (у кг — як було, підказка з tips.js) */
+  const lbH = (t) => (isLb() ? t.replace(/Зріст, см|Height, cm/, LL('Зріст, дюймів', 'Height, in')).replace('id="meH"', `id="meH" data-tip="${esc(LL('Ваш зріст у дюймах — потрібен для розрахунку калорій.', 'Your height in inches — needed to calculate calories.'))}"`) : t);
+  /* підказка поля диска у фунтах (у кг — з tips.js): найменший — ще й про крок */
+  const invTip = (k, i) => (i < 2 ? LL(`Скільки у вас дисків по ${fmt(k)} lb — на обидві гантелі разом.`, `How many ${k} lb plates you have — for both dumbbells combined.`)
+    : LL(`Скільки дисків по ${fmt(k)} lb. Від 4 штук вага росте кроком 5 lb, інакше — 10 lb.`, `How many ${k} lb plates. With 4 or more, the weight goes up in 5 lb steps; otherwise in 10 lb steps.`));
+  window.__lb = isLb;  // підказки (tips.js) — кілограми в тексті → фунти
+  /* програма у фунтах для екранів і рушія: крок і межа тренажерів, стартові ваги, кілограми й сантиметри в текстах; набір дисків і межа гантелі власної програми — уже у фунтах */
+  const lbCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function unitsView(prog) {
+    if (!isLb() || !prog || typeof prog !== 'object') return prog;
+    const c = lbCache && lbCache.get(prog); if (c) return c;
+    const deep = (x, d) => {
+      if (typeof x === 'string') return ENGINE.lbText(x);
+      if (!x || typeof x !== 'object' || d > 12) return x;
+      if (Array.isArray(x)) return x.map((y) => deep(y, d + 1));
+      const o = {}; Object.keys(x).forEach((k) => { const v = x[k]; o[k] = typeof v === 'function' ? function () { return deep(v.apply(x, arguments), 0); } : deep(v, d + 1); }); return o;
+    };
+    const r = deep(prog, 0);
+    Object.keys(r.ex || {}).forEach((id) => {
+      const e = r.ex[id];
+      if (e.type === 'mach') { e.step = (e.step || 5) * 2; e.cap = Math.round((e.cap || 300) * ENGINE.LB / 10) * 10; if (typeof e.start === 'number') e.start = Math.round(e.start * ENGINE.LB / e.step) * e.step; }
+      else if (typeof e.start === 'number' && (e.type === 'db' || e.type === 'dbopt' || (e.type === 'time' && e.load))) e.start = ENGINE.lbNum(e.start);  // еспандер (рівень) і вага тіла — без перерахунку
+    });
+    if (!prog.custom && typeof r.cap === 'number') r.cap = ENGINE.lbNum(r.cap);
+    r.units = 'lb';
+    if (lbCache) lbCache.set(prog, r);
+    return r;
+  }
   /* програма для екранів — мовою застосунку (I18N.view: перекладена копія); генератор і рушій працюють з українським оригіналом PROGRAMS */
-  const G = () => I18N.view(PROGRAMS[DB.active]);
+  const G = () => unitsView(I18N.view(PROGRAMS[DB.active]));  // фунти — поверх мови (кілограми в текстах перераховуються вже перекладеними)
   const S = () => DB.settings;
   const nextN = () => Math.max(0, P().sessions.length + (P().offset || 0));  // не нижче нуля (див. ENGINE.planFor)
   /* назва тренування — і для старих записів, яких у програмі вже немає (Д1–Д3 після зміни днів чи анкети) */
@@ -248,6 +293,7 @@ window.APP_START = () => {
     clearInterval(elapsedT);
     if (view !== 'workout') keepAwake(false);
     if (!I18N.chosen) { nav.style.display = 'none'; return rLang(); }  // перший запуск — спершу мова
+    if (VOICE.setUnits) VOICE.setUnits(isLb() ? 'lb' : 'kg');  // голос: кілограми чи фунти
     ({ onboard: rOnboard, home: rHome, workout: rWorkout, summary: rSummary, plan: rPlan, progress: rProgress, body: rBody, more: rMore }[view] || rHome)();
     updateRadio();
   }
@@ -260,6 +306,29 @@ window.APP_START = () => {
       <p class="small muted">Змінити можна в «Більше» · You can change it later in “More”.</p>`;
   }
   function langPick(v) { const was = I18N.lang; I18N.set(v); if (v !== was) { location.reload(); return; } render(); }
+  /* одиниці (з 3.18.0): перемкнути — перевести журнал цього профілю (вага тренувань, диски, гриф) з округленням до дисків нового набору;
+     вага тіла й заміри зберігаються метрично — лише показ */
+  function unitsCard() {
+    if (!P()) return '';
+    return `<h2>${LL('Одиниці', 'Units')}</h2><div class="card"><div class="seg"><button type="button" class="${isLb() ? '' : 'on'}" data-act="unitsSet" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${isLb() ? 'on' : ''}" data-act="unitsSet" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>
+      <p class="tiny muted" style="margin-top:8px">${LL('Вага тренувань і набір дисків переводяться й округлюються до ваших дисків; вага тіла й заміри — лише показ.', 'Workout weights and your plate set are converted and rounded to your plates; body weight and measurements just display differently.')}</p></div>`;
+  }
+  function unitsSet(v) {
+    const p = P(); if (!p || v === (p.units || 'kg') || (v !== 'kg' && v !== 'lb')) return;
+    if (p.draft) { toast(LL('Спершу завершіть тренування', 'Finish your workout first')); return; }
+    if (!confirm(LL('Перевести ваги журналу? Вага округлиться до дисків нового набору.', 'Convert the weights in your log? They will be rounded to the plates of the new set.'))) return;
+    const toLb = v === 'lb', f = toLb ? ENGINE.LB : 1 / ENGINE.LB, from = PLATES(!toLb), to = PLATES(toLb), prog = PROGRAMS[DB.active];
+    const inv = {}; to.forEach((k, i) => { inv[k] = (p.inv || {})[from[i]] || 0; });
+    const step = ENGINE.stepFor(inv), snap = (x, st) => Math.max(0, Math.round(Math.round(x / st) * st * 100) / 100);
+    (p.sessions || []).forEach((s) => (s.sets || []).forEach((x) => {
+      const ex = prog && prog.ex[x.ex]; if (!ex || x.load === null || x.load === undefined || x.load === '' || !(Number(x.load) >= 0)) return;
+      if (ex.type === 'mach') x.load = snap(Number(x.load) * f, (ex.step || 5) * (toLb ? 2 : 1));
+      else if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) x.load = snap(Number(x.load) * f, step);
+    }));
+    p.inv = inv; p.handle = Math.round((Number(p.handle) || 0) * f * 2) / 2; p.units = v;
+    if (DB.active === 'me' && DB.custom && DB.custom.answers) { DB.custom.answers.units = v; DB.custom.answers.inv = Object.assign({}, inv); DB.custom.answers.handle = p.handle; }
+    save(); location.reload();
+  }
   function langCard() {
     return `<h2>${LL('Мова', 'Language')}</h2><div class="card"><div class="seg"><button type="button" class="${I18N.lang === 'uk' ? 'on' : ''}" data-act="langSet" data-v="uk">Українська</button><button type="button" class="${I18N.lang === 'en' ? 'on' : ''}" data-act="langSet" data-v="en">English (US)</button></div>
       <p class="tiny muted" style="margin-top:8px">${LL('Тексти, голос і тренер. Застосунок перезапуститься.', 'Texts, voice and coach. The app will restart.')}</p></div>`;
@@ -273,8 +342,13 @@ window.APP_START = () => {
   function qState() {
     if (!ui.q) {
       const acc = STORE.account(STORE.current) || {}, old = DB.custom && DB.custom.answers;
-      ui.q = { step: 0, err: false, edit: !!old, a: old ? JSON.parse(JSON.stringify(old)) : { name: acc.name && !isNewAcc(acc.name) ? acc.name : '', equip: [], limits: [], days: [], agree: false } };
-      const p = P(); if (!ui.q.a.inv) { ui.q.a.handle = p ? p.handle : 1; ui.q.a.inv = p ? Object.assign({}, p.inv) : { 5: 4, 2.5: 8, 1.25: 4 }; }
+      ui.q = { step: 0, err: false, edit: !!old, a: old ? JSON.parse(JSON.stringify(old)) : { name: acc.name && !isNewAcc(acc.name) ? acc.name : '', equip: [], limits: [], days: [], agree: false, units: I18N.lang === 'en' ? 'lb' : 'kg' } };
+      if (!ui.q.a.units) ui.q.a.units = 'kg';  // відповіді до 3.18.0 — у кілограмах
+      const p = P(); if (!ui.q.a.inv) {  // набір з поточного профілю — у розмірах одиниць анкети (ті самі кількості), гриф — перерахований
+        const lb = ui.q.a.units === 'lb', plb = !!(p && p.units === 'lb'), src = p ? p.inv : { 5: 4, 2.5: 8, 1.25: 4 }, from = PLATES(plb), to = PLATES(lb), h = p ? p.handle : 1;
+        ui.q.a.inv = {}; to.forEach((k, i) => { ui.q.a.inv[k] = Number(src[from[i]]) || 0; });
+        ui.q.a.handle = plb === lb ? h : Math.round(h * (lb ? ENGINE.LB : 1 / ENGINE.LB) * 2) / 2;
+      }
     }
     return ui.q;
   }
@@ -282,17 +356,19 @@ window.APP_START = () => {
   function qRead() {
     const q = qState(), a = q.a, v = (id) => { const e = document.getElementById(id); return e ? e.value : undefined; };
     if (v('qName') !== undefined) a.name = v('qName').trim();
-    ['age', 'height', 'weight'].forEach((k) => { const x = v('q' + k); if (x !== undefined) a[k] = num(x); });
+    const lb = a.units === 'lb';
+    ['age', 'height', 'weight'].forEach((k) => { const x = v('q' + k); if (x !== undefined) a[k] = k === 'height' ? HDin(num(x), lb) : k === 'weight' ? BWin(num(x), lb) : num(x); });  // зріст і вага — завжди метрично
     if (v('qHandle') !== undefined) a.handle = num(v('qHandle'));
-    [['5', 'qI5'], ['2.5', 'qI25'], ['1.25', 'qI125']].forEach(([k, id]) => { const x = v(id); if (x !== undefined) a.inv[k] = num(x); });
+    PLATES(lb).forEach((k, i) => { const x = v(QINV(lb)[i]); if (x !== undefined) a.inv[k] = num(x); });
   }
   function qErrors(step) {
     const a = qState().a, e = GEN.check(a).errors, out = {};
-    QFIELDS[step].forEach((k) => { if (e[k]) out[k] = e[k]; });
+    QFIELDS[step].forEach((k) => { if (e[k]) out[k] = TR(e[k]); });
+    if (a.units === 'lb') { if (out.height) out.height = LL('Зріст — від 51 до 86 дюймів', 'Height — 51 to 86 in'); if (out.weight) out.weight = LL('Вага — від 89 до 440 lb', 'Weight — 89 to 440 lb'); }  // межі 130–220 см і 40–200 кг після перерахунку
     if (step === 'equip' && a.equip.indexOf('db') >= 0) {
-      if (!(a.handle >= 0 && a.handle <= 10)) out.handle = LL('Вага грифа — від 0 до 10 кг', "Handle weight must be between 0 and 10 kg");
-      if (['5', '2.5', '1.25'].some((k) => !(a.inv[k] >= 0 && a.inv[k] <= 40 && Number.isInteger(a.inv[k])))) out.inv = LL('Кількість дисків — ціле число від 0 до 40', "Number of plates must be a whole number from 0 to 40");
-      else if (!(a.inv['5'] + a.inv['2.5'] + a.inv['1.25'] > 0)) out.inv = LL('Вкажіть, скільки дисків є', "Enter how many plates you have");
+      if (!(a.handle >= 0 && a.handle <= (a.units === 'lb' ? 25 : 10))) out.handle = a.units === 'lb' ? LL('Вага грифа — від 0 до 25 lb', "Handle weight must be between 0 and 25 lb") : LL('Вага грифа — від 0 до 10 кг', "Handle weight must be between 0 and 10 kg");
+      if (PLATES(a.units === 'lb').some((k) => !(a.inv[k] >= 0 && a.inv[k] <= 40 && Number.isInteger(a.inv[k])))) out.inv = LL('Кількість дисків — ціле число від 0 до 40', "Number of plates must be a whole number from 0 to 40");
+      else if (!(PLATES(a.units === 'lb').reduce((t, k) => t + (a.inv[k] || 0), 0) > 0)) out.inv = LL('Вкажіть, скільки дисків є', "Enter how many plates you have");
       else if (!ENGINE.capOf(a.inv)) out.inv = LL('Потрібна хоча б пара однакових дисків — по одному на кожен бік грифа', "You need at least one pair of matching plates — one for each side of the handle");
     }
     return out;
@@ -303,7 +379,7 @@ window.APP_START = () => {
     const opt = (act, v, label, sub, on) => { const m = act === 'qLimit' || act === 'qEquip';
       return `<button type="button" class="qopt${m ? ' multi' : ''}${on ? ' on' : ''}" data-act="${act}" data-v="${v}" ${m ? `role="checkbox" aria-checked="${on}"` : `aria-pressed="${on}"`}><b>${label}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</button>`; };
     const err = (k) => (errs[k] ? `<p class="qerr">${esc(errs[k])}</p>` : '');
-    const numIn = (id, label, val, mode) => `<label class="f" for="${id}">${label}</label><input id="${id}" inputmode="${mode || 'numeric'}" autocomplete="off" value="${val === null || val === undefined || isNaN(val) ? '' : fmt(val)}">`;
+    const numIn = (id, label, val, mode, tip) => `<label class="f" for="${id}">${label}</label><input id="${id}"${tip ? ` data-tip="${esc(tip)}"` : ''} inputmode="${mode || 'numeric'}" autocomplete="off" value="${val === null || val === undefined || isNaN(val) ? '' : fmt(val)}">`;
     let body = '';
     if (step === 'who') body = `${LL(`<h1>Як вас звати?</h1><p class="muted small">Імʼя бачитимете на екрані входу.</p>
       <label class="f" for="qName">Імʼя</label><input id="qName" maxlength="24" autocomplete="given-name" value="`, `<h1>What’s your name?</h1><p class="muted small">You’ll see it on the start screen.</p>
@@ -312,7 +388,7 @@ window.APP_START = () => {
       <h2>Sex</h2><div class="grid2">`)}${opt('qSex', 'm', LL('Чоловік', "Male"), '', a.sex === 'm')}${opt('qSex', 'f', LL('Жінка', "Female"), '', a.sex === 'f')}</div>${err('sex')}`;
     else if (step === 'body') body = `${LL(`<h1>Про вас</h1><p class="muted small">Потрібно, щоб розрахувати навантаження й харчування.</p>
       `, `<h1>About you</h1><p class="muted small">We need this to calculate your training load and nutrition.</p>
-      `)}${numIn('qage', LL('Вік, років', "Age, years"), a.age)}${err('age')}${numIn('qheight', LL('Зріст, см', "Height, cm"), a.height)}${err('height')}${numIn('qweight', LL('Вага, кг', "Weight, kg"), a.weight, 'decimal')}${err('weight')}`;
+      `)}<div class="seg" style="margin:4px 0 10px"><button type="button" class="${a.units !== 'lb' ? 'on' : ''}" data-act="qUnits" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${a.units === 'lb' ? 'on' : ''}" data-act="qUnits" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>${numIn('qage', LL('Вік, років', "Age, years"), a.age)}${err('age')}${numIn('qheight', a.units === 'lb' ? LL('Зріст, дюймів', 'Height, in') : LL('Зріст, см', "Height, cm"), HD(a.height, a.units === 'lb'), undefined, a.units === 'lb' ? LL('Зріст у дюймах — для норми калорій.', 'Height in inches — for your calorie target.') : '')}${err('height')}${numIn('qweight', a.units === 'lb' ? LL('Вага, lb', 'Weight, lb') : LL('Вага, кг', "Weight, kg"), BW(a.weight, a.units === 'lb'), 'decimal', a.units === 'lb' ? LL('Вага у фунтах — для навантаження й норми білка.', 'Weight in pounds — for your training load and protein target.') : '')}${err('weight')}`;
     else if (step === 'goal') body = `${LL(`<h1>Ваша мета</h1><div class="pick">`, `<h1>Your goal</h1><div class="pick">`)}${[['loss', LL('Схуднути', "Lose weight"), LL('менше жиру, більше сил', "less fat, more energy")], ['muscle', LL('Набрати мʼязи', "Build muscle"), LL('більше обʼєму й сили', "more size and strength")], ['health', LL('Сила й здоровʼя', "Strength and health"), LL('міцне тіло без крайнощів', "a strong body, no extremes")], ['posture', LL('Спина й осанка', "Back and posture"), LL('рівна спина, менше болю від сидіння', "a straight back, less pain from sitting")]].map(([v, l, d]) => opt('qGoal', v, l, d, a.goal === v)).join('')}</div>${err('goal')}`;
     else if (step === 'level') body = `${LL(`<h1>Досвід тренувань</h1><div class="pick">`, `<h1>Training experience</h1><div class="pick">`)}${opt('qLevel', 'new', LL('Новачок', "Beginner"), LL('або перерва понад пів року', "or a break of more than six months"), a.level === 'new')}${opt('qLevel', 'exp', LL('Тренуюсь регулярно', "I train regularly"), LL('пів року й більше без перерв', "six months or more without a break"), a.level === 'exp')}</div>${err('level')}`;
     else if (step === 'equip') {
@@ -320,9 +396,9 @@ window.APP_START = () => {
       body = `${LL(`<h1>Що є вдома</h1><p class="muted small">Можна обрати кілька. Для тяг (спина) потрібні гантелі, петля або блок.</p>
       <div class="pick">`, `<h1>What you have at home</h1><p class="muted small">Pick all that apply. For rows (back), you need dumbbells, a resistance band, or a cable machine.</p>
       <div class="pick">`)}${opt('qEquip', 'db', LL('Гантелі з дисками', "Plate-loaded dumbbells"), LL('розбірні: гриф + диски', "adjustable: handle + plates"), db)}${opt('qEquip', 'band', LL('Петля-еспандер', "Resistance band"), LL('резинка з кріпленням до дверей', "band with a door anchor"), a.equip.indexOf('band') >= 0)}</div>${err('equip')}
-      ${db ? `${LL(`<div class="card"><b>Ваші гантелі</b>`, `<div class="card"><b>Your dumbbells</b>`)}${numIn('qHandle', LL('Вага одного грифа без дисків, кг', "Weight of one handle without plates, kg"), a.handle, 'decimal')}${err('handle')}${LL(`
+      ${db ? `${LL(`<div class="card"><b>Ваші гантелі</b>`, `<div class="card"><b>Your dumbbells</b>`)}${numIn('qHandle', a.units === 'lb' ? LL('Вага одного грифа без дисків, lb', 'Weight of one handle without plates, lb') : LL('Вага одного грифа без дисків, кг', "Weight of one handle without plates, kg"), a.handle, 'decimal')}${err('handle')}${LL(`
         <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>`, `
-        <label class="f">Total plates for both dumbbells</label><div class="grid3"><div>`)}${numIn('qI5', LL('5 кг', "5 kg"), a.inv['5'])}</div><div>${numIn('qI25', LL('2,5 кг', "2.5 kg"), a.inv['2.5'])}</div><div>${numIn('qI125', LL('1,25 кг', "1.25 kg"), a.inv['1.25'])}</div></div>${err('inv')}</div>` : ''}${LL(`
+        <label class="f">Total plates for both dumbbells</label><div class="grid3"><div>`)}${PLATES(a.units === 'lb').map((k, i) => numIn(QINV(a.units === 'lb')[i], fmt(k) + ' ' + MU('weight', a.units === 'lb'), a.inv[k], undefined, a.units === 'lb' ? invTip(k, i) : '')).join('</div><div>')}</div></div>${err('inv')}</div>` : ''}${LL(`
       <h2>Тренажери вдома</h2><p class="muted small">Ті самі вправи, що в залі: історія й рекорди спільні, вагу застосунок рахує окремо для дому й залу. Додати чи прибрати можна будь-коли: «Більше» → «Обладнання вдома».</p>
       <button type="button" class="wide`, `
       <h2>Machines at home</h2><p class="muted small">Same exercises as at the gym: history and PRs are shared, but the app tracks weights separately for home and gym. You can add or remove machines anytime: “More” → “Home equipment.”</p>
@@ -342,9 +418,9 @@ window.APP_START = () => {
       const blk = GEN.check(a).block, lim = a.limits.filter((x) => x !== 'none');
       body = `${LL(`<h1>Майже готово</h1><div class="card"><ul class="list">
         <li><span>Імʼя</span><b>`, `<h1>Almost done</h1><div class="card"><ul class="list">
-        <li><span>Name</span><b>`)}${esc(a.name)}${LL(`</b></li><li><span>Вік · зріст · вага</span><b>`, `</b></li><li><span>Age · height · weight</span><b>`)}${fmt(a.age)} · ${fmt(a.height)}${LL(` см · `, ` cm · `)}${fmt(a.weight)}${LL(` кг</b></li>
+        <li><span>Name</span><b>`)}${esc(a.name)}${LL(`</b></li><li><span>Вік · зріст · вага</span><b>`, `</b></li><li><span>Age · height · weight</span><b>`)}${fmt(a.age)} · ${fmt(HD(a.height, a.units === 'lb'))} ${MU('height', a.units === 'lb')} · ${fmt(BW(a.weight, a.units === 'lb'))}${(a.units === 'lb' ? (t) => ENGINE.unitize('lb', t) : (t) => t)(LL(` кг</b></li>
         <li><span>Мета</span><b>`, ` kg</b></li>
-        <li><span>Goal</span><b>`)}${esc(GEN.GOALS[a.goal] || '')}${LL(`</b></li><li><span>Де</span><b>`, `</b></li><li><span>Where</span><b>`)}${esc((GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `${LL(`<li><span>Обладнання вдома</span><b>`, `<li><span>Home equipment</span><b>`)}${esc(kitText(a.equip))}</b></li>`}${LL(`
+        <li><span>Goal</span><b>`))}${esc(GEN.GOALS[a.goal] || '')}${LL(`</b></li><li><span>Де</span><b>`, `</b></li><li><span>Where</span><b>`)}${esc((GEN.PLACES[a.place] || '').toLowerCase())}</b></li>${a.place === 'gym' ? '' : `${LL(`<li><span>Обладнання вдома</span><b>`, `<li><span>Home equipment</span><b>`)}${esc(kitText(a.equip))}</b></li>`}${LL(`
         <li><span>Здоровʼя</span><b>`, `
         <li><span>Health</span><b>`)}${lim.length ? lim.map((x) => ({ back: LL('спина', "back"), knees: LL('коліна', "knees"), shoulders: LL('плечі', "shoulders"), heart: LL('тиск/серце', "blood pressure/heart"), pregnant: LL('вагітність', "pregnancy") }[x])).join(', ') : LL('без обмежень', "no limitations")}${LL(`</b></li>
         <li><span>Дні</span><b>`, `</b></li>
@@ -379,7 +455,7 @@ window.APP_START = () => {
     const fresh = !DB.profiles.me;
     if (fresh) DB.profiles.me = newProfile('me');
     const p = DB.profiles.me;
-    p.days = a.days.slice().sort(); p.handle = a.handle; p.inv = { 5: a.inv['5'], 2.5: a.inv['2.5'], 1.25: a.inv['1.25'] };
+    p.days = a.days.slice().sort(); p.handle = a.handle; p.units = a.units === 'lb' ? 'lb' : 'kg'; p.inv = {}; PLATES(p.units === 'lb').forEach((k) => { p.inv[k] = a.inv[k] || 0; });
     p.me = Object.assign({}, p.me || {}, { height: a.height, age: a.age });
     if (!fresh) keepWeek(p, oldPw, PROGRAMS.me);
     if (p.draft) p.draft = null;
@@ -413,7 +489,7 @@ window.APP_START = () => {
     return parts.filter(Boolean).join(', ');
   };
   /* підказка-хмарка до числа ваги: на тренажері й еспандері — своя (загальна в tips.js — про диски на гантель) */
-  const loadTip = (ex, what) => (isMach(ex) ? `${LL(` data-tip="Вага на тренажері чи блоці, кг`, ` data-tip="Weight on the machine or cable, kg`)}${what}"` : ex.type === 'band' ? `${LL(` data-tip="Рівень еспандера: номер джгута або сума, якщо кілька разом`, ` data-tip="Band resistance level: band number, or the sum if using several together`)}${what}"` : '');
+  const loadTip = (ex, what) => (isMach(ex) ? `${KG(LL(` data-tip="Вага на тренажері чи блоці, кг`, ` data-tip="Weight on the machine or cable, kg`))}${what}"` : ex.type === 'band' ? `${LL(` data-tip="Рівень еспандера: номер джгута або сума, якщо кілька разом`, ` data-tip="Band resistance level: band number, or the sum if using several together`)}${what}"` : '');
   /* крок ваги: тренажер — з ваг людини на ньому (ENGINE.machStep: її зал може мати 2,5 чи 4,5 замість 5), еспандер — рівень, гантелі — диски */
   /* place — де тренування (поки воно складається, чернетки ще немає — місце передають явно) */
   const loadStep = (ex, id, place) => (isMach(ex) ? ENGINE.machStep(ex, histAt(id, place || (P().draft || {}).place)) : ex.type === 'band' ? 1 : ENGINE.stepFor(P().inv));
@@ -437,17 +513,19 @@ window.APP_START = () => {
     for (let i = h.length - 1; i >= 0; i--) { const s = h[i].sets.find((x) => x.variant); if (s) return s.variant; }
     return ex.variants[0].id;
   }
-  function discs(side) { if (!side.length) return ''; return '<span class="disc"><b></b>' + side.map((x) => `<i class="d${String(x).replace('.', '')}"></i>`).join('') + '</span>'; }
+  /* малюнок дисків: фунтові 10 / 5 / 2,5 lb — ті самі три розміри, що 5 / 2,5 / 1,25 кг (з 3.18.0) */
+  const DISC_LB = { 10: '5', 5: '25', 2.5: '125' };
+  function discs(side) { if (!side.length) return ''; return '<span class="disc"><b></b>' + side.map((x) => `<i class="d${isLb() ? DISC_LB[x] || '125' : String(x).replace('.', '')}"></i>`).join('') + '</span>'; }
   function plateLine(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return '';
-    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap);
+    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
     return `<span class="plt">${pl.ok ? (pl.side.length ? LL('на кожен бік: ', "per side: ") + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)}</span>`;
   }
 
   /* ---------- чернетка тренування ---------- */
   function plateSide(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return null;
-    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap);
+    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
     return pl.ok ? pl.side : null;
   }
   function makeItem(it, ss, plan, step, o) {
@@ -499,7 +577,7 @@ window.APP_START = () => {
   /* Голос: якщо для профілю є записаний пакет і в ньому є всі речення — грає запис; інакше системний голос. */
   const missedSegs = new Set();
   /* речення-вага з voice.target: «40 кілограмів.», «13 з половиною кілограма.», «6,8 кілограма.», «… дисків.» */
-  const KG_SAY = /^\d+(,\d+)?( з половиною)? кілограм(а|и|ів)?( дисків)?\.$/, ON_SCREEN = LL('Вага — на екрані.', "The weight is on the screen.");
+  const KG_SAY = /^\d+(,\d+)?( з половиною)? (кілограм|фунт)(а|и|ів)?( дисків)?\.$/, ON_SCREEN = LL('Вага — на екрані.', "The weight is on the screen.");
   const packId = () => { const v = S().voice; return v.packs && DB.active ? v.packs[DB.active] || '' : ''; };
   /* Хто зараз говорить і чому — видно в «Більше» → «Голосовий тренер» (щоб не гадати, чому звучить системний голос). */
   const voiceInfo = { mode: '', why: '' };
@@ -781,12 +859,12 @@ window.APP_START = () => {
     const prog = G(), it = d.items[cs.i], ex = prog.ex[it.ex], s = it.sets[cs.j], ij = `data-i="${cs.i}" data-j="${cs.j}"`;
     const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${cs.i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
     const tgt = ex.type === 'amrap' ? LL('скільки зможете', "as many as you can") : s.type === 'M' ? LL('до відмови', "to failure") : s.type === 'W' ? LL('легко', "easy") : (it.min === it.max ? it.max : it.min + '–' + it.max) + (ex.type === 'time' ? LL(' с', " sec") : '');
-    const mt = (w) => (isMach(ex) ? ` data-tip="${w}${LL(` на крок тренажера: `, ` one machine step: `)}${fmt(loadStep(ex, it.ex))}${LL(` кг."`, ` kg."`)}` : '');
+    const mt = (w) => (isMach(ex) ? ` data-tip="${w}${LL(` на крок тренажера: `, ` one machine step: `)}${fmt(loadStep(ex, it.ex))}${KG(LL(` кг."`, ` kg."`))}` : '');
     const pm = (f) => `<div class="cpm"><button type="button" data-act="cstep" data-f="${f}" data-d="-1" ${ij}${LL(` aria-label="менше"`, ` aria-label="decrease"`)}${f === 'load' ? mt(LL('Менше', "Down")) : ''}>−</button><button type="button" data-act="cstep" data-f="${f}" data-d="1" ${ij}${LL(` aria-label="більше"`, ` aria-label="increase"`)}${f === 'load' ? mt(LL('Більше', "Up")) : ''}>+</button></div>`;
     const kgOn = hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '';
-    const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? LL('рівень еспандера', "band level") : isMach(ex) ? LL('вага, кг', "weight, kg") : LL('диски на гантель, кг', "plates per dumbbell, kg")}</span>
+    const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? LL('рівень еспандера', "band level") : isMach(ex) ? KG(LL('вага, кг', "weight, kg")) : KG(LL('диски на гантель, кг', "plates per dumbbell, kg"))}</span>
       <button type="button" class="cval" data-act="kp" data-f="load" ${ij}${loadTip(ex, LL('. Торкніться, щоб ввести інше число.', ". Tap to enter a different number."))}>${esc(loadText(ex, s.load))}</button>${pm('load')}
-      <span class="tiny muted"${isMach(ex) ? LL(' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. На вашому тренажері інший — введіть свою вагу цифрами: застосунок підхопить крок."', " data-tip=\"This machine’s step: the − and + buttons change the weight by this many kg. If your machine’s step is different, type in your weight and the app will pick it up.\"") : ex.type === 'band' ? LL(' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."', " data-tip=\"Level is the sum of the band numbers if you use more than one.\"") : ''}>${kgOn ? LL('у руках ', "total ") + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + LL(' кг', " kg") : ex.type === 'band' ? LL('сума номерів джгутів', "sum of band numbers") : isMach(ex) ? LL('на тренажері · крок ', "on machine · step ") + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
+      <span class="tiny muted"${isMach(ex) ? KG(LL(' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. На вашому тренажері інший — введіть свою вагу цифрами: застосунок підхопить крок."', " data-tip=\"This machine’s step: the − and + buttons change the weight by this many kg. If your machine’s step is different, type in your weight and the app will pick it up.\"")) : ex.type === 'band' ? LL(' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."', " data-tip=\"Level is the sum of the band numbers if you use more than one.\"") : ''}>${kgOn ? LL('у руках ', "total ") + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + KG(LL(' кг', " kg")) : ex.type === 'band' ? LL('сума номерів джгутів', "sum of band numbers") : isMach(ex) ? LL('на тренажері · крок ', "on machine · step ") + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
     const boxR = `<div class="cbox"><span class="cl2">${ex.type === 'time' ? LL('секунди', "seconds") : LL('повторення', "reps")}${ex.side ? LL(' · на бік', " · per side") : ''}</span>
       <button type="button" class="cval" data-act="kp" data-f="reps" ${ij}>${s.reps === null || s.reps === undefined ? '—' : s.reps}</button>${pm('reps')}${LL(`
       <span class="tiny muted">ціль: `, `
@@ -900,7 +978,7 @@ window.APP_START = () => {
     let note = it.note || '';
     if (it.ex === 'goblet' && it.variant === 'g1' && /максимальна|^Max weight/.test(note)) note += LL(' Час переходити на «2 гантелі на плечах».', " Time to move up to “2 dumbbells on shoulders.”");
     const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
-    const hdr = `${LL(`<div class="tr h"><span>підхід</span><span>минулого</span><span`, `<div class="tr h"><span>set</span><span>previous</span><span`)}${loadTip(ex, '.')}>${ex.type === 'band' ? LL('рівень', "level") : hasKg(ex) ? LL('диски, кг', "plates, kg") : isMach(ex) ? LL('вага, кг', "weight, kg") : ''}</span><span>${ex.type === 'time' ? LL('секунди', "seconds") : LL('повтор.', "reps")}</span><span></span></div>`;
+    const hdr = `${LL(`<div class="tr h"><span>підхід</span><span>минулого</span><span`, `<div class="tr h"><span>set</span><span>previous</span><span`)}${loadTip(ex, '.')}>${ex.type === 'band' ? LL('рівень', "level") : hasKg(ex) ? KG(LL('диски, кг', "plates, kg")) : isMach(ex) ? KG(LL('вага, кг', "weight, kg")) : ''}</span><span>${ex.type === 'time' ? LL('секунди', "seconds") : LL('повтор.', "reps")}</span><span></span></div>`;
     const rows = it.sets.map((s, j) => {
       const lab = s.type === 'N' ? String(it.sets.slice(0, j + 1).filter((x) => x.type !== 'W').length) : ({ W: LL('Р', "W"), D: LL('Д', "D"), F: LL('В', "F"), M: LL('М', "M") }[s.type]);
       const loadCell = isLoad(ex) ? `<button type="button" class="cl" data-act="kp" data-f="load" data-i="${i}" data-j="${j}"${loadTip(ex, LL('. Торкніться, щоб ввести інше число.', ". Tap to enter a different number."))}>${esc(loadText(ex, s.load))}${hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '' ? LL('<small>+ гриф</small>', "<small>+ handle</small>") : ''}</button>` : '<span class="cl na">—</span>';
@@ -1014,14 +1092,14 @@ window.APP_START = () => {
   function drawKp() {
     const d = P().draft, it = d.items[kp.i], s = it.sets[kp.j], ex = G().ex[it.ex], isRep = kp.f === 'reps';
     const step = isRep ? (ex.type === 'time' ? 5 : 1) : loadStep(ex, it.ex);
-    const unit = isRep ? (ex.type === 'time' ? LL('с', "sec") : LL('повт.', "reps")) : (ex.type === 'band' ? LL('рівень', "level") : isMach(ex) ? LL('кг', "kg") : LL('кг дисків на гантель', "kg of plates per dumbbell"));
+    const unit = isRep ? (ex.type === 'time' ? LL('с', "sec") : LL('повт.', "reps")) : (ex.type === 'band' ? LL('рівень', "level") : isMach(ex) ? KG(LL('кг', "kg")) : KG(LL('кг дисків на гантель', "kg of plates per dumbbell")));
     const title = esc(G().ex[it.ex].name) + ' · ' + setName(it, kp.j);
     const v = num(kp.str);
     let extra = '';
     if (!isRep && hasKg(ex)) {
-      const pl = v === null ? null : ENGINE.plates(v, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap);
+      const pl = v === null ? null : ENGINE.plates(v, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
       const tot = v === null ? 0 : ENGINE.totalLoad(ex, v, P().handle, it.variant);
-      extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : LL('усього в руках: ', "total in hand: ") + fmt(tot) + LL(' кг', " kg")}${pl ? ' · ' + (pl.ok ? (pl.side.length ? LL('на бік: ', "per side: ") + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
+      extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : LL('усього в руках: ', "total in hand: ") + fmt(tot) + KG(LL(' кг', " kg"))}${pl ? ' · ' + (pl.ok ? (pl.side.length ? LL('на бік: ', "per side: ") + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
     }
     const quick = [];
     if (s.prev) quick.push([LL('минулого: ', "last time: ") + (isRep ? s.prev.reps : loadText(ex, s.prev.load)), isRep ? s.prev.reps : s.prev.load]);
@@ -1031,7 +1109,7 @@ window.APP_START = () => {
     const rir = isRep ? `${LL(`<label class="f">Запас повторень (скільки ще могли б)</label><div class="seg">`, `<label class="f">Reps in reserve (how many more you could do)</label><div class="seg">`)}${[[null, '—'], [0, '0'], [1, '1'], [2, '2'], [3, '3'], [4, '4+']].map(([x, l]) => `<button type="button" class="${kp.rir === x ? 'on' : ''}" data-k="rir" data-v="${x === null ? '' : x}">${l}</button>`).join('')}</div>` : '';
     openSheet(`<div class="sp"><b class="small">${title}${LL(`</b><button type="button" class="sm ghost" data-k="close">Закрити</button></div>
       <div class="kv"`, `</b><button type="button" class="sm ghost" data-k="close">Close</button></div>
-      <div class="kv"`)}${!isRep && isMach(ex) ? LL(' data-tip="Число, яке ви вводите: вага на тренажері чи блоці, кг."', " data-tip=\"The number you enter: weight on the machine or cable, kg.\"") : ''}>${kp.str === '' ? (isRep ? '—' : ex.type === 'dbopt' ? LL('без', "none") : '—') : esc(kp.str)} <small>${unit}</small></div>${extra}
+      <div class="kv"`)}${!isRep && isMach(ex) ? KG(LL(' data-tip="Число, яке ви вводите: вага на тренажері чи блоці, кг."', " data-tip=\"The number you enter: weight on the machine or cable, kg.\"")) : ''}>${kp.str === '' ? (isRep ? '—' : ex.type === 'dbopt' ? LL('без', "none") : '—') : esc(kp.str)} <small>${unit}</small></div>${extra}
       <div class="quick">${quick.map(([l, x]) => `<button type="button" class="sm" data-k="set" data-v="${x === null || x === undefined ? '' : x}">${esc(l)}</button>`).join('')}</div>${rir}
       <div class="keys">${['1', '2', '3', '−', '4', '5', '6', '+', '7', '8', '9', '⌫', isRep ? '' : ',', '0', '', 'ok'].map((k) => {
         if (k === '') return '<span></span>';
@@ -1081,7 +1159,7 @@ window.APP_START = () => {
     app.innerHTML = `${LL(`<div class="card hero" style="margin-top:calc(14px + env(safe-area-inset-top))"><div class="chip">Тиждень `, `<div class="card hero" style="margin-top:calc(14px + env(safe-area-inset-top))"><div class="chip">Week `)}${s.week}${LL(`</div><h1>Тренування завершено 🎉</h1><p class="muted">`, `</div><h1>Workout complete 🎉</h1><p class="muted">`)}${esc(woTitle(s.workout))} · ${dm(s.date)}</p></div>
       <div class="grid2"><div class="stat"><b>${s.mins}${LL(` хв</b><span>тривалість</span></div><div class="stat"><b>`, ` min</b><span>duration</span></div><div class="stat"><b>`)}${work}${LL(`</b><span>робочих підходів</span></div>
       <div class="stat"><b>`, `</b><span>working sets</span></div>
-      <div class="stat"><b>`)}${vol ? fmt(Math.round(vol)) + LL(' кг', " kg") : '—'}${LL(`</b><span>обсяг`, `</b><span>volume`)}${dv !== null ? ' · ' + (dv >= 0 ? '+' : '') + dv + LL(' % до минулого', "% vs. last time") : ''}</span></div><div class="stat"><b>${s.prs || 0}${LL(`</b><span>рекордів</span></div></div>
+      <div class="stat"><b>`)}${vol ? fmt(Math.round(vol)) + KG(LL(' кг', " kg")) : '—'}${LL(`</b><span>обсяг`, `</b><span>volume`)}${dv !== null ? ' · ' + (dv >= 0 ? '+' : '') + dv + LL(' % до минулого', "% vs. last time") : ''}</span></div><div class="stat"><b>${s.prs || 0}${LL(`</b><span>рекордів</span></div></div>
       `, `</b><span>PRs</span></div></div>
       `)}${s.prList && s.prList.length ? `${LL(`<h2>🏆 Рекорди</h2><div class="card"><ul class="list">`, `<h2>🏆 PRs</h2><div class="card"><ul class="list">`)}${s.prList.map((x) => `<li><span>${esc(prog.ex[x.ex].name)}</span><span class="chip g">${x.types.map((t) => ({ e1rm: LL('максимум', "est. 1RM"), weight: LL('вага', "weight"), reps: LL('повторення', "reps") }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}${LL(`
       <h2>Що попрацювало</h2><div class="card">`, `
@@ -1102,7 +1180,7 @@ window.APP_START = () => {
     g.fillStyle = '#fff'; g.font = F(700, 64); g.fillText(LL('Тренування завершено', "Workout complete"), 80, 170);
     g.font = F(400, 40); g.globalAlpha = 0.9; g.fillText(woTitle(s.workout) + ' · ' + dm(s.date), 80, 240); g.globalAlpha = 1;
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
-    [[s.mins + LL(' хв', " min"), LL('тривалість', "duration")], [String(s.sets.filter((x) => x.type !== 'W').length), LL('підходів', "sets")], [vol ? Math.round(vol) + LL(' кг', " kg") : '—', LL('обсяг', "volume")], [String(s.prs || 0), LL('рекордів', "PRs")]].forEach((x, k) => {
+    [[s.mins + LL(' хв', " min"), LL('тривалість', "duration")], [String(s.sets.filter((x) => x.type !== 'W').length), LL('підходів', "sets")], [vol ? Math.round(vol) + KG(LL(' кг', " kg")) : '—', LL('обсяг', "volume")], [String(s.prs || 0), LL('рекордів', "PRs")]].forEach((x, k) => {
       const X = 80 + (k % 2) * 480, Y = 380 + Math.floor(k / 2) * 240;
       g.fillStyle = '#0d3937'; g.fillRect(X, Y, 440, 200); g.fillStyle = '#1c4b49'; g.fillRect(X, Y, 6, 200);
       g.fillStyle = '#fff'; g.font = F(700, 84); g.fillText(x[0], X + 36, Y + 110); g.fillStyle = '#e8f0ef'; g.font = F(400, 34); g.fillText(x[1], X + 36, Y + 165); g.fillStyle = '#fff';
@@ -1148,7 +1226,7 @@ window.APP_START = () => {
       ['#tabs', LL('План — 12 тижнів і історія. Прогрес — графіки й рекорди. Тіло — заміри, харчування, фото. Більше — голос і налаштування.', "Plan: 12 weeks and your history. Progress: charts and PRs. Body: measurements, nutrition, photos. More: voice and settings.")]],
     /* текст про вагу — за тим, що в рамці: диски, тренажер, еспандер чи лише повторення */
     coach: [['.ctarget', () => { const l = (document.querySelector('.ctarget .cl2') || {}).textContent || '', t = LL(' Міняйте кнопками − і + або торкніться числа.', " Adjust with the − and + buttons, or tap the number.");
-      return /диски|plates/.test(l) ? LL('Ціль підходу. Вага — скільки дисків на гантель; поруч — повторення.', "Set target. Weight is the plates per dumbbell; next to it, reps.") + t : /вага/.test(l) ? LL('Ціль підходу. Вага на тренажері чи блоці, кг; поруч — повторення.', "Set target. Weight on the machine or cable, kg; next to it, reps.") + t
+      return /диски|plates/.test(l) ? LL('Ціль підходу. Вага — скільки дисків на гантель; поруч — повторення.', "Set target. Weight is the plates per dumbbell; next to it, reps.") + t : /вага/.test(l) ? KG(LL('Ціль підходу. Вага на тренажері чи блоці, кг; поруч — повторення.', "Set target. Weight on the machine or cable, kg; next to it, reps.")) + t
         : /еспандер|band/.test(l) ? LL('Ціль підходу. Рівень еспандера; поруч — повторення.', "Set target. Band level; next to it, reps.") + t : LL('Ціль підходу: ', "Set target: ") + (/секунди/.test(l) ? LL('секунди.', "seconds.") : LL('повторення.', "reps.")) + t; }],
       ['.coach .plt', LL('Скільки дисків надіти з кожного боку гантелі.', "How many plates to put on each side of the dumbbell.")],
       ['.cdone', LL('Зробили підхід — натисніть. Тренер сам запустить відпочинок і скаже, що далі.', "Finished the set? Tap here. The coach will start your rest and tell you what’s next.")],
@@ -1179,9 +1257,11 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`${LL(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>⚖️ Кілограми або фунти</b><div class="small muted">В анкеті й у «Більше» → «Одиниці»: кг і см або фунти й дюйми. Набір дисків у фунтах — 10 · 5 · 2,5 lb. Перемкнули — вага тренувань переводиться й округлюється до ваших дисків; вага тіла й заміри просто показуються в нових одиницях.</div></li>
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">`, `<div class="sp"><b>What the app can do</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
       <ul class="list">
+        <li style="display:block"><b>⚖️ Kilograms or pounds</b><div class="small muted">In the questionnaire and in “More” → “Units”: kg and cm, or pounds and inches. Plates in pounds — 10 · 5 · 2.5 lb. When you switch, workout weights are converted and rounded to your plates; body weight and measurements simply display in the new units.</div></li>
         <li style="display:block"><b>↩ Coming back after a break</b><div class="small muted">Haven’t trained for 2 weeks or more? The app lowers your weights automatically: after a break of up to a month, the first week is ≈ 20% lighter; after a longer one (or 2+ weeks if you’re 60 or older), the first week is a third of your previous weight, then more each week, back to your previous weight in half the length of the break. No failure, myo-reps, or drop sets.</div></li>
         <li style="display:block"><b>🔔 Reminders</b><div class="small muted">`)}${TX(LL('«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, а на іконці «1», поки тренування не почато. Працює в застосунку з іконки на початковому екрані.', "“More” → “Reminders”: on workout days, a notification at the time you choose, plus a “1” badge on the app icon until you start your workout. Works in the app opened from the Home Screen icon."), LL('«Більше» → «Нагадування»: у дні тренувань в обраний час — сповіщення, поки тренування не почато. Працює і в Chrome, і в застосунку з іконки.', "“More” → “Reminders”: on workout days, a notification at the time you choose until you start your workout. Works both in Chrome and in the app opened from the icon."))}${LL(`</div></li>
         <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
@@ -1801,9 +1881,9 @@ window.APP_START = () => {
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
     openSheet(`<div class="sp"><b>${esc(woTitle(s.workout))}${placeTag(s)}${LL(`</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <p class="small muted">`, `</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
-      <p class="small muted">`)}${dm(s.date)}${LL(` · тиждень `, ` · week `)}${s.week} · ${s.mins || '?'}${LL(` хв`, ` min`)}${vol ? LL(' · обсяг ', " · volume ") + fmt(Math.round(vol)) + LL(' кг', " kg") : ''}${s.ready ? LL(' · спина ', " · back ") + ({ g: '🟢', y: '🟡', r: '🔴' }[s.ready] || '') : ''}</p>
+      <p class="small muted">`)}${dm(s.date)}${LL(` · тиждень `, ` · week `)}${s.week} · ${s.mins || '?'}${LL(` хв`, ` min`)}${vol ? LL(' · обсяг ', " · volume ") + fmt(Math.round(vol)) + KG(LL(' кг', " kg")) : ''}${s.ready ? LL(' · спина ', " · back ") + ({ g: '🟢', y: '🟡', r: '🔴' }[s.ready] || '') : ''}</p>
       ${groups.map((g) => { const ex = prog.ex[g.ex] || { name: g.ex, type: 'bw' }; return `<div class="card" style="padding:10px 12px"><b class="small">${esc(ex.name)}</b>${g.sets.map(({ x, k }) => edit
-        ? `<div class="row" style="flex-wrap:nowrap;margin-top:6px"><span class="tiny muted" style="width:22px">${x.type === 'W' ? LL('Р', "W") : x.type === 'D' ? LL('Д', "D") : x.type === 'F' ? LL('В', "F") : '•'}</span>${isLoad(ex) ? `<input inputmode="decimal" data-ed="load" data-sk="${k}"${loadTip(ex, LL(' у цьому підході. Порожньо — без ваги.', " in this set. Leave blank for no weight."))} value="${x.load === null || x.load === undefined ? '' : fmt(x.load)}" placeholder="${ex.type === 'band' ? LL('рівень', "level") : LL('кг', "kg")}">` : ''}<input inputmode="numeric" data-ed="reps" data-sk="${k}" value="${x.reps}"></div>`
+        ? `<div class="row" style="flex-wrap:nowrap;margin-top:6px"><span class="tiny muted" style="width:22px">${x.type === 'W' ? LL('Р', "W") : x.type === 'D' ? LL('Д', "D") : x.type === 'F' ? LL('В', "F") : '•'}</span>${isLoad(ex) ? `<input inputmode="decimal" data-ed="load" data-sk="${k}"${loadTip(ex, LL(' у цьому підході. Порожньо — без ваги.', " in this set. Leave blank for no weight."))} value="${x.load === null || x.load === undefined ? '' : fmt(x.load)}" placeholder="${ex.type === 'band' ? LL('рівень', "level") : KG(LL('кг', "kg"))}">` : ''}<input inputmode="numeric" data-ed="reps" data-sk="${k}" value="${x.reps}"></div>`
         : `<div class="small" style="margin-top:4px">${x.type === 'W' ? LL('<span class="chip w">Р</span> ', "<span class=\"chip w\">W</span> ") : x.type === 'D' ? LL('<span class="chip">Д</span> ', "<span class=\"chip\">D</span> ") : x.type === 'F' ? LL('<span class="chip">В</span> ', "<span class=\"chip\">F</span> ") : x.type === 'M' ? LL('<span class="chip g">М</span> ', "<span class=\"chip g\">M</span> ") : ''}${esc(setText(ex, x))}${x.mini && x.mini.length ? ' + ' + x.mini.join(' + ') : ''}${x.rir !== null && x.rir !== undefined ? LL(' · запас ', " · RIR ") + x.rir : ''}</div>`).join('')}</div>`; }).join('')}
       ${edit ? `<button type="button" class="pri wide" data-act="sessSave" data-id="${s.id}${LL(`">Зберегти зміни</button>`, `">Save changes</button>`)}` : `<button type="button" class="wide" data-act="sessEdit" data-id="${s.id}${LL(`">Редагувати</button>`, `">Edit</button>`)}`}<p></p>
       <button type="button" class="ghost wide" style="color:var(--bad)" data-act="sessDel" data-id="${s.id}${LL(`">Видалити тренування</button>`, `">Delete workout</button>`)}`);
@@ -1833,18 +1913,18 @@ window.APP_START = () => {
         return { t: tms(x.date), v: Math.round(v * 10) / 10, pr };
       }).filter((q) => q.t >= cut);
       const rec = ENGINE.records(ex, histAll, h);
-      const unit = ui.metric === 'vol' ? LL('кг за тренування', "kg per workout") : ui.metric === 'heavy' ? (isMach(ex) ? LL('кг на тренажері', "kg on the machine") : LL('кг у руках', "kg in hand")) : ui.metric === 'reps' ? LL('повторень', "reps") : ENGINE.metricLabel(ex);
+      const unit = ui.metric === 'vol' ? KG(LL('кг за тренування', "kg per workout")) : ui.metric === 'heavy' ? (isMach(ex) ? KG(LL('кг на тренажері', "kg on the machine")) : KG(LL('кг у руках', "kg in hand"))) : ui.metric === 'reps' ? LL('повторень', "reps") : ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg');
       const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
       body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}${used[id] ? '' : LL(' (ще не виконували)', " (not done yet)")}</option>`).join('')}</select>
         <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}"${k === 'heavy' && isMach(ex) ? LL(' data-tip="Найбільша вага на тренажері за кожне тренування."', " data-tip=\"Heaviest weight on the machine in each workout.\"") : ''}>${l}</button>`).join('')}</div>
         <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)}${LL(` · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">`, ` · ◎ — PR</span><span class="seg" style="margin:0;padding:2px">`)}${[['4', LL('4 т', "4 wk")], ['12', LL('12 т', "12 wk")], ['all', LL('усе', "all")]].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;min-width:44px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
         ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: LL('Ще немає підходів у цій вправі', "No sets for this exercise yet") })}</div>
         ${histAll.length ? `<div class="grid3">
-          <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' || isMach(ex) ? LL('рекорд максимуму, кг', "best est. 1RM, kg") : LL('найкращий показник', "best result")}</span></div>
-          <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? LL('найбільша вага', "heaviest weight") : LL('найважче в руках', "heaviest in hand")}${LL(`, кг`, `, kg`)}${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
-          <div class="stat"><b>${rec.vol ? fmt(Math.round(rec.vol.v)) : '—'}${LL(`</b><span>найбільший обсяг, кг</span></div></div>
+          <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' || isMach(ex) ? KG(LL('рекорд максимуму, кг', "best est. 1RM, kg")) : LL('найкращий показник', "best result")}</span></div>
+          <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? LL('найбільша вага', "heaviest weight") : LL('найважче в руках', "heaviest in hand")}${KG(LL(`, кг`, `, kg`))}${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
+          <div class="stat"><b>${rec.vol ? fmt(Math.round(rec.vol.v)) : '—'}${KG(LL(`</b><span>найбільший обсяг, кг</span></div></div>
           `, `</b><span>biggest volume, kg</span></div></div>
-          `)}${repRows.length ? `${LL(`<h2>Рекорди повторень</h2><div class="card"><ul class="list">`, `<h2>Rep PRs</h2><div class="card"><ul class="list">`)}${repRows.map((L) => `<li><span>${ex.type === 'band' ? LL('рівень ', "level ") + fmt(L) : isMach(ex) ? fmt(L) + LL(' кг', " kg") : LL('гриф + ', "handle + ") + fmt(L) + LL(' кг', " kg")}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}${LL(`
+          `))}${repRows.length ? `${LL(`<h2>Рекорди повторень</h2><div class="card"><ul class="list">`, `<h2>Rep PRs</h2><div class="card"><ul class="list">`)}${repRows.map((L) => `<li><span>${ex.type === 'band' ? LL('рівень ', "level ") + fmt(L) : isMach(ex) ? fmt(L) + KG(LL(' кг', " kg")) : LL('гриф + ', "handle + ") + fmt(L) + KG(LL(' кг', " kg"))}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}${LL(`
           <h2>Останні тренування</h2><div class="card"><ul class="list">`, `
           <h2>Recent workouts</h2><div class="card"><ul class="list">`)}${histAll.slice(-6).reverse().map((x) => `<li><span>${dm(x.date)}</span><span class="small">${x.sets.map((s) => esc(setText(ex, s))).join(', ')}</span></li>`).join('')}</ul></div>` : ''}
         ${ex.tip ? `<div class="note small">${esc(ex.tip)}</div>` : ''}`;
@@ -1892,8 +1972,8 @@ window.APP_START = () => {
     if (!tabs.some((t) => t[0] === ui.bodyTab)) ui.bodyTab = 'm';
     let body = '';
     if (ui.bodyTab === 'm') {
-      body = MEAS.map(([k, l, u]) => {
-        const arr = (p.body[k] || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1));
+      body = MEAS.map(([k, l]) => {
+        const u = MU(k), arr = (p.body[k] || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1)).map((q) => ({ d: q.d, v: MV(k, q.v) }));  // показ — у одиницях профілю
         const last = arr[arr.length - 1], first = arr[0];
         const avg = k === 'weight' ? ENGINE.rolling7(arr) : null;
         const series = k === 'weight' ? [{ pts: arr.map((q) => ({ t: tms(q.d), v: Number(q.v) })), color: 'var(--muted)', width: 1 }, { pts: avg.map((q) => ({ t: tms(q.d), v: q.v })), color: 'var(--accent)', width: 2.5, dots: false, area: true }] : [{ pts: arr.map((q) => ({ t: tms(q.d), v: Number(q.v) })), color: 'var(--accent)', area: true }];
@@ -1909,19 +1989,19 @@ window.APP_START = () => {
       const nu = ENGINE.nutrition(food, me, wNow);
       const tr = ENGINE.weightTrend(wts), adv = ENGINE.foodAdvice(food, tr);
       const goalTxt = food.goal === 'loss' ? LL('мета — менше жиру, більше мʼязів: дефіцит ≈ ', "goal — less fat, more muscle: deficit ≈ ") + Math.round(food.deficit * 100) + LL(' % від витрат', " % of TDEE") : LL('мета — сила й тонус: калорії на рівні підтримки, без дієт', "goal — strength and tone: maintenance calories, no dieting");
-      body = `${LL(`<div class="card"><p class="small muted">Дані лише в цьому телефоні. Вага береться із «Замірів» (середня за 7 днів).</p>
+      body = `${lbH(LL(`<div class="card"><p class="small muted">Дані лише в цьому телефоні. Вага береться із «Замірів» (середня за 7 днів).</p>
         <div class="grid2"><div><label class="f">Зріст, см</label><input inputmode="numeric" id="meH" value="`, `<div class="card"><p class="small muted">Data stays on this phone only. Weight comes from “Measurements” (7-day average).</p>
-        <div class="grid2"><div><label class="f">Height, cm</label><input inputmode="numeric" id="meH" value="`)}${me.height || ''}${LL(`"></div><div><label class="f">Вік, років</label><input inputmode="numeric" id="meA" value="`, `"></div><div><label class="f">Age, years</label><input inputmode="numeric" id="meA" value="`)}${me.age || ''}"></div></div>
-        ${food.basis === 'target' ? `${LL(`<label class="f">Цільова вага, кг (для білка; порожньо — порахую за зростом)</label><input inputmode="decimal" id="meT" value="`, `<label class="f">Target weight, kg (for protein; leave blank and I’ll estimate it from your height)</label><input inputmode="decimal" id="meT" value="`)}${me.target || ''}">` : ''}${LL(`
+        <div class="grid2"><div><label class="f">Height, cm</label><input inputmode="numeric" id="meH" value="`))}${me.height ? HD(me.height) : ''}${LL(`"></div><div><label class="f">Вік, років</label><input inputmode="numeric" id="meA" value="`, `"></div><div><label class="f">Age, years</label><input inputmode="numeric" id="meA" value="`)}${me.age || ''}"></div></div>
+        ${food.basis === 'target' ? `${KG(LL(`<label class="f">Цільова вага, кг (для білка; порожньо — порахую за зростом)</label><input inputmode="decimal" id="meT" value="`, `<label class="f">Target weight, kg (for protein; leave blank and I’ll estimate it from your height)</label><input inputmode="decimal" id="meT" value="`))}${me.target ? BW(me.target) : ''}">` : ''}${LL(`
         <p></p><button type="button" class="wide" data-act="meSave">Зберегти</button></div>
         `, `
         <p></p><button type="button" class="wide" data-act="meSave">Save</button></div>
-        `)}${!wMeas && wAns ? `${LL(`<div class="note">Поки зважувань немає — норма за вагою з анкети (`, `<div class="note">No weigh-ins yet — targets use the weight from your questionnaire (`)}${fmt(wAns)}${LL(` кг). Зважтеся й додайте вагу у «Заміри» — норма стане точнішою.</div>`, ` kg). Weigh yourself and add it to “Measurements” — your targets will get more accurate.</div>`)}` : ''}
+        `)}${!wMeas && wAns ? `${LL(`<div class="note">Поки зважувань немає — норма за вагою з анкети (`, `<div class="note">No weigh-ins yet — targets use the weight from your questionnaire (`)}${fmt(BW(wAns))}${KG(LL(` кг). Зважтеся й додайте вагу у «Заміри» — норма стане точнішою.</div>`, ` kg). Weigh yourself and add it to “Measurements” — your targets will get more accurate.</div>`))}` : ''}
         ${!wNow ? LL('<div class="note w">Додайте вагу у «Заміри» — і тут зʼявиться норма.</div>', "<div class=\"note w\">Add your weight in “Measurements” and your targets will show up here.</div>") : !nu ? LL('<div class="note w">Вкажіть зріст і вік — і тут зʼявиться норма.</div>', "<div class=\"note w\">Enter your height and age and your targets will show up here.</div>") : `
         <div class="grid2"><div class="stat"><b>${fmt(nu.kLo)}–${fmt(nu.kHi)}${LL(`</b><span>ккал на день</span></div><div class="stat"><b>`, `</b><span>kcal per day</span></div><div class="stat"><b>`)}${nu.pLo}–${nu.pHi}${LL(` г</b><span>білка на день</span></div></div>
         <p class="tiny muted">`, ` g</b><span>protein per day</span></div></div>
-        <p class="tiny muted">`)}${esc(goalTxt)}${LL(`. Розрахунок: формула Міффліна — Сан Жеора × 1,45 (основний обмін ≈ `, `. Calculation: Mifflin–St Jeor formula × 1.45 (BMR ≈ `)}${fmt(nu.bmr)}${LL(`, витрати ≈ `, `, TDEE ≈ `)}${fmt(nu.tdee)}${LL(` ккал); білок — `, ` kcal); protein — `)}${fmt(food.protein[0])}–${fmt(food.protein[1])}${LL(` г на кг `, ` g per kg of `)}${food.basis === 'target' ? LL('цільової ваги ', "target weight ") + fmt(nu.target) + LL(' кг', " kg") : LL('поточної ваги', "current weight")}.</p>
-        <div class="note ${adv.k === 'ok' ? 'ok' : adv.k === 'wait' ? '' : 'w'}${LL(`"><b>За вашою вагою:</b> `, `"><b>Based on your weight:</b> `)}${esc(adv.text)}${tr && tr.rate !== null ? LL(' <span class="tiny muted">(темп ', " <span class=\"tiny muted\">(rate ") + (tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : '') + fmt(Math.abs(tr.rate)) + LL(' кг на тиждень)</span>', " kg per week)</span>") : ''}</div>`}
+        <p class="tiny muted">`)}${esc(goalTxt)}${LL(`. Розрахунок: формула Міффліна — Сан Жеора × 1,45 (основний обмін ≈ `, `. Calculation: Mifflin–St Jeor formula × 1.45 (BMR ≈ `)}${fmt(nu.bmr)}${LL(`, витрати ≈ `, `, TDEE ≈ `)}${fmt(nu.tdee)}${LL(` ккал); білок — `, ` kcal); protein — `)}${fmt(isLb() ? Math.round(food.protein[0] / ENGINE.LB * 100) / 100 : food.protein[0])}–${fmt(isLb() ? Math.round(food.protein[1] / ENGINE.LB * 100) / 100 : food.protein[1])}${KG(LL(` г на кг `, ` g per kg of `))}${food.basis === 'target' ? LL('цільової ваги ', "target weight ") + fmt(BW(nu.target)) + KG(LL(' кг', " kg")) : LL('поточної ваги', "current weight")}.</p>
+        <div class="note ${adv.k === 'ok' ? 'ok' : adv.k === 'wait' ? '' : 'w'}${LL(`"><b>За вашою вагою:</b> `, `"><b>Based on your weight:</b> `)}${esc(LBT(adv.text))}${tr && tr.rate !== null ? LL(' <span class="tiny muted">(темп ', " <span class=\"tiny muted\">(rate ") + (tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : '') + fmt(Math.abs(BW(tr.rate))) + KG(LL(' кг на тиждень)</span>', " kg per week)</span>")) : ''}</div>`}
         <div class="card">${food.notes.map((x) => `<p class="small" style="margin:6px 0">• ${esc(x)}</p>`).join('')}</div>`;
     } else if (ui.bodyTab === 'f') {
       body = `<div class="seg">${[['front', LL('Спереду', "Front")], ['side', LL('Збоку', "Side")], ['back', LL('Ззаду', "Back")]].map(([k, l]) => `<button type="button" class="${ui.photoPose === k ? 'on' : ''}" data-act="pose" data-v="${k}">${l}</button>`).join('')}${LL(`</div>
@@ -1968,7 +2048,7 @@ window.APP_START = () => {
   }
   function measSheet(k) {
     const m = MEAS.find((x) => x[0] === k);
-    openSheet(`<b>${m[1]}, ${m[2]}${LL(`</b><p class="small muted">Сьогодні, `, `</b><p class="small muted">Today, `)}${dm(today())}</p><input inputmode="decimal" id="measIn" placeholder="${m[2]}" style="font-size:1.6rem;text-align:center"><p></p><button type="button" class="pri wide big" data-act="measSave" data-m="${k}${LL(`">Зберегти</button>`, `">Save</button>`)}`);
+    openSheet(`<b>${m[1]}, ${MU(k)}${LL(`</b><p class="small muted">Сьогодні, `, `</b><p class="small muted">Today, `)}${dm(today())}</p><input inputmode="decimal" id="measIn" placeholder="${MU(k)}" style="font-size:1.6rem;text-align:center"><p></p><button type="button" class="pri wide big" data-act="measSave" data-m="${k}${LL(`">Зберегти</button>`, `">Save</button>`)}`);
     setTimeout(() => { const i = document.getElementById('measIn'); if (i) i.focus(); }, 250);
   }
 
@@ -2031,7 +2111,7 @@ window.APP_START = () => {
       `, `<h1>More</h1>
       `)}${accountCard()}
       ${standalone ? '' : installNote(LL('Встановіть як застосунок', "Install as an app"))}
-      ${langCard()}${remindCard()}${LL(`
+      ${langCard()}${unitsCard()}${remindCard()}${LL(`
       <h2>Голосовий тренер</h2><div class="card"><label class="sw"><span>Голос під час тренування<div class="tiny muted">`, `
       <h2>Voice coach</h2><div class="card"><label class="sw"><span>Voice during workouts<div class="tiny muted">`)}${hasDb ? LL('вага й диски', "weight and plates") : LL('вага', "weight")}${LL(`, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"`, `, rest, “10 seconds”, “Time!”, PRs</div></span><input type="checkbox" id="voiceOn"`)}${V.on ? ' checked' : ''}></label>
         ${I18N.lang === 'en' ? '<div class="note small">During workouts the coach speaks with your phone’s English voice — the recorded coach voices are in Ukrainian.</div>' : packBox()}
@@ -2060,11 +2140,11 @@ window.APP_START = () => {
         <label class="f">Дні тренувань</label><div class="row">`, `</select>
         <label class="f">Workout days</label><div class="row">`)}${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${p.draft ? LL('<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>', "<p class=\"tiny muted\">Questionnaire, days, and week can be changed after you finish the workout.</p>") : ''}</div>
       ${eqCard(p)}
-      ${hasDb ? `${LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`)}${fmt(p.handle)}${LL(`">
-        <label class="f">Диски на обидві гантелі: 5 · 2,5 · 1,25 кг (штук)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="`, `">
-        <label class="f">Plates for both dumbbells: 5 · 2.5 · 1.25 kg (count)</label><div class="grid3"><input inputmode="numeric" data-inv="5" value="`)}${p.inv[5]}"><input inputmode="numeric" data-inv="2.5" value="${p.inv[2.5]}"><input inputmode="numeric" data-inv="1.25" value="${p.inv[1.25]}${LL(`"></div>
+      ${hasDb ? `${KG(LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`))}${fmt(p.handle)}${LL(`">
+        <label class="f">`, `">
+        <label class="f">`)}${LL('Диски на обидві гантелі: ', 'Plates for both dumbbells: ')}${PLATES(isLb()).map(fmt).join(' · ')} ${MU('weight')}${LL(' (штук)', ' (count)')}</label><div class="grid3">${PLATES(isLb()).map((k, i) => `<input inputmode="numeric" data-inv="${k}"${isLb() ? ` data-tip="${esc(invTip(k, i))}"` : ''} value="${p.inv[k] || 0}">`).join('')}${LL(`</div>
         <p class="tiny muted">Крок ваги зараз: `, `"></div>
-        <p class="tiny muted">Current weight step: `)}${fmt(ENGINE.stepFor(p.inv))}${LL(` кг на гантель.</p></div>`, ` kg per dumbbell.</p></div>`)}` : ''}${LL(`
+        <p class="tiny muted">Current weight step: `)}${fmt(ENGINE.stepFor(p.inv))}${KG(LL(` кг на гантель.</p></div>`, ` kg per dumbbell.</p></div>`))}` : ''}${LL(`
       <h2>Порадник і підказки</h2><div class="card" style="padding:10px 12px">`, `
       <h2>Guide and tips</h2><div class="card" style="padding:10px 12px">`)}${guideChips()}${LL(`<div class="quick"><button type="button" class="sm" data-act="food">Харчування</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Можливості</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
       <h2>Резервна копія</h2><div class="card"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: `, `<div class="quick"><button type="button" class="sm" data-act="food">Nutrition</button><button type="button" class="sm" data-act="glAll">Glossary</button><button type="button" class="sm" data-act="whatsnew">Features</button><button type="button" class="sm" data-act="tourReset">Show the tutorial again</button></div></div>
@@ -2087,8 +2167,8 @@ window.APP_START = () => {
       const w = Number(e.target.value), pw = G().perWeek || 3, base = cp.cycle === 1 ? (w - 1) * pw : 12 * pw + (cp.cycle - 2) * 8 * pw + (w - 5) * pw;
       p.offset = base - p.sessions.length; save(); toast(LL('Наступне тренування — тиждень ', "Next workout — week ") + w + (cp.cycle > 1 ? LL(' · цикл ', " · cycle ") + cp.cycle : ''));
     };
-    if (hasDb) document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > 10) { toast(LL('Вага грифа — від 0 до 10 кг', "Handle weight — 0 to 10 kg")); e.target.value = fmt(p.handle); return; } p.handle = v; syncAnswers({ handle: v }); save(); toast(LL('Збережено', "Saved")); };
-    app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); syncAnswers({ inv: { 5: p.inv[5], 2.5: p.inv[2.5], 1.25: p.inv[1.25] } }); save(); rMore(); }; });
+    if (hasDb) document.getElementById('handleIn').onchange = (e) => { const v = num(e.target.value); if (v === null || v < 0 || v > (isLb() ? 25 : 10)) { toast(isLb() ? LL('Вага грифа — від 0 до 25 lb', 'Handle weight — 0 to 25 lb') : LL('Вага грифа — від 0 до 10 кг', "Handle weight — 0 to 10 kg")); e.target.value = fmt(p.handle); return; } p.handle = v; syncAnswers({ handle: v }); save(); toast(LL('Збережено', "Saved")); };
+    app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); syncAnswers({ inv: Object.assign({}, p.inv) }); save(); rMore(); }; });
     app.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { S()[el.dataset.set] = el.checked; save(); if (el.dataset.set === 'haptics' && el.checked) haptic(); }; });
     document.getElementById('restoreIn').onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
     if (navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then((v) => { const el = document.getElementById('persist'); if (el) el.textContent = v ? LL('сховище захищене від автоочищення', "storage protected from auto-clearing") : LL('робіть резервні копії', "make backups"); }).catch(() => {});
@@ -2108,7 +2188,7 @@ window.APP_START = () => {
     if (ok) { DB.lastBackup = today(); save(); toast(LL('Резервну копію створено', "Backup created")); rMore(); }
   }
   function csv() {
-    const prog = G(), h = P().handle, rows = [[LL('дата', "date"), LL('тиждень', "week"), LL('тренування', "workout"), LL('місце', "location"), LL('спина', "back"), LL('вправа', "exercise"), LL('варіант', "variant"), LL('тип', "type"), LL('підхід', "set"), LL('вага_кг', "weight_kg"), LL('разом_кг', "total_kg"), LL('повторення_або_с', "reps_or_sec"), LL('запас', "rir"), LL('міні_підходи', "mini_sets")]];
+    const prog = G(), h = P().handle, rows = [[LL('дата', "date"), LL('тиждень', "week"), LL('тренування', "workout"), LL('місце', "location"), LL('спина', "back"), LL('вправа', "exercise"), LL('варіант', "variant"), LL('тип', "type"), LL('підхід', "set"), KG(LL('вага_кг', "weight_kg")), KG(LL('разом_кг', "total_kg")), LL('повторення_або_с', "reps_or_sec"), LL('запас', "rir"), LL('міні_підходи', "mini_sets")]];
     P().sessions.forEach((s) => { const cnt = {}; s.sets.forEach((x) => { const ex = prog.ex[x.ex] || { name: x.ex }; cnt[x.ex] = (cnt[x.ex] || 0) + 1;
       const tot = (x.load === null || x.load === undefined || ex.type === 'band') ? '' : String(ENGINE.totalLoad(ex, x.load, h, x.variant));
       rows.push([s.date, s.week, s.workout, s.place === 'gym' ? LL('зал', "gym") : s.place === 'home' ? LL('дім', "home") : '', s.ready || '', ex.name, x.variant || '', x.type || 'N', cnt[x.ex], x.load === null || x.load === undefined ? '' : x.load, tot, x.reps, x.rir === null || x.rir === undefined ? '' : x.rir, (x.mini || []).join('+')]); }); });
@@ -2221,6 +2301,16 @@ window.APP_START = () => {
     if (act === 'askNew') { askHush(); liveClose(); ASK.chat = []; ASK.photo = null; ASK.st = 'idle'; ASK.msg = ''; ASK.help = false; return askDraw(); }
     if (act === 'install') { const ev = installEv; installEv = null; if (ev) { try { ev.prompt(); ev.userChoice.finally(() => render()); } catch (e) { render(); } } else render(); return; }
     if (act === 'langPick') return langPick(b.dataset.v);
+    if (act === 'unitsSet') return unitsSet(b.dataset.v);
+    if (act === 'qUnits') {
+      qRead(); const a = qState().a, v = b.dataset.v === 'lb' ? 'lb' : 'kg';
+      if (v !== a.units) {  // диски тієї самої кількості — у розмірах нових одиниць; гриф — перерахований
+        const from = PLATES(a.units === 'lb'), to = PLATES(v === 'lb'), inv = {}; to.forEach((k, i) => { inv[k] = (a.inv || {})[from[i]]; }); a.inv = inv;
+        if (typeof a.handle === 'number') a.handle = Math.round(a.handle * (v === 'lb' ? ENGINE.LB : 1 / ENGINE.LB) * 2) / 2;
+        a.units = v;
+      }
+      return rOnboard();
+    }
     if (act === 'langSet') { if (b.dataset.v !== I18N.lang && I18N.set(b.dataset.v)) location.reload(); return; }
     if (act === 'askPhoto') { const fi = document.getElementById('askFile'); if (fi) fi.click(); return; }  // у тому самому дотику — інакше iPhone не відкриє камеру
     if (act === 'askPhotoDel') { ASK.photo = null; return askDraw(); }
@@ -2366,7 +2456,7 @@ window.APP_START = () => {
     if (act === 'pose') { ui.photoPose = b.dataset.v; return rBody(); }
     if (act === 'measAdd') return measSheet(b.dataset.m);
     if (act === 'measSave') {
-      const m = MEAS.find((x) => x[0] === b.dataset.m), v = num(document.getElementById('measIn').value);
+      const m = MEAS.find((x) => x[0] === b.dataset.m), v = MI(m[0], num(document.getElementById('measIn').value));  // введене в одиницях профілю → метрично
       if (v === null || v < m[3] || v > m[4]) { toast(LL('Перевірте число', "Check the number")); return; }
       const arr = p.body[m[0]] = p.body[m[0]] || [], t = today(), k = arr.findIndex((q) => q.d === t);
       if (k >= 0) arr[k].v = v; else arr.push({ d: t, v }); save(); closeSheet(); toast(LL('Збережено', "Saved")); return rBody();
@@ -2377,11 +2467,11 @@ window.APP_START = () => {
     }
     if (act === 'photoDel') { if (!confirm(LL('Видалити фото?', "Delete photo?"))) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
     if (act === 'meSave') {
-      const h = num(document.getElementById('meH').value), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? num(document.getElementById('meT').value) : null;
+      const h = HDin(num(document.getElementById('meH').value)), a = num(document.getElementById('meA').value), te = document.getElementById('meT') ? BWin(num(document.getElementById('meT').value)) : null;  // дюйми й фунти → метрично
       /* межі — як в анкеті: зріст і вік ідуть і в програму (вік від 55 — інший обсяг) */
-      if (h !== null && (h < 130 || h > 220)) { toast(LL('Зріст — від 130 до 220 см', "Height — 130 to 220 cm")); return; }
+      if (h !== null && (h < 130 || h > 220)) { toast(isLb() ? LL('Зріст — від 51 до 86 дюймів', 'Height — 51 to 86 in') : LL('Зріст — від 130 до 220 см', "Height — 130 to 220 cm")); return; }
       if (a !== null && (a < 16 || a > 85)) { toast(LL('Вік — від 16 до 85', "Age — 16 to 85")); return; }
-      if (te !== null && (te < 35 || te > 250)) { toast(LL('Цільова вага — від 35 до 250 кг', "Target weight — 35 to 250 kg")); return; }
+      if (te !== null && (te < 35 || te > 250)) { toast(isLb() ? LL('Цільова вага — від 78 до 551 lb', 'Target weight — 78 to 551 lb') : LL('Цільова вага — від 35 до 250 кг', "Target weight — 35 to 250 kg")); return; }
       p.me = { height: h, age: a, target: te };
       const sa = {}; if (h !== null) sa.height = h; if (a !== null) sa.age = a; if (Object.keys(sa).length) syncAnswers(sa);
       save(); toast(LL('Збережено', "Saved")); return rBody();

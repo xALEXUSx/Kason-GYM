@@ -26,8 +26,12 @@ var VOICE = (function () {
     if (fr === 75) return (whole ? whole + LL(' і ', " and ") : '') + LL('три чверті', "three quarters");
     return typeof I18N !== 'undefined' && I18N.lang === 'en' ? String(n) : String(n).replace('.', ',');
   }
+  /* одиниці профілю (з 3.18.0): кілограми чи фунти */
+  var units = 'kg';
+  function setUnits(u) { units = u === 'lb' ? 'lb' : 'kg'; }
   function kg(x) {
     var n = Math.round(Number(x) * 100) / 100;
+    if (units === 'lb') return n !== Math.floor(n) ? numWords(n) + LL(' фунта', ' pounds') : n + ' ' + plural(n, LL('фунт', 'pound'), LL('фунти', 'pounds'), LL('фунтів', 'pounds'));
     if (n !== Math.floor(n)) return numWords(n) + LL(' кілограма', " kilograms");
     return n + ' ' + plural(n, LL('кілограм', "kilogram"), LL('кілограми', "kilograms"), LL('кілограмів', "kilograms"));
   }
@@ -121,7 +125,7 @@ var VOICE = (function () {
   function busy() { return !!(synth && (synth.speaking || synth.pending)); }
   function list() { loadVoices(); return ukVoices().map(function (v) { return { uri: v.voiceURI, name: v.name }; }); }
 
-  return { norm: norm, split: split, cap: cap, plural: plural, numWords: numWords, kg: kg, secs: secs, reps: reps, target: target, firstSentence: firstSentence,
+  return { norm: norm, split: split, cap: cap, plural: plural, numWords: numWords, kg: kg, setUnits: setUnits, secs: secs, reps: reps, target: target, firstSentence: firstSentence,
            init: init, ready: ready, unlock: unlock, say: say, stop: stop, list: list, busy: busy,
            onSpeaking: function (f) { onSpeak = f; },
            get supported() { return !!synth; }, get cfg() { return cfg; } };

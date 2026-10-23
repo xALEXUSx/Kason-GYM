@@ -38,7 +38,8 @@ var ENGINE = (function () {
     if (ex.type === 'band') return (Number(set.load) || 0) * set.reps;
     return set.reps;
   }
-  function metricLabel(ex) {
+  function metricLabel(ex, units) { return unitize(units, metricLabel0(ex)); }
+  function metricLabel0(ex) {
     if (ex.type === 'db' || ex.type === 'mach') return LL('розрахунковий максимум, кг', "estimated 1RM, kg");
     if (ex.type === 'band') return LL('рівень × повторення', "level × reps");
     if (ex.type === 'time') return LL('секунди, кращий підхід', "seconds, best set");
@@ -158,8 +159,26 @@ var ENGINE = (function () {
     out.note = head + (back.kind === 'short' ? LL('вага на ≈ 20 % менша', "weight ≈ 20% lower") : '≈ ' + back.pct + LL(' % колишньої ваги', " % of your previous weight")) + ', ' + (ex.type === 'time' ? LL('той самий час', "same time") : LL('ті самі повторення', "same reps")) + LL(', запас 3–4.', ", RIR 3–4.");
     return out;
   }
-  /* Підказка на сьогодні за правилами прогресії програми. back — повернення після перерви (comeback), інакше нічого. */
+  /* кг із даних і текстів → «круглі» фунти: диски 1,25 → 2,5, 2,5 → 5, 5 → 10, 20 → 45; мале (темп ваги тіла) — до 0,5 lb */
+  function lbNum(kg) { kg = Number(kg); if (!(kg > 0)) return 0; if (kg < 1.25) return Math.round(kg * LB * 2) / 2; if (kg < 2.5) return 2.5; return Math.round(kg * LB / 5) * 5; }
+  /* текст із кілограмами й сантиметрами числами → фунти й дюйми: «5 кг» → «10 lb», «2,5–5 кг» → «5–10 lb», «гриф + 20» → «гриф + 45», «160 см» → «63 in» */
+  function lbText(t) {
+    if (typeof t !== 'string') return t;
+    var num = function (x) { return Number(String(x).replace(',', '.')); }, show = function (x, comma) { var s = String(x); return comma ? s.replace('.', ',') : s; };
+    return t.replace(/(\d+(?:[.,]\d+)?)\s?([–…-])\s?(−?)(\d+(?:[.,]\d+)?)(\s?)(кг|kg)(?![A-Za-zА-Яа-яІіЇїЄєҐґ])/g, function (m, a, dash, minus, b, sp) { var c = /,/.test(a + b); return show(lbNum(num(a)), c) + dash + minus + show(lbNum(num(b)), c) + sp + 'lb'; })
+      .replace(/(\d+(?:[.,]\d+)?)(\s?)(кг|kg)(?![A-Za-zА-Яа-яІіЇїЄєҐґ])/g, function (m, a, sp) { return show(lbNum(num(a)), /,/.test(a)) + sp + 'lb'; })
+      .replace(/(гриф|handle) \+ 20/g, '$1 + 45')
+      .replace(/(\d+(?:[.,]\d+)?)(\s?)(см|cm)(?![A-Za-zА-Яа-яІіЇїЄєҐґ])/g, function (m, a, sp) { return Math.round(num(a) / 2.54) + sp + 'in'; });
+  }
+  /* одиниця ваги в текстах: програма у фунтах (prog.units === 'lb') — «кг»/«kg» → «lb» (числа вже у фунтах) */
+  function unitize(units, t) { return units === 'lb' && typeof t === 'string' ? t.replace(/кг/g, 'lb').replace(/\bkg\b/g, 'lb') : t; }
   function suggest(prog, exId, item, nSets, hist, handle, deload, stepIn, back) {
+    var r = suggest0(prog, exId, item, nSets, hist, handle, deload, stepIn, back);
+    if (prog && prog.units === 'lb' && r && r.note) r.note = unitize('lb', r.note);
+    return r;
+  }
+  /* Підказка на сьогодні за правилами прогресії програми. back — повернення після перерви (comeback), інакше нічого. */
+  function suggest0(prog, exId, item, nSets, hist, handle, deload, stepIn, back) {
     var ex = prog.ex[exId];
     /* тренажер чи блок: крок — з ваг людини на ньому (machStep), межа — власна; гантелі — крок дисків і межа набору */
     var STEP = ex.type === 'mach' ? machStep(ex, hist) : (stepIn || 2.5), cap = ex.type === 'mach' ? (ex.cap || 300) : (prog.cap || 20);
@@ -336,17 +355,24 @@ var ENGINE = (function () {
 
   /* ---------- v2 ---------- */
   var INV = { 5: 4, 2.5: 8, 1.25: 4 };
+  /* фунти (з 3.18.0, слово Alexа 23.10: «має бути і те і те, давати на вибір»): диски 10 / 5 / 2,5 lb — набір у тих самих кількостях;
+     уся вага тренувань профілю — у його одиницях (lb), тож рушій рахує ті самі числа, лише розміри дисків — з набору людини */
+  var INV_LB = { 10: 4, 5: 8, 2.5: 4 };
+  var LB = 2.20462262;
+  /* розміри дисків набору (за зростанням); порожній набір — кілограмові */
+  function sizesOf(inv) { var k = Object.keys(inv || {}).map(Number).filter(function (x) { return x > 0; }).sort(function (a, b) { return a - b; }); return k.length ? k : [1.25, 2.5, 5]; }
   /* Крок ваги на гантель — подвоєний найменший диск, якого вистачає на обидва боки обох гантелей (4 шт.);
-     з дисками 1,25 — 2,5 кг, з 2,5 — 5 кг, лише з 5 — 10 кг. Без жодної четвірки — за парою (одна гантель). */
+     з дисками 1,25 — 2,5 кг, з 2,5 — 5 кг, лише з 5 — 10 кг (фунти: 2,5 → 5 lb, 5 → 10 lb). Без жодної четвірки — за парою (одна гантель);
+     без пари — подвоєний середній диск набору. */
   function stepFor(inv) {
     inv = inv || {};
-    var four = [1.25, 2.5, 5].filter(function (s) { return inv[s] >= 4; })[0], two = [1.25, 2.5, 5].filter(function (s) { return inv[s] >= 2; })[0];
-    return 2 * (four || two || 2.5);
+    var z = sizesOf(inv), four = z.filter(function (s) { return inv[s] >= 4; })[0], two = z.filter(function (s) { return inv[s] >= 2; })[0];
+    return 2 * (four || two || z[Math.min(1, z.length - 1)]);
   }
   /* Найбільша вага дисків на гриф, яку можна зібрати з набору: для двох гантелей (а якщо на дві дисків не вистачає — для однієї). */
   function capOf(inv) {
     var two = 0, one = 0;
-    [5, 2.5, 1.25].forEach(function (s) { var n = Number((inv || {})[s]) || 0; two += Math.floor(n / 4) * 2 * s; one += Math.floor(n / 2) * 2 * s; });
+    sizesOf(inv).slice().reverse().forEach(function (s) { var n = Number((inv || {})[s]) || 0; two += Math.floor(n / 4) * 2 * s; one += Math.floor(n / 2) * 2 * s; });
     return two || one;
   }
   function dbCountOf(ex, variant) {
@@ -365,14 +391,14 @@ var ENGINE = (function () {
     var v = 0; (session.sets || []).forEach(function (x) { var ex = prog.ex[x.ex]; if (ex) v += setVolume(ex, x, handle); }); return round1(v);
   }
   /* Диски на кожен бік з урахуванням набору: dbCount гантелей заряджаються однаково. */
-  function plates(load, inv, dbCount, cap) {
+  function plates(load, inv, dbCount, cap, units) {
     inv = inv || INV; cap = cap || 20;
     if (load === null || load === undefined || load === '') return { ok: true, side: [], text: LL('без гантелі', "no dumbbell") };
     load = Number(load);
     if (load === 0) return { ok: true, side: [], text: LL('лише гриф', "handle only") };
-    if (load > cap) return { ok: false, side: [], text: LL('понад межу ', "over the limit of ") + cap + LL(' кг на гриф', " kg per handle") };
+    if (load > cap) return { ok: false, side: [], text: LL('понад межу ', "over the limit of ") + cap + unitize(units, LL(' кг на гриф', " kg per handle")) };
     /* рахуємо в чвертях кілограма, щоб не було похибок заокруглення */
-    var per = Math.round(load * 2), sizes = [[5, 20], [2.5, 10], [1.25, 5]], side = [], k = 2 * (dbCount || 1);
+    var per = Math.round(load * 2), sizes = sizesOf(inv).slice().reverse().map(function (s) { return [s, Math.round(s * 4)]; }), side = [], k = 2 * (dbCount || 1);
     sizes.forEach(function (z) {
       var avail = Math.floor((inv[z[0]] || 0) / k);
       while (avail > 0 && per >= z[1]) { side.push(z[0]); per -= z[1]; avail--; }
@@ -637,6 +663,6 @@ var ENGINE = (function () {
 
   return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
-           suggest: suggest, comeback: comeback, machStep: machStep, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
+           suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
 if (typeof module !== 'undefined') module.exports = ENGINE;
