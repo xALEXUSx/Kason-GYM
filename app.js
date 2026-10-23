@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.20.0';
+  const VERSION = '3.20.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -2097,7 +2097,9 @@ window.APP_START = () => {
     }
     return fmt(e.g) + LL(' г', ' g');
   }
+  /* 1 — долоня; 2–4 — долоні; 5+ — долонь; дробові (1,5) — родовий однини: «1,5 долоні», «1,5 кулака» (з 3.20.1; до того «1,5 долонь») */
   const kHandName = (h, n) => { const one = n === 1, few = n > 1 && n < 5 && n === Math.round(n);
+    if (n !== Math.round(n)) return { palm: LL('долоні', 'palms'), fist: LL('кулака', 'fists'), cup: LL('жмені', 'cupped hands'), thumb: LL('пальця', 'thumbs') }[h];
     return { palm: one ? LL('долоня', 'palm') : few ? LL('долоні', 'palms') : LL('долонь', 'palms'), fist: one ? LL('кулак', 'fist') : few ? LL('кулаки', 'fists') : LL('кулаків', 'fists'),
       cup: one ? LL('жменя', 'cupped hand') : few ? LL('жмені', 'cupped hands') : LL('жмень', 'cupped hands'), thumb: one ? LL('палець', 'thumb') : few ? LL('пальці', 'thumbs') : LL('пальців', 'thumbs') }[h]; };
   const kHandWhat = () => ({ palm: LL('білок: мʼясо, риба, яйця, сир', 'protein: meat, fish, eggs, cheese'), fist: LL('овочі', 'vegetables'),

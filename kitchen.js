@@ -144,15 +144,31 @@ var KITCHEN = (function () {
     return out.map(function (x) { return { t: fmtT(x.m), k: x.k }; }).filter(function (x, i, a) { return !i || x.t !== a[i - 1].t; });
   }
 
+  /* пошук звичними словами (з 3.20.1; жива перевірка 23.10: «курка» з підказки поля не знаходила нічого — у базі «Куряче філе»):
+     основа слова → продукти бази. Лише для запитів від 3 літер; спершу — назви, що починаються з запиту, далі ці слова, далі решта збігів. */
+  var FISH = ['salmon', 'cod', 'pollock', 'mackerel', 'herring', 'tuna_can'], MEAT = ['chicken_breast', 'chicken_thigh', 'turkey_breast', 'beef_lean', 'beef_mince_5', 'beef_mince_15', 'pork_tender', 'pork_loin'];
+  var ALIAS = [
+    [['курк', 'курят', 'курин', 'куроч', 'chick'], ['chicken_breast', 'chicken_thigh', 'chicken_liver']],
+    [['яйц', 'яєч', 'egg'], ['egg', 'egg_white']],
+    [['риб', 'fish'], FISH], [['мʼяс', "м'яс", 'мяс', 'meat'], MEAT],
+    [['свин', 'pork'], ['pork_tender', 'pork_loin', 'salo']], [['індич', 'індик', 'turkey'], ['turkey_breast']],
+    [['ялович', 'beef'], ['beef_lean', 'beef_mince_5', 'beef_mince_15']], [['фарш', 'mince', 'ground'], ['beef_mince_5', 'beef_mince_15']],
+    [['овес', 'вівс', 'геркулес', 'oatmeal', 'porridge'], ['oats']], [['сир', 'cheese'], ['gouda', 'mozzarella', 'feta', 'parmesan']],
+    [['каш', 'круп', 'grain'], ['buckwheat', 'rice_white', 'rice_brown', 'oats', 'bulgur', 'millet', 'barley', 'quinoa', 'couscous']],
+    [['картоп', 'potat'], ['potato', 'potato_baked']], [['томат', 'tomat'], ['tomato']], [['гриб', 'mushroom'], ['mushrooms']],
+    [['горіх', 'nut'], ['walnuts', 'almonds', 'peanuts']], [['ягід', 'ягод', 'berr'], ['strawberry', 'blueberry']],
+    [['масло', 'oil'], ['butter', 'oil_sunflower', 'oil_olive']], [['шоколад', 'chocol'], ['dark_choc']], [['сік', 'juice'], ['orange_juice']]
+  ];
   /* пошук продуктів: назва українською чи англійською; спершу — ті, що починаються з запиту */
   function search(q, lang) {
-    q = String(q || '').trim().toLowerCase(); if (!q) return [];
-    var key = lang === 'en' ? 'en' : 'uk', a = [], b = [];
+    q = String(q || '').trim().toLowerCase().replace(/[’'`]/g, 'ʼ'); if (!q) return [];
+    var key = lang === 'en' ? 'en' : 'uk', a = [], al = [], b = [], seen = {};
+    if (q.length >= 3) ALIAS.forEach(function (x) { if (x[0].some(function (st) { st = st.replace(/[’'`]/g, 'ʼ'); return q.indexOf(st) === 0 || (q.length >= 3 && st.indexOf(q) === 0); })) x[1].forEach(function (id) { if (BY[id] && al.indexOf(BY[id]) < 0) al.push(BY[id]); }); });
     DB.items.forEach(function (it) {
       var n = it[key].toLowerCase(), o = it[key === 'uk' ? 'en' : 'uk'].toLowerCase();
       if (n.indexOf(q) === 0) a.push(it); else if (n.indexOf(q) > 0 || o.indexOf(q) >= 0) b.push(it);
     });
-    return a.concat(b);
+    return a.concat(al, b).filter(function (it) { if (seen[it.id]) return false; seen[it.id] = 1; return true; });
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
