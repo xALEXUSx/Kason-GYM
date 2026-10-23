@@ -4,7 +4,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.12.2';
+  const VERSION = '3.12.3';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -1427,15 +1427,20 @@ window.APP_START = () => {
   function dailyCard() {
     const p = P(), prog = G(), t = today(), rec = p.daily[t] || {};
     const wk = ENGINE.planFor(prog, Math.max(0, nextN() - 1)).week;
-    return `<h2>Щодня</h2><div class="card dly">${prog.daily.map((it) => {
+    /* «Виконано» — кнопка замість галочки (слово Alexа 23.10: з галочками незрозуміло, чи треба натискати й чи це зарахується);
+       ще раз — скасувати; відмітка лише на сьогодні, такі дні зеленіють у «План» → «Історія» */
+    const isDone = (it) => (it.jumps ? (rec.jumps || 0) >= prog.jumpsFor(wk).times : !!rec[it.id]);
+    const nDone = prog.daily.filter(isDone).length;
+    return `<div class="sp"><h2>Щодня</h2><span class="small muted">зроблено ${nDone} з ${prog.daily.length}</span></div><div class="card dly">${prog.daily.map((it) => {
       if (it.jumps) {
         const j = prog.jumpsFor(wk), done = rec.jumps || 0;
         return `<div class="chk" style="flex-wrap:wrap"><div style="flex:1 1 100%"><b>${esc(it.label)}</b><div class="tiny muted">Тиждень ${wk}: ${j.n} стрибків × ${j.times} на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">як стрибати</button></div></div>
           <div class="row">${Array.from({ length: j.times }, (_, k) => `<button type="button" class="sm${k < done ? ' pri' : ''}" data-act="jump" data-k="${k + 1}">${k < done ? '✓ ' : ''}${k + 1}-й раз</button>`).join('')}</div></div>`;
       }
       const how = it.how && (G().guide || []).some((g) => g.id === it.how) ? ` <button type="button" class="sm ghost" data-act="guide" data-id="${it.how}">як робити</button>` : '';
-      return `<div class="chk"><label class="row" style="flex:1;flex-wrap:nowrap;gap:12px"><input type="checkbox" data-act="daily" data-id="${it.id}"${rec[it.id] ? ' checked' : ''}><span>${esc(it.label)}</span></label>${how}</div>`;
-    }).join('')}</div>`;
+      const ok = !!rec[it.id];
+      return `<div class="chk"><div style="flex:1;min-width:0"><span>${esc(it.label)}</span>${how ? '<div>' + how + '</div>' : ''}</div><button type="button" class="sm${ok ? ' done' : ' pri'}" data-act="dailyDone" data-id="${it.id}" aria-pressed="${ok}">${ok ? '✓ Зроблено' : 'Виконано'}</button></div>`;
+    }).join('')}</div><p class="tiny muted">Відмітка — на сьогодні; ще раз торкніться, щоб скасувати. Дні з відмітками зеленіють у «План» → «Історія».</p>`;
   }
   function alerts() {
     const out = [], p = P(), prog = G();
@@ -1937,6 +1942,7 @@ window.APP_START = () => {
     if (act === 'other') return otherSheet();
     if (act === 'startW') { VOICE.unlock(); return beginWorkout(b.dataset.w); }
     if (act === 'resume') { view = 'workout'; return render(); }
+    if (act === 'dailyDone') { const t = today(), r = p.daily[t] = p.daily[t] || {}; r[b.dataset.id] = !r[b.dataset.id]; save(); haptic(); return rHome(); }
     if (act === 'jump') { const k = Number(b.dataset.k), t = today(); const r = p.daily[t] = p.daily[t] || {}; r.jumps = (r.jumps || 0) >= k ? k - 1 : k; save(); haptic(); return rHome(); }
     /* тренування */
     if (act === 'minimize') { view = 'home'; return render(); }
@@ -2062,7 +2068,6 @@ window.APP_START = () => {
   app.addEventListener('change', (e) => {
     const t = e.target;
     if (t.id === 'qAgree') { qState().a.agree = t.checked; return; }
-    if (t.dataset && t.dataset.act === 'daily') { const d = today(); const r = P().daily[d] = P().daily[d] || {}; r[t.dataset.id] = t.checked; save(); haptic(); }
   });
 
   /* ---------- запуск ---------- */
