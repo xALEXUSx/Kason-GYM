@@ -543,11 +543,76 @@ var ENGINE = (function () {
     for (;;) { var k = weekKey(d.toISOString().slice(0, 10)); if (set[k]) { n++; d.setDate(d.getDate() - 7); } else break; }
     return n;
   }
+  /* ---------- калорії тренування (з 3.21.9; слово Alexа 24.10: «Скільки калорій за тренування я спалив? Це потрібно правильно вираховувати і показувати
+     після тренування та в додатку … + за тиждень в цілому за всі тренування які зробив») ----------
+     2024 Adult Compendium of Physical Activities (J Sport Health Sci, 2024; pacompendium.com — «Conditioning Exercise»), код 02054 «Resistance (weight) training,
+     multiple exercises, 8-15 reps at varied resistance» — 3,5 MET; визначення там же: 1 MET = 1 ккал на кг ваги за годину. Значення MET не міняємо й не змішуємо (правило Compendium).
+     ккал = 3,5 × вага × години тренування — від старту до останнього виконаного підходу (kmins), разом із відпочинками (так міряли й у Compendium);
+     понад спокій — (3,5 − 1) × вага × години. Вага — останнє зважування до дня тренування, якщо його немає — найближче після, інакше з анкети. Compendium — середнє, не вимір окремої людини (пише сам сайт) — показуємо «≈». */
+  var KCAL_MET = 3.5;
+  function weightAt(profile, date) {
+    var all = ((profile.body || {}).weight || []).filter(function (x) { return x.v > 0; }).sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
+    var before = all.filter(function (x) { return x.d <= date; });
+    if (before.length) return Number(before[before.length - 1].v);
+    if (all.length) return Number(all[0].v);  // тренування раніше за перше зважування (анкета записує вагу днем заповнення) — найближче відоме
+    return (profile.me || {}).weight > 0 ? Number(profile.me.weight) : null;
+  }
+  function sessionKcal(profile, s) {
+    var m = s.kmins || s.mins, kg = weightAt(profile, s.date);
+    if (!(m > 0) || !(kg > 0)) return null;
+    return { total: Math.round(KCAL_MET * kg * m / 60), active: Math.round((KCAL_MET - 1) * kg * m / 60), kg: round1(kg), mins: m };
+  }
+  function kcalSum(profile, sessions) {
+    var t = 0, a = 0, n = 0;
+    sessions.forEach(function (s) { var k = sessionKcal(profile, s); if (k) { t += k.total; a += k.active; n++; } });
+    return n ? { total: t, active: a, n: n } : null;
+  }
+  /* ---------- варіанти вправи (з 3.21.9; слово Alexа 24.10: «чому не змінюються к-сть підходів та кг при натисканні різних кнопок?») ----------
+     історія й порада — окремо для кожного варіанта; записи без варіанта — перший варіант (так було до варіантів).
+     Варіанта ще не було — старт від найближчого варіанта, що був (variantStart): легший → складніший — на крок легше (опційна гантель — аж до «без гантелі»),
+     складніший → легший — та сама вага; інша кількість гантелей (гоблет 1 ↔ 2 на плечах) — та сама вага в руках, униз до дисків, що збираються. */
+  function variantOf(ex, x) { return x.variant || (ex.variants ? ex.variants[0].id : undefined); }
+  function histVariant(ex, hist, v) {
+    if (!ex.variants || !v) return hist;
+    return hist.map(function (h) { return Object.assign({}, h, { sets: h.sets.filter(function (x) { return variantOf(ex, x) === v; }) }); }).filter(function (h) { return h.sets.length; });
+  }
+  /* на крок легше / важче: d = −1 | +1; опційна гантель (dbopt): «без гантелі» (null) ↔ «лише гриф» (0) ↔ диски */
+  function shiftLoad(ex, L, d, step, cap) {
+    if (d < 0) { if (L === null || L === undefined || L === '') return null; L = Number(L); return L - step >= 0 ? Math.round((L - step) * 100) / 100 : L > 0 ? 0 : (ex.type === 'dbopt' ? null : 0); }
+    if (L === null || L === undefined || L === '') return ex.type === 'dbopt' ? 0 : null;
+    return Math.min(cap, Math.round((Number(L) + step) * 100) / 100);
+  }
+  function variantStart(ex, hist, v, handle, step, cap) {
+    if (!ex.variants || !v || histVariant(ex, hist, v).length) return null;
+    var idx = function (id) { for (var i = 0; i < ex.variants.length; i++) if (ex.variants[i].id === id) return i; return -1; };
+    var me = idx(v); if (me < 0) return null;
+    for (var j = hist.length - 1; j >= 0; j--) {
+      var u = null, L = null, has = false;
+      hist[j].sets.forEach(function (x) { var w = variantOf(ex, x); if (w === v || idx(w) < 0) return; if (u === null || Math.abs(idx(w) - me) < Math.abs(idx(u) - me)) u = w; });
+      if (u === null) continue;
+      hist[j].sets.forEach(function (x) { if (variantOf(ex, x) !== u || x.load === null || x.load === undefined || x.load === '') return; has = true; if (L === null || Number(x.load) > L) L = Number(x.load); });
+      var harder = me > idx(u), load;
+      if (!has) load = null;
+      else if (dbCountOf(ex, u) !== dbCountOf(ex, v)) { var per = totalLoad(ex, L, handle, u) / dbCountOf(ex, v) - (handle || 0); load = Math.max(0, Math.min(cap, Math.floor(per / step + 1e-9) * step)); }
+      else load = harder ? shiftLoad(ex, L, -1, step, cap) : L;
+      return { from: u, harder: harder, load: load };
+    }
+    return null;
+  }
+  /* перший раз (вправи чи варіанта ще не було): після першого робочого підходу вага решти — за відповіддю «скільки ще могли б» (ідея Джарвіса, прийнята Alexом 24.10;
+     ціль першого разу — запас 2–3): 0 у запасі або менше за нижню межу повторень — на крок легше; «3+» і верхня межа — на крок важче; інакше — та сама. Без відповіді — без змін. */
+  function calibrate(set, min, max) {
+    if (set.rir === null || set.rir === undefined) return 0;
+    var r = Number(set.reps);
+    if (set.rir <= 0 || r < min) return -1;
+    if (set.rir >= 3 && r >= max) return 1;
+    return 0;
+  }
   /* Місячний звіт. */
   function monthReport(prog, profile, ym, handle) {
-    var r = { sessions: 0, mins: 0, volume: 0, sets: 0, prs: 0, best: null };
+    var r = { sessions: 0, mins: 0, volume: 0, sets: 0, prs: 0, best: null, kcal: null };
     var ss = (profile.sessions || []).filter(function (s) { return s.date.slice(0, 7) === ym; });
-    r.sessions = ss.length;
+    r.sessions = ss.length; r.kcal = kcalSum(profile, ss);
     ss.forEach(function (s) { r.mins += s.mins || 0; r.volume += sessionVolume(prog, s, handle); r.sets += (s.sets || []).filter(function (x) { return x.reps > 0 && x.type !== 'W'; }).length; r.prs += s.prs || 0; });
     r.volume = round1(r.volume);
     var gains = [];
@@ -752,6 +817,8 @@ var ENGINE = (function () {
     if (db.settings.guide === undefined) db.settings.guide = !Object.keys(db.profiles).some(function (id) { return (db.profiles[id].sessions || []).length >= 3; });
     if (!db.settings.voice) db.settings.voice = { on: true, level: 'full', rate: 1, uri: null };
     if (!db.settings.voice.tone) db.settings.voice.tone = 'hard';
+    /* з 3.21.8: «Голос тренера під час тренування» — full / part / off; старий перемикач (on: false) → off, а on — знову загальний вимикач */
+    if (!db.settings.voice.auto) { db.settings.voice.auto = db.settings.voice.on === false ? 'off' : 'full'; db.settings.voice.on = true; }
     if (!db.settings.radio) db.settings.radio = { id: null, duck: 0.5 };
     if (!db.settings.tour) db.settings.tour = {};
     if (!db.settings.mode) db.settings.mode = 'coach';
@@ -770,6 +837,7 @@ var ENGINE = (function () {
 
   return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
-           suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
+           suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
+           KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };
 })();
 if (typeof module !== 'undefined') module.exports = ENGINE;

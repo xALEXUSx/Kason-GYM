@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.21.7';
+  const VERSION = '3.22.0';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -539,10 +539,23 @@ window.APP_START = () => {
     const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
     return pl.ok ? pl.side : null;
   }
-  function makeItem(it, ss, plan, step, o) {
-    const prog = G(), p = P(), ex = prog.ex[it.ex];
-    const nS = prog.setsFor(it, plan.week), hist = histAt(it.ex, o.where);
+  function makeItem(it0, ss, plan, step, o) {
+    const prog = G(), p = P(), ex = prog.ex[it0.ex];
+    /* варіант (з 3.21.9; слово Alexа 24.10: «чому не змінюються к-сть підходів та кг при натисканні різних кнопок?»): свої підходи й межі (болгарський — 3 × 8–10),
+       своя історія й порада; варіанта ще не було — старт від найближчого, що був (ENGINE.variantStart), і підбір ваги після першого підходу (first) */
+    const variant = o.variant || defaultVariant(it0.ex, plan), vo = ex.variants ? ex.variants.find((v) => v.id === variant) || null : null;
+    const it = vo && (vo.sets || vo.min) ? Object.assign({}, it0, { sets: vo.sets || it0.sets, min: vo.min || it0.min, max: vo.max || it0.max }) : it0;
+    const nS = prog.setsFor(it, plan.week), all = histAt(it.ex, o.where), hist = ENGINE.histVariant(ex, all, variant);
     const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step, o.back);
+    const vs = ex.type === 'amrap' ? null : ENGINE.variantStart(ex, all, variant, p.handle, step, prog.cap || 20);
+    if (vs) {
+      const lb = (id) => TR((ex.variants.find((v) => v.id === id) || {}).label || ''), withLoad = isLoad(ex) && ex.type !== 'band';
+      sug.sets.forEach((x) => { if (withLoad) x.load = vs.load; if (vs.harder && ex.type === 'time') x.reps = it.min; });
+      sug.note = LL('Новий варіант «', 'New variation “') + lb(variant) + LL('»: ', '”: ') + (!withLoad ? (vs.harder ? LL('перший раз — нижня межа', 'first time — the bottom of the range') : LL('як раніше', 'as before'))
+        : ENGINE.dbCountOf(ex, variant) !== ENGINE.dbCountOf(ex, vs.from) ? LL('майже та сама вага в руках, що в «', 'about the same total weight as in “') + lb(vs.from) + LL('», — на ', '”, split over ') + ENGINE.dbCountOf(ex, variant) + LL(' гантелі (униз до дисків, що збираються)', ' dumbbells (rounded down to plates you can load)')
+          : vs.harder ? LL('на крок легше, ніж у «', 'one step lighter than in “') + lb(vs.from) + LL('»', '”') : LL('та сама вага, що в «', 'the same weight as in “') + lb(vs.from) + LL('»', '”'))
+        + LL(', запас 2–3.', ', 2–3 in reserve.') + (withLoad ? LL(' Після першого підходу вагу підправлю за відповіддю «скільки ще могли б».', ' After the first set I’ll fine-tune the weight from your “how many more” answer.') : '');
+    }
     const last = hist.length ? hist[hist.length - 1].sets : [];
     const sets = sug.sets.map((s, j) => { const pv = last[j] || last[last.length - 1] || null; return { type: 'N', load: s.load, reps: s.reps, rir: null, done: false, pr: [], prev: pv ? { load: pv.load, reps: pv.reps } : null, touched: false }; });
     let note = sug.note, skipped = !!it.optional;
@@ -563,7 +576,25 @@ window.APP_START = () => {
     }
     if (o.from) note = LL('Замість «', "Instead of “") + prog.ex[o.from].name + LL('». ', '.” ') + note;
     if (o.myo && ex.iso && ex.type !== 'amrap' && sets.length) sets[sets.length - 1].type = 'M';
-    return { ex: it.ex, variant: defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets };
+    return { ex: it.ex, variant: vo ? variant : defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets, first: !hist.length };
+  }
+  /* перемкнули варіант (з 3.21.9): невиконані підходи — заново за порадою цього варіанта (вага, повторення, кількість); виконані лишаються як є;
+     розминка — заново, якщо ще нічого не зроблено */
+  function switchVariant(i, v) {
+    const p = P(), d = p.draft, prog = G(), it = d && d.items[i]; if (!it || it.variant === v) return rWorkout();
+    const W = d.place === 'gym' && prog.gymWorkouts ? prog.gymWorkouts : prog.workouts, src = ((W[d.workout] || {}).items || []).find((x) => x.ex === (it.from || it.ex));
+    const base = Object.assign({}, src || { sets: it.sets.filter((x) => x.type !== 'W').length, min: it.min, max: it.max, rest: it.rest }, { ex: it.ex, optional: it.optional });
+    const plan = ENGINE.planFor(prog, d.n), step = ENGINE.stepFor(p.inv), ra = ENGINE.readyAction(prog, it.ex, d.ready, d.items.map((x) => x.ex));
+    const fr = makeItem(base, it.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from: it.from, myo: it.sets.some((x) => x.type === 'M'), where: d.place, back: d.back, variant: v });
+    const done = it.sets.filter((x) => x.type !== 'W' && x.done), nw = fr.sets.filter((x) => x.type !== 'W');
+    const work = nw.map((x, k) => done[k] || x).concat(done.slice(nw.length));
+    let warm = it.sets.filter((x) => x.type === 'W');
+    if (warm.length && !it.sets.some((x) => x.done)) {
+      const fw = work.find((x) => !x.done), ws = ENGINE.warmups(prog.ex[it.ex], fw ? fw.load : null, step, prog.warm, 0);
+      warm = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true }));
+    }
+    Object.assign(it, { variant: v, sets: warm.concat(work), min: fr.min, max: fr.max, note: fr.note, first: fr.first, calib: false });
+    save(); haptic(); rWorkout();
   }
   function buildDraft(wid, ready, place) {
     const prog = G(), p = P(), n = nextN(), plan = ENGINE.planFor(prog, n);
@@ -602,13 +633,26 @@ window.APP_START = () => {
   /* Хто зараз говорить і чому — видно в «Більше» → «Голосовий тренер» (щоб не гадати, чому звучить системний голос). */
   const voiceInfo = { mode: '', why: '' };
   function sysSay(text, why) { voiceInfo.mode = 'system'; voiceInfo.why = why; return VOICE.say(text); }
-  function talk(t) {
-    if (!S().voice.on || ASK.st === 'talk' || ASK.rec) return false;  // говорить тренер-співрозмовник або людина — фразу тренування пропускаємо
+  /* Автоматичний голос тренера (з 3.21.8; слово Alexа 24.10: «потрібна кнопка яка вимикає/вмикає голос тренера під час тренування.
+     за замовчування він має бути увімкненим завжди але в налаштуваннях … вимкнути … повністю, частково або не вимикати»):
+     налаштування S().voice.auto — full (не вимикати, за замовчуванням) / part (лише головне: що робити, відпочинок, «Час!», рекорди — без техніки й жартів;
+     застереження про поперек лишається) / off (сам не говорить). Кнопка з динаміком угорі тренування перемикає лише це тренування (d.vo),
+     наступне — знову за налаштуванням. Натиснуте людиною («🔊 Як робити», «🔁 Повторити», перевірка голосу) звучить завжди — talk(t, true).
+     S().voice.on лишається загальним вимикачем (ним глушать голос перевірки в браузері, §5). */
+  const vAuto = () => { const v = S().voice.auto || 'full', d = P() && P().draft; return d && d.vo ? (d.vo === 'off' ? 'off' : v === 'off' ? 'full' : v) : v; };
+  function autoTxt(m, db) {
+    const w = db ? LL('вагу й диски', 'weight and plates') : LL('вагу', 'weight');
+    return m === 'off' ? LL('Сам не говорить. «🔊 Як робити», «🔁 Повторити» і відповіді на питання звучать. Кнопка з динаміком угорі тренування вмикає голос на одне тренування.', 'Doesn’t speak on its own. “🔊 How to do it,” “🔁 Repeat,” and answers to your questions still play. The speaker button at the top of a workout turns the voice on for that workout.')
+      : m === 'part' ? LL('Лише головне: вправа, підхід, ', 'Just the essentials: exercise, set, ') + w + LL(' й повторення, відпочинок, «10 секунд», «Час!», рекорди — без пояснень техніки й жартів. Кнопка з динаміком угорі тренування вимикає голос на одне тренування.', ' and reps, rest, “10 seconds,” “Time!,” PRs — no form explanations or jokes. The speaker button at the top of a workout turns the voice off for that workout.')
+      : LL('Говорить усе: що робити, ', 'Says everything: what to do, ') + w + LL(', техніку, відпочинок, «10 секунд», «Час!», рекорди. Кнопка з динаміком угорі тренування вимикає голос на одне тренування.', ', form cues, rest, “10 seconds,” “Time!,” PRs. The speaker button at the top of a workout turns the voice off for that workout.');
+  }
+  function talk(t, force) {
+    if (!S().voice.on || (!force && vAuto() === 'off') || ASK.st === 'talk' || ASK.rec) return false;  // говорить тренер-співрозмовник або людина — фразу тренування пропускаємо
     const text = sp(t), id = I18N.lang === 'en' ? '' : packId();  // англійською — голос телефона: записані голоси українські
     if (I18N.lang === 'en') return sysSay(text, 'English: phone voice');
     if (!id) return sysSay(text, VPACKS.length ? LL('у налаштуваннях обрано системний голос', "system voice is selected in settings") : LL('записані голоси ще не завантажились', "recorded voices haven’t loaded yet"));
     /* опис голосу ще не завантажився (перші секунди після запуску) — дочекатися, а не перемикатися на системний */
-    if (!VOICEPACK.packs[id]) { VOICEPACK.load(id).then(() => talk(t), () => sysSay(text, LL('записаний голос не завантажився — перевірте інтернет', "recorded voice didn’t load — check your internet connection"))); return true; }
+    if (!VOICEPACK.packs[id]) { VOICEPACK.load(id).then(() => talk(t, force), () => sysSay(text, LL('записаний голос не завантажився — перевірте інтернет', "recorded voice didn’t load — check your internet connection"))); return true; }
     let segs = VOICE.split(text);
     /* вага, якої немає в записі (крок тренажера вашого залу 4,5 чи 6,8 кг, своя вага цифрами), не переводить усю фразу
        на системний голос: число видно на екрані — тренер каже «Вага — на екрані.» (поки її немає в записі — пропускає) */
@@ -714,7 +758,7 @@ window.APP_START = () => {
     const it = d.items[st.i]; return G().ex[it.ex].name + ' · ' + setName(it, st.j);
   }
   /* Тренер: характер (жорсткий з гумором або спокійний) і сценарій вправи. */
-  const hard = () => S().voice.tone !== 'calm';
+  const hard = () => S().voice.tone !== 'calm' && vAuto() !== 'part';  // «Частково» — без жартів характеру
   const L = (kind, seed) => (hard() ? COACH.line(kind, G().sex, seed) + ' ' : '');
   /* «Перші 3 тренування — за руку» (з 3.21.7; слово Alexа 24.10: «для перших різних тренеровок потрібен повний голосовий супровід тренера та підсказки що де і як натискати і чому»):
      тренер каже, що натиснути, а кнопка світиться (підказка — і текстом, для тих, хто без голосу). Лише режим «Тренер»; перші 3 тренування
@@ -743,6 +787,9 @@ window.APP_START = () => {
   }
   function guideMark(d) {
     const k = d.guide && d.guide.cur; if (!k || !guideOn()) return;
+    /* не під час туру (огляд 24.10, слово Alexа: «без рядка-підказки під час туру»): тур цього екрана ще не пройдено чи він на екрані — рядок каже те саме; зʼявиться після туру */
+    const tid = app.querySelector('.cdone') ? 'coach' : app.querySelector('.crest .cring') ? 'rest' : null;
+    if (document.getElementById('tour') || (tid && !S().tour[tid])) return;
     const el = app.querySelector(G_EL[k]), host = app.querySelector('.coach'); if (!el || !host) return;
     el.classList.add('gpulse');
     const n = document.createElement('div'); n.className = 'note small gnote';
@@ -766,9 +813,11 @@ window.APP_START = () => {
     if (s.type === 'D') t += LL(' Одразу.', " No rest.");
     if (ex.spine && s.type !== 'W') t += LL(' Запас два.', " Two reps in reserve.");
     if (it.ss && it.ss.k === 1) { const b = d.items[st.i + 1]; if (b && !b.skipped) t += LL(' Суперсет: одразу після — ', " Superset: then straight into ") + G().ex[b.ex].name + '.'; }
+    const sd = COACH.side(it.ex, ''); if (sd && s.type !== 'W' && !it.sets.some((x) => x.done && x.type !== 'W')) t += ' ' + sd.say;  // один бік — порядок (з 3.21.9)
     if (brief) return sp(t);
     const doneN = it.sets.filter((x) => x.done).length, lastWork = s.type !== 'W' && !it.sets.slice(st.j + 1).some((x) => x.type !== 'W');
     if (ex.spine && s.type !== 'W' && !it.sets.some((x) => x.done && x.type !== 'W')) t += ' ' + COACH.line('spine', G().sex);
+    if (vAuto() === 'part') return sp(t);  // «Частково»: без техніки; застереження про поперек — лишається
     if (doneN === 0) {
       if (sc) t += ' ' + (full ? COACH.howText(sc) : LL('Як: ', "How: ") + sc.move);
       else t += ' ' + VOICE.firstSentence(ex.tip);
@@ -801,7 +850,7 @@ window.APP_START = () => {
   /* ---------- позначка підходу ---------- */
   function markDone(i, j) {
     const p = P(), d = p.draft, it = d.items[i], s = it.sets[j], ex = G().ex[it.ex];
-    ensureAudio(); s.done = true; haptic(); s.pr = [];
+    ensureAudio(); s.done = true; haptic(); s.pr = []; s.variant = it.variant || undefined; d.lastAt = Date.now();  // варіант — свій у кожного підходу; час — для калорій (з 3.21.9)
     const histAll = ENGINE.history(p, it.ex, 'all');
     /* рекорд — лише коли вправа вже була в попередніх тренуваннях */
     if (s.type !== 'W' && histAll.length) {
@@ -809,11 +858,22 @@ window.APP_START = () => {
       s.pr = ENGINE.prTypes(ex, { load: s.load, reps: Number(s.reps), variant: it.variant, type: s.type }, histAll.concat(earlier.length ? [{ date: d.date, sets: earlier }] : []), p.handle);
     }
     const nx = it.sets[j + 1]; if (nx && !nx.done && !nx.touched && (nx.type === s.type || (s.type === 'N' && nx.type === 'M'))) nx.load = s.load;
+    /* перший раз (вправи чи варіанта ще не було; з 3.21.9; ідея Джарвіса, прийнята 24.10): вага решти підходів — за відповіддю «скільки ще могли б» після першого робочого */
+    if (it.first && !it.calib && s.type === 'N' && (ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'mach' || (ex.type === 'time' && ex.load))) {
+      it.calib = true; const dd = ENGINE.calibrate(s, it.min, it.max);
+      if (dd) {
+        const st = isMach(ex) ? loadStep(ex, it.ex, d.place) : ENGINE.stepFor(p.inv), cap = isMach(ex) ? (ex.cap || 300) : (G().cap || 20), nl = ENGINE.shiftLoad(ex, s.load, dd, st, cap);
+        let ch = false; it.sets.forEach((x, k) => { if (k > j && !x.done && !x.touched && x.type !== 'W' && x.load !== nl) { x.load = nl; ch = true; } });
+        if (ch) s.calib = dd;
+      }
+    }
     if (d.coach) d.coach.last = { i, j };
     save();
     if (s.pr.length) toast(LL('🏆 Рекорд: ', "🏆 PR: ") + ex.name, true);
+    else if (s.calib) toast(calibText(s.calib));
     return s;
   }
+  const calibText = (dd) => (dd < 0 ? LL('Наступні підходи — на крок легше.', 'Next sets: one step lighter.') : LL('Наступні підходи — на крок важче.', 'Next sets: one step heavier.'));
   /* Список: позначка будь-якого підходу. */
   function toggleDone(i, j) {
     const d = P().draft, s = d.items[i].sets[j];
@@ -834,14 +894,14 @@ window.APP_START = () => {
     VOICE.unlock(); markDone(cs.i, cs.j);
     const pr = s.pr.length ? (hard() ? COACH.line('pr', G().sex, d.n + cs.i) + ' ' : LL('Новий рекорд! ', "New PR! ")) : '';
     if (s.type === 'M') { d.coach.myo = { i: cs.i, j: cs.j, k: 0 }; s.mini = []; save(); startTimer(15, LL('Міо: пауза', "Myo: rest"), 'myo'); rWorkout(); talk(pr + L('myo', 0) + LL('Пауза 15 секунд. Глибоко дихай.', "Rest 15 seconds. Breathe deep.")); return; }
-    afterSet(d, cs.i, cs.j, pr);
+    afterSet(d, cs.i, cs.j, pr + (s.calib ? calibText(s.calib) + ' ' : ''));
   }
   function afterSet(d, i, j, pre) {
     const st = draftStats(d), nx = curStep(d);
     let t = pre || '';
-    if (!d.coach.half && st.total >= 6 && st.done * 2 >= st.total && nx) { d.coach.half = true; t += hard() ? L('half', 0) : LL('Половина тренування позаду. ', "Halfway there. "); }
+    if (!d.coach.half && st.total >= 6 && st.done * 2 >= st.total && nx) { d.coach.half = true; t += vAuto() === 'part' ? '' : hard() ? L('half', 0) : LL('Половина тренування позаду. ', "Halfway there. "); }
     save();
-    if (!nx) { stopTimer(); const gs = gSay(d, 'cool'); rWorkout(); talk(t + LL('Усі підходи зроблено. ', "All sets done. ") + (coolText() ? LL('Заминка. ', "Cool-down. ") + coolText() : LL('Можна завершувати.', "You can wrap up now.")) + gs); return; }
+    if (!nx) { stopTimer(); const gs = gSay(d, 'cool'); rWorkout(); talk(t + LL('Усі підходи зроблено. ', "All sets done. ") + (coolText() ? LL('Заминка. ', "Cool-down. ") + (vAuto() === 'part' ? '' : coolText()) : LL('Можна завершувати.', "You can wrap up now.")) + gs); return; }
     const left = ENGINE.stepOrder(d.items).filter((x) => !d.items[x.i].sets[x.j].done).length;
     const rest = ENGINE.restAfter(d.items, i, j), lastTxt = left === 1 ? LL('Останній підхід тренування. ', "Last set of the workout. ") : '';
     const nIt = d.items[nx.i], restLine = nIt.sets.filter((x) => x.done).length >= 2 ? L('rest', d.n + i + j) : '';
@@ -879,15 +939,19 @@ window.APP_START = () => {
     coach: '<svg viewBox="0 0 24 24"><path d="M4 5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
     radio: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
     mic: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"/></svg>',
-    cam: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>'
+    cam: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+    spk: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
+    spkOff: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>'
   };
+  /* голос тренера на це тренування (з 3.21.8) */
+  const vBtn = () => { const on = vAuto() !== 'off'; return `<button type="button" class="ic" id="vBtn" data-act="vmute" aria-label="${on ? LL('вимкнути голос тренера', 'turn off the coach voice') : LL('увімкнути голос тренера', 'turn on the coach voice')}">${on ? ICON.spk : ICON.spkOff}</button>`; };
   function wbar(d, prog, st) {
     const list = S().mode === 'list';
     return `${LL(`<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
       <div class="t"><b>`, `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="minimize">⌄</button>
       <div class="t"><b>`)}${esc(woTitle(d.workout))}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}${LL(`</span></div>
       <div class="wbr"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `</span></div>
-      <div class="wbr"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" id="radBtn" data-act="radio" aria-label="радіо">`, `" id="radBtn" data-act="radio" aria-label="radio">`)}${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? LL('режим тренера', "coach mode") : LL('список усіх вправ', "list of all exercises")}">${list ? ICON.coach : ICON.list}${LL(`</button><button type="button" class="pri" data-act="finish">Готово</button></div>
+      <div class="wbr"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button>${vBtn()}<button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" id="radBtn" data-act="radio" aria-label="радіо">`, `" id="radBtn" data-act="radio" aria-label="radio">`)}${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? LL('режим тренера', "coach mode") : LL('список усіх вправ', "list of all exercises")}">${list ? ICON.coach : ICON.list}${LL(`</button><button type="button" class="pri" data-act="finish">Готово</button></div>
       <div class="wradio" id="wRadio">`, `</button><button type="button" class="pri" data-act="finish">Finish</button></div>
       <div class="wradio" id="wRadio">`)}${radioRow()}</div></div>
       <div class="prog"><i style="width:${st.total ? Math.round(st.done / st.total * 100) : 0}%"></i></div>`;
@@ -921,6 +985,7 @@ window.APP_START = () => {
     else if (T.id && T.kind === 'rest') body = restCard(d);
     else { const cs = curStep(d); body = cs ? setCard(d, cs) : coolCard(); }
     app.innerHTML = wbar(d, prog, st) + body;
+    vizAttach(d);
     startElapsed(d); keepAwake(true);
     if (T.id) tickTimer();
     guideMark(d);
@@ -938,8 +1003,10 @@ window.APP_START = () => {
   }
   function setCard(d, cs) {
     const prog = G(), it = d.items[cs.i], ex = prog.ex[it.ex], s = it.sets[cs.j], ij = `data-i="${cs.i}" data-j="${cs.j}"`;
-    const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${cs.i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
+    const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${cs.i}" data-v="${v.id}"${v.tip ? ` data-tip="${esc(v.tip)}"` : ''}>${esc(v.label)}</button>`).join('')}</div>` : '';
     const tgt = ex.type === 'amrap' ? LL('скільки зможете', "as many as you can") : s.type === 'M' ? LL('до відмови', "to failure") : s.type === 'W' ? LL('легко', "easy") : (it.min === it.max ? it.max : it.min + '–' + it.max) + (ex.type === 'time' ? LL(' с', " sec") : '');
+    /* вправа на один бік (з 3.21.9): один підхід — обидва боки, відпочинок — після обох; ціль — на кожен бік */
+    const sd = s.type !== 'W' ? COACH.side(it.ex, s.type === 'M' ? LL('до відмови', 'to failure') : tgt) : null;
     const mt = (w) => (isMach(ex) ? ` data-tip="${w}${LL(` на крок тренажера: `, ` one machine step: `)}${fmt(loadStep(ex, it.ex))}${KG(LL(` кг."`, ` kg."`))}` : '');
     const pm = (f) => `<div class="cpm"><button type="button" data-act="cstep" data-f="${f}" data-d="-1" ${ij}${LL(` aria-label="менше"`, ` aria-label="decrease"`)}${f === 'load' ? mt(LL('Менше', "Down")) : ''}>−</button><button type="button" data-act="cstep" data-f="${f}" data-d="1" ${ij}${LL(` aria-label="більше"`, ` aria-label="increase"`)}${f === 'load' ? mt(LL('Більше', "Up")) : ''}>+</button></div>`;
     const kgOn = hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '';
@@ -956,17 +1023,44 @@ window.APP_START = () => {
       <div class="seg">${[[0, '0'], [1, '1'], [2, '2'], [3, '3+']].map(([x, l]) => `<button type="button" class="${s.rir === x || (x === 3 && s.rir > 3) ? 'on' : ''}" data-act="crir" data-v="${x}" ${ij}>${l}</button>`).join('')}</div></div>`;
     return `<div class="coach">${chipsFor(d, cs)}
       <h1 class="cname">${esc(ex.name)}</h1><div class="cmus">${esc(ex.m.p.map(mName).join(' · '))}${ex.side ? LL(' · кожен бік', " · each side") : ''}</div>
-      ${vsel}${it.note ? `<div class="hint">💡 ${esc(it.note)}</div>` : ''}${plat}${painHint(it)}${userNote}
+      ${vsel}${sd ? `<div class="hint side">↔ ${esc(sd.card)}</div>` : ''}${it.note ? `<div class="hint">💡 ${esc(it.note)}</div>` : ''}${plat}${painHint(it)}${userNote}
       <div class="ctarget${isLoad(ex) ? '' : ' one'}">${boxL}${boxR}</div>
       ${plateLine(ex, it, s.load)}
       ${s.prev && s.type !== 'W' ? `<button type="button" class="ghost cprev" data-act="copyprev" ${ij}${LL(`>Минулого: `, `>Last time: `)}${esc(setText(ex, s.prev))}${LL(` — повторити</button>`, ` — repeat</button>`)}` : ''}
       ${rir}
       <button type="button" class="pri wide big cdone" data-act="cdone">✓ ${s.type === 'W' ? LL('Розминковий підхід зроблено', "Warm-up set done") : LL('Підхід виконано', "Set done")}</button>
-      ${techHtml(it.ex, !it.sets.some((x) => x.done))}${LL(`
+      ${vizBox(d, it)}${techHtml(it.ex, !it.sets.some((x) => x.done) && !vizOpen(d, it))}${LL(`
       <div class="grid3 cacts"><button type="button" data-act="say" data-what="tip">🔊 Як робити</button><button type="button" data-act="say" data-what="set">🔁 Повторити</button><button type="button" id="cMore" data-act="exmenu" data-i="`, `
       <div class="grid3 cacts"><button type="button" data-act="say" data-what="tip">🔊 How to do it</button><button type="button" data-act="say" data-what="set">🔁 Repeat</button><button type="button" id="cMore" data-act="exmenu" data-i="`)}${cs.i}${LL(`">⋯ Ще</button></div>
       </div>`, `">⋯ More</button></div>
       </div>`)}${upcoming(d, cs)}${phaseBox(d)}`;
+  }
+  /* 3D-рух (з 3.22.0; слово Alexа 24.10: «Роби день 5 візуалізації: у застосунок, лише картка підходу «Тренер»»): лише тут — картка підходу «Тренер».
+     Розгорнутий на першому підході нової вправи чи нового варіанта (it.first — історії немає), далі — згорнутий; що людина відкрила чи згорнула — у чернетці (d.vz).
+     Місце — під кнопкою «Підхід виконано», над «Як робити» (огляд 24.10, слово Alexа: «3D під кнопку «Підхід виконано»»): над ціллю розгорнутий блок ховав ціль і кнопку
+     за край екрана на першому підході кожної нової вправи (кнопка — до 1228 px при екрані 878, у Safari — 699); поки 3D розгорнуте, «Як робити» згорнуте.
+     Анімація, тема, «Зменшити рух», кадри — у viz.js; анімація — та сама, що в атласі (tools/viz/atlas3d.html) */
+  const vzKey = (it) => VIZ.keyFor(it.ex, it.variant, (PROGRAMS[DB.active] && PROGRAMS[DB.active].ex[it.ex]) || GEN.GYM.ex[it.ex]);
+  /* розгорнутий: людина сама відкрила / згорнула (d.vz) — так і лишається; інакше — перший підхід нової вправи чи варіанта */
+  const vizOpen = (d, it) => { if (typeof VIZ === 'undefined') return false; const k = vzKey(it); if (!k) return false; const vz = d.vz || {}; return vz[k] !== undefined ? vz[k] : !!(it.first && !it.sets.some((x) => x.done)); };
+  function vizBox(d, it) {
+    if (typeof VIZ === 'undefined') return '';
+    const k = vzKey(it); if (!k) return '';
+    const open = vizOpen(d, it);
+    return `<details class="vz3" data-k="${k}"${open ? ' open' : ''}><summary><b>${LL('Як рухатись — 3D', 'How to move — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>
+      <div class="vzb"><div class="vzc"></div><div class="vzcap"><span class="vzph"></span><button type="button" class="ic" data-vz="pp" data-tip="${esc(LL('Пауза або знову грати. Пальцем по картинці — повернути вигляд.', 'Pause or play again. Drag the picture to turn the view.'))}">⏸</button></div><div class="vznote"></div>
+      <div class="seg vzm"><button type="button" data-vzm="move" data-tip="${esc(LL('Рух: як виконувати — підпис показує фазу.', 'Motion: how to do it — the caption shows the phase.'))}">${LL('Рух', 'Motion')}</button><button type="button" data-vzm="mus" data-tip="${esc(LL('Мʼязи, що працюють, — підсвічені охрою.', 'The working muscles are highlighted in ochre.'))}">${LL('Мʼязи', 'Muscles')}</button><button type="button" data-vzm="bad" data-tip="${esc(LL('Найчастіша помилка — червоним поверх правильного руху.', 'The most common mistake — in red over the correct movement.'))}">${LL('Помилка', 'Mistake')}</button></div>
+      <div class="seg vzs"><button type="button" data-vzs="clay" data-tip="${esc(LL('Манекен — суцільне тіло, рух видно найчіткіше.', 'Mannequin — a solid body, the movement is easiest to see.'))}">${LL('Манекен', 'Mannequin')}</button><button type="button" data-vzs="xray" data-tip="${esc(LL('Анатомія — напівпрозоре тіло, мʼязи видно всередині.', 'Anatomy — a see-through body with the muscles inside.'))}">${LL('Анатомія', 'Anatomy')}</button></div></div></details>`;
+  }
+  function vizAttach(d) {
+    if (typeof VIZ === 'undefined') return;
+    VIZ.attach(app.querySelector('details.vz3'), {
+      t: TR, esc, mus: (ids) => ids.map(mName).join(' · ').toLowerCase(),
+      style: () => (S().vz3 === 'xray' ? 'xray' : 'clay'), setStyle: (v) => { S().vz3 = v; save(); },
+      onToggle: (open) => { const det = app.querySelector('details.vz3'); if (!det) return; (d.vz = d.vz || {})[det.dataset.k] = open; save(); },
+      L: { right: LL('правий бік', 'right side'), left: LL('лівий бік', 'left side'), work: LL('Працюють: ', 'Working: '), red: LL(' — червоним', ' — shown in red'),
+        wait: LL('Завантаження…', 'Loading…'), fail: LL('3D недоступне на цьому пристрої — дивіться «Як робити» нижче.', '3D isn’t available on this device — see “How to do it” below.'),
+        play: LL('Грати', 'Play'), pause: LL('Пауза', 'Pause') } });
   }
   function skippedBox(d) {
     const sk = d.items.map((it, i) => ({ it, i })).filter((x) => x.it.skipped); if (!sk.length) return '';
@@ -1058,7 +1152,7 @@ window.APP_START = () => {
     const plat = ENGINE.plateau(ex, histAt(it.ex, (P().draft || {}).place), P().handle) ? LL('<div class="note w small">Плато: 3 тренування без зростання — опускання 3–4 с, пауза 2 с внизу або +1 підхід.</div>', "<div class=\"note w small\">Plateau: 3 workouts with no progress — try a 3–4 sec lowering, a 2 sec pause at the bottom, or +1 set.</div>") : '';
     let note = it.note || '';
     if (it.ex === 'goblet' && it.variant === 'g1' && /максимальна|^Max weight/.test(note)) note += LL(' Час переходити на «2 гантелі на плечах».', " Time to move up to “2 dumbbells on shoulders.”");
-    const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${i}" data-v="${v.id}">${esc(v.label)}</button>`).join('')}</div>` : '';
+    const vsel = ex.variants ? `<div class="seg">${ex.variants.map((v) => `<button type="button" class="${v.id === it.variant ? 'on' : ''}" data-act="variant" data-i="${i}" data-v="${v.id}"${v.tip ? ` data-tip="${esc(v.tip)}"` : ''}>${esc(v.label)}</button>`).join('')}</div>` : '';
     const hdr = `${LL(`<div class="tr h"><span>підхід</span><span>минулого</span><span`, `<div class="tr h"><span>set</span><span>previous</span><span`)}${loadTip(ex, '.')}>${ex.type === 'band' ? LL('рівень', "level") : hasKg(ex) ? KG(LL('диски, кг', "plates, kg")) : isMach(ex) ? KG(LL('вага, кг', "weight, kg")) : ''}</span><span>${ex.type === 'time' ? LL('секунди', "seconds") : LL('повтор.', "reps")}</span><span></span></div>`;
     const rows = it.sets.map((s, j) => {
       const lab = s.type === 'N' ? String(it.sets.slice(0, j + 1).filter((x) => x.type !== 'W').length) : ({ W: LL('Р', "W"), D: LL('Д', "D"), F: LL('В', "F"), M: LL('М', "M") }[s.type]);
@@ -1148,13 +1242,13 @@ window.APP_START = () => {
     d.items.forEach((it) => {
       if (it.skipped) return;
       const types = new Set();
-      it.sets.forEach((s) => { if (!s.done || !(Number(s.reps) > 0)) return; const x = { ex: it.ex, variant: it.variant || undefined, type: s.type || 'N', load: s.load === '' ? null : s.load, reps: Number(s.reps), rir: s.rir === null || s.rir === undefined ? null : Number(s.rir) }; if (s.mini && s.mini.length) x.mini = s.mini.filter((r) => r > 0); sets.push(x); (s.pr || []).forEach((t) => types.add(t)); });
+      it.sets.forEach((s) => { if (!s.done || !(Number(s.reps) > 0)) return; const x = { ex: it.ex, variant: s.variant || it.variant || undefined, type: s.type || 'N', load: s.load === '' ? null : s.load, reps: Number(s.reps), rir: s.rir === null || s.rir === undefined ? null : Number(s.rir) }; if (s.mini && s.mini.length) x.mini = s.mini.filter((r) => r > 0); sets.push(x); (s.pr || []).forEach((t) => types.add(t)); });
       if (types.size) prList.push({ ex: it.ex, types: Array.from(types) });
     });
     if (!sets.length) { if (confirm(LL('Жодного підходу не відмічено. Закрити тренування без збереження?', "No sets checked off. Close the workout without saving?"))) { p.draft = null; save(); stopTimer(); view = 'home'; render(); remindSync(false); } return; }
     const st = draftStats(d);
     if (st.done < st.total && !confirm(LL('Відмічено ', "Checked off ") + st.done + LL(' з ', " of ") + st.total + LL(' підходів. Завершити тренування?', " sets. Finish the workout?"))) return;
-    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, place: d.place === 'gym' || d.place === 'home' ? d.place : undefined, deload: d.deload, back: d.back && d.back.f ? d.back.f : undefined, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList, pain: d.pain && d.pain.length ? d.pain.slice() : undefined };  // pain — з 3.21.5
+    const sess = { id: Date.now(), date: d.date, n: d.n, week: d.week, workout: d.workout, place: d.place === 'gym' || d.place === 'home' ? d.place : undefined, deload: d.deload, back: d.back && d.back.f ? d.back.f : undefined, ready: d.ready || 'g', mins: Math.max(1, Math.round((Date.now() - d.started) / 60000)), kmins: d.lastAt ? Math.max(1, Math.min(Math.round((Date.now() - d.started) / 60000), Math.round((d.lastAt - d.started) / 60000))) : undefined, sets, prs: prList.reduce((a, x) => a + x.types.length, 0), prList, pain: d.pain && d.pain.length ? d.pain.slice() : undefined };  // pain — з 3.21.5
     p.sessions.push(sess); if (S().guide && p.sessions.length - (S().guideFrom || 0) >= 3) S().guide = false;  /* «за руку» — 3 тренування */ p.sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id));
     p.draft = null; save(); stopTimer(); keepAwake(false);
     ui.summary = sess.id; view = 'summary'; render(); window.scrollTo(0, 0);
@@ -1228,6 +1322,19 @@ window.APP_START = () => {
   });
 
   /* ---------- підсумок ---------- */
+  /* калорії тренування (з 3.21.9; слово Alexа 24.10) — ENGINE.sessionKcal: Compendium 2024, силове тренування 3,5 MET; пояснення — на затисканні */
+  const KC_TIP = () => LL('Оцінка за довідником Compendium 2024 (силове тренування, 3,5 MET): 3,5 × вага тіла × години — від старту до останнього підходу, разом із відпочинками. «Понад спокій» — те, що додало саме тренування. Норма калорій у «Кухні» вже враховує тренування — до їжі їх не додавайте.',
+    'An estimate from the 2024 Compendium of Physical Activities (strength training, 3.5 MET): 3.5 × body weight × hours, from the start to your last set, rests included. “Above rest” is what the workout itself added. Your calorie target in “Kitchen” already includes training — don’t add these to your food.');
+  function kcalTiles(s) {
+    const k = ENGINE.sessionKcal(P(), s); if (!k) return '';
+    return `<div class="grid2 kcal" style="margin-top:10px" data-tip="${esc(KC_TIP())}"><div class="stat"><b>≈ ${k.total}</b><span>${LL('ккал за тренування', 'kcal this workout')}</span></div><div class="stat"><b>≈ ${k.active}</b><span>${LL('ккал понад спокій', 'kcal above rest')}</span></div></div>`;
+  }
+  /* тиждень (з 3.21.9): тренування, хвилини й калорії за всі тренування цього тижня — на головній, під кільцем тижня */
+  function weekKcal() {
+    const p = P(), wk = ENGINE.weekKey(today()), ss = p.sessions.filter((x) => ENGINE.weekKey(x.date) === wk); if (!ss.length) return '';
+    const k = ENGINE.kcalSum(p, ss), mins = ss.reduce((a, x) => a + (x.mins || 0), 0);
+    return `<p class="small muted wkcal" style="text-align:center" data-tip="${esc(KC_TIP())}">${LL('Цього тижня: ', 'This week: ')}${plural(ss.length, LL('тренування', 'workout'), LL('тренування', 'workouts'), LL('тренувань', 'workouts'))} · ${mins}${LL(' хв', ' min')}${k ? ' · ≈ ' + fmt(k.total) + LL(' ккал', ' kcal') : ''}</p>`;
+  }
   function rSummary() {
     const p = P(), prog = G(), s = p.sessions.find((x) => x.id === ui.summary); if (!s) { view = 'home'; return render(); }
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
@@ -1242,7 +1349,7 @@ window.APP_START = () => {
       <div class="stat"><b>`, `</b><span>working sets</span></div>
       <div class="stat"><b>`)}${vol ? fmt(Math.round(vol)) + KG(LL(' кг', " kg")) : '—'}${LL(`</b><span>обсяг`, `</b><span>volume`)}${dv !== null ? ' · ' + (dv >= 0 ? '+' : '') + dv + LL(' % до минулого', "% vs. last time") : ''}</span></div><div class="stat"><b>${s.prs || 0}${LL(`</b><span>рекордів</span></div></div>
       `, `</b><span>PRs</span></div></div>
-      `)}${(() => { const nw = msNew(s); return nw.length ? `<h2>${LL('🏅 Нова віха', '🏅 New milestone')}</h2><div class="card"><ul class="list">${nw.map((g) => `<li><span>${esc(msText(g))}</span></li>`).join('')}</ul></div>` : ''; })()}${s.prList && s.prList.length ? `${LL(`<h2>🏆 Рекорди</h2><div class="card"><ul class="list">`, `<h2>🏆 PRs</h2><div class="card"><ul class="list">`)}${s.prList.map((x) => `<li><span>${esc(prog.ex[x.ex].name)}</span><span class="chip g">${x.types.map((t) => ({ e1rm: LL('максимум', "est. 1RM"), weight: LL('вага', "weight"), reps: LL('повторення', "reps") }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}${LL(`
+      `)}${kcalTiles(s)}${(() => { const nw = msNew(s); return nw.length ? `<h2>${LL('🏅 Нова віха', '🏅 New milestone')}</h2><div class="card"><ul class="list">${nw.map((g) => `<li><span>${esc(msText(g))}</span></li>`).join('')}</ul></div>` : ''; })()}${s.prList && s.prList.length ? `${LL(`<h2>🏆 Рекорди</h2><div class="card"><ul class="list">`, `<h2>🏆 PRs</h2><div class="card"><ul class="list">`)}${s.prList.map((x) => `<li><span>${esc(prog.ex[x.ex].name)}</span><span class="chip g">${x.types.map((t) => ({ e1rm: LL('максимум', "est. 1RM"), weight: LL('вага', "weight"), reps: LL('повторення', "reps") }[t])).join(' · ')}</span></li>`).join('')}</ul></div>` : ''}${LL(`
       <h2>Що попрацювало</h2><div class="card smus">`, `
       <h2>Muscles worked</h2><div class="card smus">`)}${CHARTS.bodyMap(ms, 6, G().sex)}${LL(`</div>
       <p class="small muted">Наступне: `, `</div>
@@ -1414,7 +1521,7 @@ window.APP_START = () => {
         <li style="display:block"><b>⚡ Коротші тренування</b><div class="small muted">Суперсети — дві вправи поспіль, відпочинок після пари; у частині програм ще й міо-підходи в ізоляції. Менше часу, та сама робота.</div></li>
         <li style="display:block"><b>🔄 Заміна вправи</b><div class="small muted">«⋯ Ще» → «Замінити»: рівноцінні вправи на ті самі мʼязи.</div></li>
         <li style="display:block"><b>🎨 Новий вигляд</b><div class="small muted">Мʼякі заокруглені форми, легкі тіні, «скляні» панелі й плавні переходи. Світла й темна тема — за налаштуванням телефона.</div></li>
-        <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
+        <li style="display:block"><b>💡 Підказки</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1 секунду — зʼявиться пояснення простою мовою. А ще: кнопки «?» біля термінів, навчання на першому запуску, словник у «Більше».</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Зрозуміло</button>`, `</div></li>
         <li style="display:block"><b>🗣 Ask the coach</b><div class="small muted">The microphone button on the Home screen and during a workout: ask by voice or text — the coach answers based on your program (week, weights, form, the app) in its own voice. Requires internet.</div></li>
         <li style="display:block"><b>📷 Photo to the coach</b><div class="small muted">In the coach chat, tap the camera button: snap a photo of a machine, dumbbells, or a machine’s label and ask — the coach will tell you what it is and how it fits into your program.</div></li>
@@ -1431,7 +1538,7 @@ window.APP_START = () => {
         <li style="display:block"><b>⚡ Shorter workouts</b><div class="small muted">Supersets — two exercises back to back, with rest after the pair; some programs also use myo-rep sets on isolation exercises. Less time, same work.</div></li>
         <li style="display:block"><b>🔄 Exercise swap</b><div class="small muted">“⋯ More” → “Swap”: equivalent exercises for the same muscles.</div></li>
         <li style="display:block"><b>🎨 New look</b><div class="small muted">Soft rounded shapes, light shadows, “glass” panels, and smooth transitions. Light and dark themes follow your phone’s setting.</div></li>
-        <li style="display:block"><b>💡 Tips</b><div class="small muted">Press and hold any button or label for 1.5 seconds to see a plain-language explanation. Plus: “?” buttons next to terms, a tutorial on first launch, and a glossary in “More.”</div></li>
+        <li style="display:block"><b>💡 Tips</b><div class="small muted">Press and hold any button or label for 1 second to see a plain-language explanation. Plus: “?” buttons next to terms, a tutorial on first launch, and a glossary in “More.”</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Got it</button>`)}`);
     S().tour.v3 = true; S().tour.v4 = true; save();
   }
@@ -1949,12 +2056,12 @@ window.APP_START = () => {
   function kHomeCard() {
     const k = kit(), day = kday(today()), sx = ksex(), N = kNorm(), t = KITCHEN.dayTotals(day, sx, kctx()), wd = kWaterDay(), wday = kday(wd);
     const wT = kWTarget(wd), gl = kGlasses(wT, wday.water || 0, k.set.glass);
-    const tu = kTurn();  // з 3.21.1 — склянка на черзі (з доганянням), не просто наступна за часом
+    const tu = kTurn();  // з 3.21.1 — склянка на черзі (з доганянням), не просто наступна за часом; кількість — лише в рядку «Вода: … з … л» (огляд 24.10)
     return `<div class="card"><div class="sp"><b>${LL('Кухня сьогодні', 'Kitchen today')}</b><button type="button" class="sm" data-act="goKitchen">${LL('Відкрити', 'Open')}</button></div>
       <div class="grid2"><div class="stat"><b>${t.kcal}</b><span>${N.nu ? LL('ккал з ', 'kcal of ') + N.nu.kLo + '–' + N.nu.kHi : LL('ккал', 'kcal')}</span></div><div class="stat"><b>${fmt(t.p)}</b><span>${N.nu ? LL('г білка з ', 'g protein of ') + N.nu.pLo : LL('г білка', 'g protein')}</span></div></div>
       <div class="sp" style="margin-top:10px"><span class="small">${LL('Вода: ', 'Water: ')}<b>${fmt((wday.water || 0) / 1000)}</b>${LL(' з ', ' of ')}${fmt(wT / 1000)}${LL(' л', ' L')}</span>
         <button type="button" class="sm pri" data-act="kWaterHome">+ ${tu ? kGlW(tu.p) : LL('склянка', 'glass')}</button></div>
-      ${gl.icons}<p class="tiny muted" style="margin:0">${gl.line}${tu ? ' · ' + kTurnTxt(tu, true) : ''}</p>
+      ${gl.icons}<p class="tiny muted" style="margin:0">${(wday.water || 0) >= wT ? gl.line + (tu ? ' · ' + kTurnTxt(tu, true) : '') : tu ? kTurnTxt(tu) : ''}</p>
       ${k.set.water || !pushOk() ? '' : `<button type="button" class="sm ghost wide" data-act="kWaterRemind">${LL('Нагадувати пити воду', 'Remind me to drink water')}</button>`}</div>`;
   }
   function dailyCard() {
@@ -2022,12 +2129,12 @@ window.APP_START = () => {
         <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises"))} · ≈ ${est}${LL(` хв`, ` min`)}${warmMin ? LL(' + розминка ', " + warm-up ") + warmMin + LL(' хв', " min") : ''} · ${esc(pv.back ? LL('запас 3–4', "RIR 3–4") : plan.note.rir)}${nd ? LL(' · за планом ', " · scheduled ") + nd : ''}</p>
         <p class="small" style="opacity:.92">${pv.back ? '↩ ' + esc(backText(pv.back)) : esc(plan.note.phase)}</p>
         ${d ? '' : LL('<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>', "<button type=\"button\" class=\"pri wide big\" data-act=\"start\">Start workout</button><button type=\"button\" class=\"ghost wide hlink\" data-act=\"other\">Different workout</button>")}</div>
-      ${S().tour.tips ? '' : LL('<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1,5 секунди — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>💡 Tips on every button</b><div class=\"small muted\">Press and hold any button or label for 1.5 seconds to see a short explanation.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"tipsOk\">Got it</button></div></div>")}
+      ${S().tour.tips ? '' : LL('<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1 секунду — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>💡 Tips on every button</b><div class=\"small muted\">Press and hold any button or label for 1 second to see a short explanation.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"tipsOk\">Got it</button></div></div>")}
       ${S().tour.v4 ? '' : LL('<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: ask the coach</b><div class=\"small muted\">Tap the mic button at the top to ask by voice, text, or photo — about your program, weights, and form.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>")}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"))}</div>
         <div class="stat"><b>${streak}${LL(`</b><span>тижнів поспіль</span></div><div class="stat"><b>`, `</b><span>weeks in a row</span></div><div class="stat"><b>`)}${mprs}${LL(`</b><span>рекордів за місяць</span></div></div>
       `, `</b><span>PRs this month</span></div></div>
-      `)}${kHomeCard()}${measureHome()}${dailyCard()}`;
+      `)}${weekKcal()}${kHomeCard()}${measureHome()}${dailyCard()}`;
     tourMaybe('home');
     badgeSync();
   }
@@ -2072,7 +2179,7 @@ window.APP_START = () => {
     const vol = ENGINE.sessionVolume(prog, s, p.handle);
     openSheet(`<div class="sp"><b>${esc(woTitle(s.workout))}${placeTag(s)}${LL(`</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <p class="small muted">`, `</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
-      <p class="small muted">`)}${dm(s.date)}${LL(` · тиждень `, ` · week `)}${s.week} · ${s.mins || '?'}${LL(` хв`, ` min`)}${vol ? LL(' · обсяг ', " · volume ") + fmt(Math.round(vol)) + KG(LL(' кг', " kg")) : ''}${s.ready ? LL(' · спина ', " · back ") + ({ g: '🟢', y: '🟡', r: '🔴' }[s.ready] || '') : ''}</p>
+      <p class="small muted">`)}${dm(s.date)}${LL(` · тиждень `, ` · week `)}${s.week} · ${s.mins || '?'}${LL(` хв`, ` min`)}${(() => { const k = ENGINE.sessionKcal(p, s); return k ? ' · ≈ ' + k.total + LL(' ккал', ' kcal') : ''; })()}${vol ? LL(' · обсяг ', " · volume ") + fmt(Math.round(vol)) + KG(LL(' кг', " kg")) : ''}${s.ready ? LL(' · спина ', " · back ") + ({ g: '🟢', y: '🟡', r: '🔴' }[s.ready] || '') : ''}</p>
       ${groups.map((g) => { const ex = prog.ex[g.ex] || { name: g.ex, type: 'bw' }; return `<div class="card" style="padding:10px 12px"><b class="small">${esc(ex.name)}</b>${g.sets.map(({ x, k }) => edit
         ? `<div class="row" style="flex-wrap:nowrap;margin-top:6px"><span class="tiny muted" style="width:22px">${x.type === 'W' ? LL('Р', "W") : x.type === 'D' ? LL('Д', "D") : x.type === 'F' ? LL('В', "F") : '•'}</span>${isLoad(ex) ? `<input inputmode="decimal" data-ed="load" data-sk="${k}"${loadTip(ex, LL(' у цьому підході. Порожньо — без ваги.', " in this set. Leave blank for no weight."))} value="${x.load === null || x.load === undefined ? '' : fmt(x.load)}" placeholder="${ex.type === 'band' ? LL('рівень', "level") : KG(LL('кг', "kg"))}">` : ''}<input inputmode="numeric" data-ed="reps" data-sk="${k}" value="${x.reps}"></div>`
         : `<div class="small" style="margin-top:4px">${x.type === 'W' ? LL('<span class="chip w">Р</span> ', "<span class=\"chip w\">W</span> ") : x.type === 'D' ? LL('<span class="chip">Д</span> ', "<span class=\"chip\">D</span> ") : x.type === 'F' ? LL('<span class="chip">В</span> ', "<span class=\"chip\">F</span> ") : x.type === 'M' ? LL('<span class="chip g">М</span> ', "<span class=\"chip g\">M</span> ") : ''}${esc(setText(ex, x))}${x.mini && x.mini.length ? ' + ' + x.mini.join(' + ') : ''}${x.rir !== null && x.rir !== undefined ? LL(' · запас ', " · RIR ") + x.rir : ''}</div>`).join('')}</div>`; }).join('')}
@@ -2087,38 +2194,42 @@ window.APP_START = () => {
     let body = '';
     if (ui.progTab === 'ex') {
       const used = {}; p.sessions.forEach((s) => s.sets.forEach((x) => { if (x.type !== 'W') used[x.ex] = 1; }));
-      const ids = Object.keys(prog.ex).filter((id) => !prog.ex[id].retired || used[id]).sort((a, b) => (used[b] ? 1 : 0) - (used[a] ? 1 : 0) || (prog.ex[b].main ? 1 : 0) - (prog.ex[a].main ? 1 : 0));
-      if (!ui.progEx || !prog.ex[ui.progEx]) ui.progEx = ids[0];
-      const ex = prog.ex[ui.progEx], histAll = ENGINE.history(p, ui.progEx, 'all');
-      const metrics = ex.type === 'db' || isMach(ex) ? [['e1rm', LL('Максимум', "Est. 1RM")], ['heavy', LL('Вага', "Weight")], ['vol', LL('Обсяг', "Volume")]] : ex.type === 'dbopt' ? [['reps', LL('Повторення', "Reps")], ['heavy', LL('Вага', "Weight")]] : ex.type === 'band' ? [['e1rm', LL('Рівень × повт.', "Level × reps")]] : ex.type === 'time' ? [['e1rm', LL('Секунди', "Seconds")]] : [['e1rm', LL('Повторення', "Reps")]];
-      if (!metrics.some((m) => m[0] === ui.metric)) ui.metric = metrics[0][0];
-      const cut = ui.range === '4' ? Date.now() - 28 * 864e5 : ui.range === '12' ? Date.now() - 84 * 864e5 : 0;
-      let best = -Infinity;
-      const pts = histAll.map((x) => {
-        let v;
-        if (ui.metric === 'heavy') v = Math.max(...x.sets.map((s) => ENGINE.totalLoad(ex, s.load, h, s.variant)));
-        else if (ui.metric === 'vol') v = x.sets.reduce((a, s) => a + ENGINE.setVolume(ex, s, h), 0);
-        else if (ui.metric === 'reps') v = Math.max(...x.sets.map((s) => s.reps));
-        else v = ENGINE.bestOf(ex, x.sets, h);
-        const pr = best > -Infinity && v > best; best = Math.max(best, v);
-        return { t: tms(x.date), v: Math.round(v * 10) / 10, pr };
-      }).filter((q) => q.t >= cut);
-      const rec = ENGINE.records(ex, histAll, h);
-      const unit = ui.metric === 'vol' ? KG(LL('кг за тренування', "kg per workout")) : ui.metric === 'heavy' ? (isMach(ex) ? KG(LL('кг на тренажері', "kg on the machine")) : KG(LL('кг у руках', "kg in hand"))) : ui.metric === 'reps' ? LL('повторень', "reps") : ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg');
-      const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
-      body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}${used[id] ? '' : LL(' (ще не виконували)', " (not done yet)")}</option>`).join('')}</select>
-        <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}"${k === 'heavy' && isMach(ex) ? LL(' data-tip="Найбільша вага на тренажері за кожне тренування."', " data-tip=\"Heaviest weight on the machine in each workout.\"") : ''}>${l}</button>`).join('')}</div>
-        <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)}${LL(` · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">`, ` · ◎ — PR</span><span class="seg" style="margin:0;padding:2px">`)}${[['4', LL('4 т', "4 wk")], ['12', LL('12 т', "12 wk")], ['all', LL('усе', "all")]].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;min-width:44px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
-        ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: LL('Ще немає підходів у цій вправі', "No sets for this exercise yet") })}</div>
-        ${histAll.length ? `<div class="grid3">
-          <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' || isMach(ex) ? KG(LL('рекорд максимуму, кг', "best est. 1RM, kg")) : LL('найкращий показник', "best result")}</span></div>
-          <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? LL('найбільша вага', "heaviest weight") : LL('найважче в руках', "heaviest in hand")}${KG(LL(`, кг`, `, kg`))}${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
-          <div class="stat"><b>${rec.vol ? fmt(Math.round(rec.vol.v)) : '—'}${KG(LL(`</b><span>найбільший обсяг, кг</span></div></div>
-          `, `</b><span>biggest volume, kg</span></div></div>
-          `))}${repRows.length ? `${LL(`<h2>Рекорди повторень</h2><div class="card"><ul class="list">`, `<h2>Rep PRs</h2><div class="card"><ul class="list">`)}${repRows.map((L) => `<li><span>${ex.type === 'band' ? LL('рівень ', "level ") + fmt(L) : isMach(ex) ? fmt(L) + KG(LL(' кг', " kg")) : LL('гриф + ', "handle + ") + fmt(L) + KG(LL(' кг', " kg"))}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}${LL(`
-          <h2>Останні тренування</h2><div class="card"><ul class="list">`, `
-          <h2>Recent workouts</h2><div class="card"><ul class="list">`)}${histAll.slice(-6).reverse().map((x) => `<li><span>${dm(x.date)}</span><span class="small">${x.sets.map((s) => esc(setText(ex, s))).join(', ')}</span></li>`).join('')}</ul></div>` : ''}
-        ${ex.tip ? `<div class="note small">${esc(ex.tip)}</div>` : ''}`;
+      /* лише виконані вправи (огляд 24.10, слово Alexа: «у «Прогресі» лише виконані вправи»): до огляду в списку були всі вправи програми з позначкою «(ще не виконували)» */
+      const ids = Object.keys(prog.ex).filter((id) => used[id]).sort((a, b) => (prog.ex[b].main ? 1 : 0) - (prog.ex[a].main ? 1 : 0));
+      if (!ids.length) body = `<div class="card"><p class="small muted" style="margin:0">${LL('Ще немає виконаних вправ — графік і рекорди зʼявляться після першого тренування.', 'No exercises done yet — charts and records appear after your first workout.')}</p></div>`;
+      else {
+        if (!ui.progEx || !prog.ex[ui.progEx] || ids.indexOf(ui.progEx) < 0) ui.progEx = ids[0];
+        const ex = prog.ex[ui.progEx], histAll = ENGINE.history(p, ui.progEx, 'all');
+        const metrics = ex.type === 'db' || isMach(ex) ? [['e1rm', LL('Максимум', "Est. 1RM")], ['heavy', LL('Вага', "Weight")], ['vol', LL('Обсяг', "Volume")]] : ex.type === 'dbopt' ? [['reps', LL('Повторення', "Reps")], ['heavy', LL('Вага', "Weight")]] : ex.type === 'band' ? [['e1rm', LL('Рівень × повт.', "Level × reps")]] : ex.type === 'time' ? [['e1rm', LL('Секунди', "Seconds")]] : [['e1rm', LL('Повторення', "Reps")]];
+        if (!metrics.some((m) => m[0] === ui.metric)) ui.metric = metrics[0][0];
+        const cut = ui.range === '4' ? Date.now() - 28 * 864e5 : ui.range === '12' ? Date.now() - 84 * 864e5 : 0;
+        let best = -Infinity;
+        const pts = histAll.map((x) => {
+          let v;
+          if (ui.metric === 'heavy') v = Math.max(...x.sets.map((s) => ENGINE.totalLoad(ex, s.load, h, s.variant)));
+          else if (ui.metric === 'vol') v = x.sets.reduce((a, s) => a + ENGINE.setVolume(ex, s, h), 0);
+          else if (ui.metric === 'reps') v = Math.max(...x.sets.map((s) => s.reps));
+          else v = ENGINE.bestOf(ex, x.sets, h);
+          const pr = best > -Infinity && v > best; best = Math.max(best, v);
+          return { t: tms(x.date), v: Math.round(v * 10) / 10, pr };
+        }).filter((q) => q.t >= cut);
+        const rec = ENGINE.records(ex, histAll, h);
+        const unit = ui.metric === 'vol' ? KG(LL('кг за тренування', "kg per workout")) : ui.metric === 'heavy' ? (isMach(ex) ? KG(LL('кг на тренажері', "kg on the machine")) : KG(LL('кг у руках', "kg in hand"))) : ui.metric === 'reps' ? LL('повторень', "reps") : ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg');
+        const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
+        body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}</option>`).join('')}</select>
+          <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}"${k === 'heavy' && isMach(ex) ? LL(' data-tip="Найбільша вага на тренажері за кожне тренування."', " data-tip=\"Heaviest weight on the machine in each workout.\"") : ''}>${l}</button>`).join('')}</div>
+          <div class="card"><div class="sp"><span class="tiny muted">${esc(unit)}${LL(` · ◎ — рекорд</span><span class="seg" style="margin:0;padding:2px">`, ` · ◎ — PR</span><span class="seg" style="margin:0;padding:2px">`)}${[['4', LL('4 т', "4 wk")], ['12', LL('12 т', "12 wk")], ['all', LL('усе', "all")]].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;min-width:44px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span></div>
+          ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: LL('Ще немає підходів у цій вправі', "No sets for this exercise yet") })}</div>
+          ${histAll.length ? `<div class="grid3">
+            <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' || isMach(ex) ? KG(LL('рекорд максимуму, кг', "best est. 1RM, kg")) : LL('найкращий показник', "best result")}</span></div>
+            <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? LL('найбільша вага', "heaviest weight") : LL('найважче в руках', "heaviest in hand")}${KG(LL(`, кг`, `, kg`))}${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
+            <div class="stat"><b>${rec.vol ? fmt(Math.round(rec.vol.v)) : '—'}${KG(LL(`</b><span>найбільший обсяг, кг</span></div></div>
+            `, `</b><span>biggest volume, kg</span></div></div>
+            `))}${repRows.length ? `${LL(`<h2>Рекорди повторень</h2><div class="card"><ul class="list">`, `<h2>Rep PRs</h2><div class="card"><ul class="list">`)}${repRows.map((L) => `<li><span>${ex.type === 'band' ? LL('рівень ', "level ") + fmt(L) : isMach(ex) ? fmt(L) + KG(LL(' кг', " kg")) : LL('гриф + ', "handle + ") + fmt(L) + KG(LL(' кг', " kg"))}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}${LL(`
+            <h2>Останні тренування</h2><div class="card"><ul class="list">`, `
+            <h2>Recent workouts</h2><div class="card"><ul class="list">`)}${histAll.slice(-6).reverse().map((x) => `<li><span>${dm(x.date)}</span><span class="small">${x.sets.map((s) => esc(setText(ex, s))).join(', ')}</span></li>`).join('')}</ul></div>` : ''}
+          ${ex.tip ? `<div class="note small">${esc(ex.tip)}</div>` : ''}`;
+      }
     } else if (ui.progTab === 'body') {
       body = progBodyHtml();
     } else if (ui.progTab === 'mu') {
@@ -2141,7 +2252,7 @@ window.APP_START = () => {
         <div class="stat"><b>`, `</b><span>minutes</span></div>
         <div class="stat"><b>`)}${r.volume ? fmt(Math.round(r.volume / 100) / 10) + LL(' т', " t") : '—'}${LL(`</b><span>обсяг</span></div><div class="stat"><b>`, `</b><span>volume</span></div><div class="stat"><b>`)}${r.prs}${delta(r.prs, r0.prs)}${LL(`</b><span>рекордів</span></div></div>
         `, `</b><span>PRs</span></div></div>
-        `)}${r.gains && r.gains.length ? `${LL(`<h2>Найбільший приріст</h2><div class="card"><ul class="list">`, `<h2>Biggest gains</h2><div class="card"><ul class="list">`)}${r.gains.slice(0, 5).map((g) => `<li><span>${esc(prog.ex[g.id].name)}</span><span class="chip ok">+${g.pct} %</span></li>`).join('')}</ul></div>` : ''}
+        `)}${r.kcal ? `<p class="small muted" style="text-align:center" data-tip="${esc(KC_TIP())}">≈ ${fmt(r.kcal.total)}${LL(' ккал за тренування місяця', ' kcal from this month’s workouts')}</p>` : ''}${r.gains && r.gains.length ? `${LL(`<h2>Найбільший приріст</h2><div class="card"><ul class="list">`, `<h2>Biggest gains</h2><div class="card"><ul class="list">`)}${r.gains.slice(0, 5).map((g) => `<li><span>${esc(prog.ex[g.id].name)}</span><span class="chip ok">+${g.pct} %</span></li>`).join('')}</ul></div>` : ''}
         ${(() => { /* тіло за місяць (з 3.21.5; слово Alexа 24.10, пункт 2): вага — за середньою за 7 днів, талія — самі заміри */
           const rows = [['weight', true, LL('Вага (середня за 7 днів)', 'Weight (7-day average)')], ['waist', false, LL('Талія', 'Waist')]].map(([k, sm, nm]) => {
             const b = ENGINE.bodyMonth(p.body[k] || [], ym, sm); if (!b) return '';
@@ -2286,10 +2397,12 @@ window.APP_START = () => {
     const gapCard = gap && gap.need > 0 ? `<div class="card"><b>${LL('Чим добрати білок', 'How to reach your protein')}</b><p class="small muted">${LL('Бракує ', 'You need ')}${gap.need}${LL(' г до норми. Одне з:', ' g more. One of:')}</p>
       ${gap.list.map((x, j) => `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(kName(x.e))}</div><div class="tiny muted">${x.mine ? `<span class="kq exact">${LL('з ваших', 'yours')}</span> · ` : ''}${fmt(x.e.g)}${LL(' г · ', ' g · ')}${x.kcal}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(x.p)}${LL(' г', ' g')}</div></div>
         <button type="button" class="sm" data-act="kGapAdd" data-j="${j}">+</button></div>`).join('')}<p class="tiny muted">${LL('Спершу — те, що ви вже їсте. Склад — з бази USDA чи ваших етикеток.', 'What you already eat comes first. Composition comes from the USDA database or your own labels.')}</p></div>` : '';
-    const water = `<div class="card kwat"><div class="sp"><b>${LL('Вода', 'Water')}</b><span class="small muted">${fmt((wday.water || 0) / 1000)} ${LL('з', 'of')} ${fmt(wTarget / 1000)}${LL(' л', ' L')}</span></div>
-      ${wg.icons}<p class="tiny muted" style="margin:0 0 8px">${wg.line}</p>${tu ? `<p class="small" style="margin:0 0 8px">${kTurnTxt(tu)}</p>` : ''}${dp && dp.items.length ? `<p class="tiny muted" style="margin:0 0 8px">${LL('Сьогодні: ', 'Today: ')}${kPlanTxt(dp.items)}</p>` : ''}
+    /* вода одним числом (огляд 24.10, слово Alexа: «вода одним числом»): кількість — лише в заголовку (рядок «Випито … · залишилось …» її повторював — тепер лише «Норму виконано ✓»),
+       правила прийомів — у підказці на затискання заголовка (до огляду — постійний абзац ≈ 60 слів) */
+    const wPlan = `${LL('Ваш план: ', 'Your plan: ')}${fmt(KITCHEN.waterTarget(sx, false, k.set.vol, kWRec()) / 1000)}${LL(' л на день', ' L a day')}${k.set.vol ? LL(' (своє', ' (your own') + (kWRec() ? LL('; рекомендовано ', '; recommended ') + fmt(kWRec() / 1000) + LL(' л', ' L') : '') + ')' : kWRec() ? LL(' (рекомендовано за вагою, статтю й віком)', ' (recommended for your weight, sex and age)') : LL(' (норма програми)', ' (program target)')}${LL(', у день тренування — +0,5 л', ', +0.5 L on training days')}${wTrain ? LL(' (сьогодні)', ' (today)') : ''}; ${kIntakesTxt(glass, wTrain)} ${LL('(склянка — ', '(a glass is ')}${glass}${LL(' мл), з ', ' ml), from ')}${k.set.first}${LL(' до ', ' to ')}${k.set.last}. ${LL('Пропустили — наступні прийоми більші, до 0,8 л за раз; не вміщається — додатковий прийом; останній перед сном — не більший за попередній, а що не вміщається, не надолужуємо. Змінити — «Налаштування кухні».', 'Missed one — the next drinks get bigger, up to 0.8 L at once; if it doesn’t fit, an extra drink is added; the last one before bed is never bigger than the one before it, and whatever doesn’t fit isn’t made up. Change it in “Kitchen settings.”')}`;
+    const water = `<div class="card kwat"><div class="sp" data-tip="${esc(wPlan)}"><b>${LL('Вода', 'Water')}</b><span class="small muted">${fmt((wday.water || 0) / 1000)} ${LL('з', 'of')} ${fmt(wTarget / 1000)}${LL(' л', ' L')}</span></div>
+      ${wg.icons}${(wday.water || 0) >= wTarget ? `<p class="tiny muted" style="margin:0 0 8px">${wg.line}</p>` : ''}${tu ? `<p class="small" style="margin:0 0 8px">${kTurnTxt(tu)}</p>` : ''}${dp && dp.items.length ? `<p class="tiny muted" style="margin:0 0 8px">${LL('Сьогодні: ', 'Today: ')}${kPlanTxt(dp.items)}</p>` : ''}
       <div class="row"><button type="button" class="pri" style="flex:1" data-act="kWater" data-v="1">+ ${tu ? kGlW(tu.p) : LL('склянка', 'glass')}</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="0.5" aria-label="${LL('пів склянки', 'half a glass')}">+ ½</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="-1" aria-label="${LL('прибрати останню відмітку', 'remove the last entry')}">−</button></div>
-      <p class="tiny muted">${LL('Ваш план: ', 'Your plan: ')}${fmt(KITCHEN.waterTarget(sx, false, k.set.vol, kWRec()) / 1000)}${LL(' л на день', ' L a day')}${k.set.vol ? LL(' (своє', ' (your own') + (kWRec() ? LL('; рекомендовано ', '; recommended ') + fmt(kWRec() / 1000) + LL(' л', ' L') : '') + ')' : kWRec() ? LL(' (рекомендовано за вагою, статтю й віком)', ' (recommended for your weight, sex and age)') : LL(' (норма програми)', ' (program target)')}${LL(', у день тренування — +0,5 л', ', +0.5 L on training days')}${wTrain ? LL(' (сьогодні)', ' (today)') : ''}; ${kIntakesTxt(glass, wTrain)} ${LL('(склянка — ', '(a glass is ')}${glass}${LL(' мл), з ', ' ml), from ')}${k.set.first}${LL(' до ', ' to ')}${k.set.last}. ${LL('Пропустили — наступні прийоми більші, до 0,8 л за раз; не вміщається — додатковий прийом, останній перед сном не збільшуємо, поки є куди. Змінити — «Налаштування кухні».', 'Missed one — the next drinks get bigger, up to 0.8 L at once; if it doesn’t fit, an extra drink is added, and the last one before bed stays as is while there’s room elsewhere. Change it in “Kitchen settings.”')}</p>
       ${wd !== d ? `<p class="tiny muted">${LL('Нічна зміна: вода рахується від першої склянки о ', 'Night shift: water counts from your first glass at ')}${k.set.first}.</p>` : ''}${kHeartNote()}${kWaterRemindHtml()}</div>`;
     /* вага для норми (з 3.21.0, слово Alexа 23.10: «Прибери поле ваги з «Кухні»: лиши рядок, від якої ваги рахується норма (із «Замірів»), і пораду за темпом»):
        зважування — лише в «Тіло → Заміри» (до 3.21.0 тут було друге поле для тієї самої ваги); тут — від якої ваги норма, порада за темпом і перехід у «Заміри» */
@@ -2987,18 +3100,23 @@ window.APP_START = () => {
   }
 
   /* ---------- більше ---------- */
+  /* назва голосу людською мовою (огляд 24.10, слово Alexа: «кнопка збереження голосу й назви голосів»): «Тренер» / «Тренерка» за статтю голосу;
+     до огляду — технічна назва з packs.json («Тренер · Algenib») і примітка «природний голос з характером (Gemini)»; двоє однієї статі — з номером */
+  const packLabel = (x) => { const same = VPACKS.filter((y) => y.gender === x.gender), base = x.gender === 'f' ? LL('Тренерка', 'Female coach') : LL('Тренер', 'Male coach');
+    return same.length > 1 ? base + ' ' + (same.indexOf(x) + 1) : base; };
   function packBox() {
     if (!VPACKS.length) return LL('<div class="note small">Записаних голосів ще немає — зараз говорить системний голос телефону.</div>', "<div class=\"note small\">No recorded voices yet — for now, the phone’s system voice is speaking.</div>");
     const cur = packId(), sex = G().sex;
     const byP = (a, b) => (b.priority || 0) - (a.priority || 0), list = VPACKS.filter((x) => x.gender === sex).sort(byP).concat(VPACKS.filter((x) => x.gender !== sex).sort(byP));
-    return `${LL(`<label class="f">Голос тренера</label><div class="pick vp">`, `<label class="f">Coach voice</label><div class="pick vp">`)}${list.map((x) => `<button type="button" class="rst${x.id === cur ? ' on' : ''}" data-act="vpack" data-id="${x.id}"><b>${esc(x.name)}</b><span class="small muted">${esc(x.note || '')}</span></button>`).join('')}
+    return `${LL(`<label class="f">Голос тренера</label><div class="pick vp">`, `<label class="f">Coach voice</label><div class="pick vp">`)}${list.map((x) => `<button type="button" class="rst${x.id === cur ? ' on' : ''}" data-act="vpack" data-id="${x.id}"><b>${esc(packLabel(x))}</b></button>`).join('')}
 </div>
       ${voiceInfo.mode ? `<div class="note small ${voiceInfo.mode === 'pack' ? 'ok' : 'w'}">${voiceInfo.mode === 'pack' ? LL('Зараз говорить записаний голос.', "The recorded voice is speaking now.") : LL('Остання фраза прозвучала системним голосом: ', "The last phrase was spoken in the system voice: ") + esc(voiceInfo.why) + '.'}</div>` : ''}
-      ${cur ? `${LL(`<p class="small muted" id="vpState">Перевіряю, чи збережено в телефоні…</p><button type="button" class="wide" data-act="vdl">Зберегти голос у телефоні (для роботи без інтернету)</button>`, `<p class="small muted" id="vpState">Checking whether it’s saved on this phone…</p><button type="button" class="wide" data-act="vdl">Save the voice on this phone (works offline)</button>`)}` : ''}`;
+      ${cur ? `${LL(`<p class="small muted" id="vpState">Перевіряю, чи збережено в телефоні…</p><button type="button" class="wide" data-act="vdl" style="display:none">Зберегти голос у телефоні (для роботи без інтернету)</button>`, `<p class="small muted" id="vpState">Checking whether it’s saved on this phone…</p><button type="button" class="wide" data-act="vdl" style="display:none">Save the voice on this phone (works offline)</button>`)}` : ''}`;
   }
   async function packState() {
     const el = document.getElementById('vpState'), id = packId(); if (!el || !id) return;
-    try { const p = await VOICEPACK.load(id), have = await VOICEPACK.cached(id); el.textContent = have ? LL('Голос збережено в телефоні: працює без інтернету.', "Voice saved on this phone: works offline.") : LL('Голос ще не збережено в телефоні (', "Voice not saved on this phone yet (") + (p.bytes ? Math.round(p.bytes / 1e6) + LL(' МБ', " MB") : LL('кілька МБ', "a few MB")) + LL('). Без інтернету тренер говоритиме системним голосом.', "). Offline, the coach will use the system voice."); }
+    /* кнопка «Зберегти» — лише коли голос ще не збережено (огляд 24.10: до того була й поруч із «Голос збережено в телефоні») */
+    try { const p = await VOICEPACK.load(id), have = await VOICEPACK.cached(id), btn = document.querySelector('[data-act="vdl"]'); if (btn) btn.style.display = have ? 'none' : ''; el.textContent = have ? LL('Голос збережено в телефоні: працює без інтернету.', "Voice saved on this phone: works offline.") : LL('Голос ще не збережено в телефоні (', "Voice not saved on this phone yet (") + (p.bytes ? Math.round(p.bytes / 1e6) + LL(' МБ', " MB") : LL('кілька МБ', "a few MB")) + LL('). Без інтернету тренер говоритиме системним голосом.', "). Offline, the coach will use the system voice."); }
     catch (e) { el.textContent = LL('Не вдалося завантажити голос — перевірте інтернет.', "Couldn’t download the voice — check your internet."); }
   }
   /* ---------- користувач і захист ---------- */
@@ -3046,8 +3164,8 @@ window.APP_START = () => {
       `)}${accountCard()}
       ${standalone ? '' : installNote(LL('Встановіть як застосунок', "Install as an app"))}
       ${langCard()}${unitsCard()}${remindCard()}${LL(`
-      <h2>Голосовий тренер</h2><div class="card" id="mVoice"><label class="sw"><span>Голос під час тренування<div class="tiny muted">`, `
-      <h2>Voice coach</h2><div class="card" id="mVoice"><label class="sw"><span>Voice during workouts<div class="tiny muted">`)}${hasDb ? LL('вага й диски', "weight and plates") : LL('вага', "weight")}${LL(`, відпочинок, «10 секунд», «Час!», рекорди</div></span><input type="checkbox" id="voiceOn"`, `, rest, “10 seconds”, “Time!”, PRs</div></span><input type="checkbox" id="voiceOn"`)}${V.on ? ' checked' : ''}></label>
+      <h2>Голосовий тренер</h2><div class="card" id="mVoice"><label class="f">Голос тренера під час тренування</label>`, `
+      <h2>Voice coach</h2><div class="card" id="mVoice"><label class="f">Coach voice during workouts</label>`)}${seg('auto', [['full', LL('Не вимикати', 'Always on')], ['part', LL('Частково', 'Partly')], ['off', LL('Вимкнути', 'Off')]], V.auto || 'full')}<p class="tiny muted" style="margin:6px 0 10px">${autoTxt(V.auto || 'full', hasDb)}</p>
         ${I18N.lang === 'en' ? '<div class="note small">During workouts the coach speaks with your phone’s English voice — the recorded coach voices are in Ukrainian.</div>' : packBox()}
         ${packId() && I18N.lang !== 'en' ? '' : voiceBox}${LL(`
         <label class="sw"><span>Говорити й у беззвучному режимі<div class="tiny muted">вимкніть, якщо слухаєте музику в іншому застосунку і вона ставатиме на паузу</div></span><input type="checkbox" id="voiceSilent"`, `
@@ -3093,7 +3211,6 @@ window.APP_START = () => {
         <label class="btn" style="display:block;text-align:center">Restore from backup<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label><p></p>
         <button type="button" class="wide" data-act="csv">Export spreadsheet (CSV)</button></div>
       <h2>About</h2><div class="card"><p class="small muted">Version `)}${VERSION}${LL(` · <span id="persist">перевіряю сховище…</span></p><p class="tiny muted">Без реєстрації й реклами: ваші дані не залишають телефон. Голос тренера — записані фрази; збережені в телефоні, вони працюють без інтернету. `, ` · <span id="persist">checking storage…</span></p><p class="tiny muted">No sign-up, no ads: your data never leaves your phone. The coach’s voice is recorded phrases; once saved on the phone, they work offline. `)}${TX(LL('Apple Health, віджети й Live Activity веб-застосункам на iPhone недоступні.', "Apple Health, widgets, and Live Activities aren’t available to web apps on iPhone."), LL('Health Connect і віджети веб-застосункам на Android недоступні.', "Health Connect and widgets aren’t available to web apps on Android."))}</p></div>`;
-    document.getElementById('voiceOn').onchange = (e) => { V.on = e.target.checked; save(); if (V.on) { VOICE.unlock(); talk(LL('Голос увімкнено.', "Voice is on.")); } else { VOICE.stop(); VOICEPACK.stop(); } };
     document.getElementById('voiceSilent').onchange = (e) => { V.silent = e.target.checked; save(); audioMode(); };
     const vs = document.getElementById('voiceSel'); if (vs) vs.onchange = () => { V.uri = vs.value; save(); talk(LL('Так звучить цей голос.', "This is how this voice sounds.")); };
     if (document.getElementById('progSel')) document.getElementById('progSel').onchange = (e) => { DB.active = e.target.value; if (!DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active); fixProfiles(ENGINE.migrate(DB)); save(); render(); initPacks(); };
@@ -3233,7 +3350,7 @@ window.APP_START = () => {
   }
   function say1(t) {
     if (!S().voice.on) { toast(LL('Голос вимкнено: «Більше» → «Голосовий тренер»', "Voice is off: “More” → “Voice coach”")); return; }
-    if (!talk(t)) toast(VOICE.supported ? LL('Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»', "No English voice found on this phone — see “More” → “Voice coach”") : LL('Цей браузер не вміє озвучувати текст', "This browser can’t read text aloud"));
+    if (!talk(t, true)) toast(VOICE.supported ? LL('Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»', "No English voice found on this phone — see “More” → “Voice coach”") : LL('Цей браузер не вміє озвучувати текст', "This browser can’t read text aloud"));
   }
   function sheetAct(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -3353,6 +3470,7 @@ window.APP_START = () => {
     if (act === 'jump') { const k = Number(b.dataset.k), t = today(); const r = p.daily[t] = p.daily[t] || {}; r.jumps = (r.jumps || 0) >= k ? k - 1 : k; save(); haptic(); return rHome(); }
     /* тренування */
     if (act === 'minimize') { view = 'home'; return render(); }
+    if (act === 'vmute') { const d = p.draft; if (!d) return; const on = vAuto() !== 'off'; d.vo = on ? 'off' : 'on'; save(); if (on) { VOICEPACK.stop(); VOICE.stop(); toast(LL('Голос тренера вимкнено на це тренування', 'Coach voice off for this workout')); } else { toast(LL('Голос тренера увімкнено', 'Coach voice on')); VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return rWorkout(); }
     if (act === 'finish') return finishWorkout();
     if (act === 'discard') { if (confirm(LL('Скасувати тренування? Відмічені підходи не збережуться.', "Cancel the workout? Checked-off sets won’t be saved."))) { p.draft = null; save(); stopTimer(); view = 'home'; render(); remindSync(false); } return; }  // скасували — сьогодні ще не тренувались: значок (rHome) і нагадування повертаються
     if (act === 'done') return toggleDone(i, j);
@@ -3386,7 +3504,7 @@ window.APP_START = () => {
     if (act === 'swap') return swapSheet(i);
     if (act === 'swapTo') return doSwap(i, b.dataset.ex);
     if (act === 'copyprev') { const s = p.draft.items[i].sets[j]; if (!s.prev || s.done) return; s.load = s.prev.load; s.reps = s.prev.reps; s.touched = true; save(); haptic(); return rWorkout(); }
-    if (act === 'variant') { p.draft.items[i].variant = b.dataset.v; save(); return rWorkout(); }
+    if (act === 'variant') return switchVariant(i, b.dataset.v);
     if (act === 'dropset') {
       const it = p.draft.items[i]; if (!dropOk(it)) return;
       it.sets.push({ type: 'D', load: dropLoad(it), reps: it.min || null, rir: null, done: false, pr: [], prev: null, touched: true });
@@ -3527,10 +3645,10 @@ window.APP_START = () => {
       save(); toast(LL('Тести збережено', "Tests saved")); return rBody();
     }
     /* більше */
-    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; save(); rMore(); if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail.")); } return; }
+    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
     if (act === 'vpack') { ensureAudio(); S().voice.packs[DB.active] = b.dataset.id; S().voice.packsManual = S().voice.packsManual || {}; S().voice.packsManual[DB.active] = true; save(); const id = b.dataset.id;
-      if (id) VOICEPACK.load(id).then(() => { rMore(); talk(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout.")); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast(LL('Не вдалося завантажити голос — перевірте інтернет', "Couldn’t download the voice — check your internet")));
-      else { rMore(); talk(LL('Так звучить системний голос.', "This is the system voice.")); }
+      if (id) VOICEPACK.load(id).then(() => { rMore(); talk(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout."), true); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast(LL('Не вдалося завантажити голос — перевірте інтернет', "Couldn’t download the voice — check your internet")));
+      else { rMore(); talk(LL('Так звучить системний голос.', "This is the system voice."), true); }
       return; }
     if (act === 'vdl') { const id = packId(), el = document.getElementById('vpState'); b.disabled = true;
       VOICEPACK.download(id, (d, t) => { if (el) el.textContent = LL('Зберігаю: ', "Saving: ") + (t ? Math.round(d / t * 100) + ' %' : Math.round(d / 1e6) + LL(' МБ', " MB")) + '…'; }).then(() => { toast(LL('Голос збережено в телефоні', "Voice saved on this phone")); packState(); b.disabled = false; }).catch(() => { toast(LL('Не вдалося — перевірте інтернет', "Didn’t work — check your internet")); b.disabled = false; });
