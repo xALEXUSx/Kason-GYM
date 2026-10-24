@@ -664,7 +664,6 @@ I18N.add({
   "Позначте на дверній рамі 4 висоти кріплення: вгорі (над дверима) — тяга зверху; на рівні плечей — тяга до обличчя й паллоф-жим; на рівні ліктя — зовнішня ротація; внизу — відведення ноги.": "Mark 4 anchor heights on the door frame: top (above the door) — pulldown; shoulder height — face pull and Pallof press; elbow height — external rotation; bottom — leg abduction.",
   "Позначте, що у вас є, або «Нічого з цього»": "Select what you have, or “None of these”",
   "Показати всю історію.": "Show all history.",
-  "Показати навчальні підказки знову — на головній і в першому тренуванні.": "Show the tutorial tips again — on Home and in your first workout.",
   "Показати останні 12 тижнів.": "Show the last 12 weeks.",
   "Показати останні 4 тижні.": "Show the last 4 weeks.",
   "Половина позаду. Друга половина — та, що дає результат.": "Halfway done. The second half is the one that gets results.",
@@ -1275,4 +1274,36 @@ I18N.add({
   "Як важите — так і обирайте: суху крупу чи сире мʼясо — «сухий» / «сирий», приготоване — «готовий». Суха крупа в кілька разів калорійніша.": "Pick how you weigh it: dry grains or raw meat — “dry” / “raw”; already cooked — “cooked”. Dry grains have several times more calories.",
   "набрати мʼязи": "build muscle",
   "спина й осанка": "back and posture"
+});
+
+/* 3.21.7 — «Перший погляд» і «за руку» (ручні доповнення) */
+I18N.add({
+  "Показати навчання знову — на кожному екрані, а наступні 3 тренування тренер поведе за руку.": "Show the tutorial again — on every screen, and the coach will guide your next 3 workouts hands-on.",
+  "Вимкнути підказки «за руку». Увімкнути знову — «Більше» → «Тренування».": "Turn off hands-on tips. To turn them back on: “More” → “Workout.”",
+  "Перші 3 тренування тренер каже й підсвічує, що натиснути. Увімкнули знову — ще 3 тренування.": "For your first 3 workouts the coach tells you what to tap and highlights it. Turn it back on for 3 more workouts.",
+  "Я веду тебе за руку: кажу, що натиснути, і підсвічую це на екрані. Як розімнешся — натисни кнопку Розминку зроблено.": "I’ll guide you hands-on: I’ll tell you what to tap and highlight it on the screen. Once you’ve warmed up, tap Warm-up done.",
+  "Розімнулися — натисніть «✓ Розминку зроблено». Не потрібна — «Пропустити».": "Warmed up? Tap “✓ Warm-up done.” Don’t need it? Tap “Skip.”",
+  "Ціль підходу — у рамці: вага й повторення, змінити — кнопками мінус і плюс. Зробиш підхід — натисни Підхід виконано, а відпочинок я запущу сам.": "Your set target is in the box: weight and reps; change them with the minus and plus buttons. When you finish the set, tap Set done, and I’ll start your rest.",
+  "Ціль — у рамці: вага й повторення (− і + або торкніться числа). Зробили підхід — «✓ Підхід виконано», відпочинок запуститься сам.": "Your target is in the box: weight and reps (− and +, or tap the number). Finished the set? Tap “✓ Set done” — rest starts on its own.",
+  "Зараз відпочинок: таймер іде сам, телефон можна покласти, а коли час — я скажу. Хочеш раніше — натисни Почати.": "Now rest: the timer runs on its own, you can put your phone down, and I’ll tell you when it’s time. Want to start sooner? Tap Start.",
+  "Відпочинок іде сам: наприкінці — сигнал і голос, телефон можна покласти. Готові раніше — «Почати».": "Rest runs on its own and ends with a beep and the coach’s voice; you can put your phone down. Ready sooner? Tap “Start.”",
+  "Перед кнопкою Підхід виконано познач, скільки ще повторень {міг би|могла б} зробити: від цього залежить вага наступного разу.": "Before you tap Set done, mark how many more reps you could have done: that decides your weight next time.",
+  "Перед «✓ Підхід виконано» позначте, скільки ще повторень могли б зробити: від цього залежить вага наступного разу.": "Before “✓ Set done,” mark how many more reps you could have done: that decides your weight next time.",
+  "Вийшло інакше, ніж ціль, — натисни Виправити щойно зроблений підхід і впиши, скільки було.": "If it went differently from the target, tap Edit the set you just did and enter what you actually did.",
+  "Вийшло інакше, ніж ціль? «✎ Виправити щойно зроблений підхід» — і впишіть, скільки було.": "Did it go differently from the target? Tap “✎ Edit the set you just did” and enter what you actually did.",
+  "Тренажер зайнятий чи вправа не йде — натисни Ще: там заміна, пропуск, нотатка й Болить суглоб.": "Machine taken or the exercise isn’t working? Tap More: you’ll find Swap, Skip, a note, and Joint pain there.",
+  "Тренажер зайнятий чи вправа не підходить — «⋯ Ще» → «Замінити». Там же — пропуск, нотатка й «Болить суглоб».": "Machine taken or the exercise doesn’t suit you? “⋯ More” → “Swap.” Skip, notes, and “Joint pain” are there too.",
+  "Щось незрозуміло — натисни мікрофон угорі й спитай мене голосом.": "If anything’s unclear, tap the mic at the top and ask me out loud.",
+  "Щось незрозуміло — кнопка з мікрофоном угорі: спитайте тренера голосом, текстом чи з фото.": "Anything unclear? Tap the mic button at the top to ask the coach by voice, text, or photo.",
+  "Наприкінці натисни Завершити тренування: я все збережу й покажу підсумок.": "At the end, tap Finish workout: I’ll save everything and show your summary.",
+  "Натисніть «Завершити тренування» — усе збережеться, а підсумок покаже рекорди й мʼязи, що попрацювали.": "Tap “Finish workout” — everything gets saved, and the summary shows your PRs and the muscles you worked.",
+  "Сидіння й стопи — так, щоб на старті коліна були зігнуті приблизно під прямим кутом, а пʼяти стояли на платформі.": "Set the seat and your feet so that at the start your knees are bent to about a right angle and your heels are flat on the platform.",
+  "Сидіння й валик — так, щоб валик щільно притискав верх стегон, а руківʼя було в досяжності рук.": "Set the seat and the pad so the pad holds the tops of your thighs firmly and the bar is within reach.",
+  "Сидіння — так, щоб ручки були на рівні плечей або трохи вище.": "Set the seat so the handles are level with your shoulders or slightly higher.",
+  "Верхній валик опусти щільно на стегна над колінами — щоб ноги не зсувались.": "Lower the top pad snugly onto your thighs just above the knees so your legs don’t shift.",
+  "Упор для грудей — так, щоб груди легко торкались упора, а руки випрямлено діставали до ручок.": "Set the chest pad so your chest rests lightly against it and your straight arms reach the handles.",
+  "Висота сидіння — така, щоб пахви щільно лягли на верх подушки, а стопи стояли на підлозі.": "Set the seat height so your armpits rest snugly on top of the pad and your feet are flat on the floor.",
+  " Налаштування: ": " Machine setup: ",
+  "Ти вперше в залі: на екрані — коротко, як налаштувати тренажер і поставити вагу.": "It’s your first time at the gym: the screen shows, in short, how to adjust a machine and set the weight.",
+  "Перший раз у залі": "First time at the gym"
 });

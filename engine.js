@@ -748,6 +748,8 @@ var ENGINE = (function () {
     db.v = 3;
     db.settings = db.settings || {};
     ['sound', 'haptics', 'awake'].forEach(function (k) { if (db.settings[k] === undefined) db.settings[k] = true; });
+    /* «за руку» (з 3.21.7): новим і тим, у кого ще немає 3 тренувань; досвідченим — вимкнено (увімкнути — «Більше» → «Тренування») */
+    if (db.settings.guide === undefined) db.settings.guide = !Object.keys(db.profiles).some(function (id) { return (db.profiles[id].sessions || []).length >= 3; });
     if (!db.settings.voice) db.settings.voice = { on: true, level: 'full', rate: 1, uri: null };
     if (!db.settings.voice.tone) db.settings.voice.tone = 'hard';
     if (!db.settings.radio) db.settings.radio = { id: null, duck: 0.5 };
