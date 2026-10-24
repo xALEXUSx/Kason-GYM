@@ -13,10 +13,14 @@ var CHARTS = (function () {
     var all = []; series.forEach(function (s) { all = all.concat(s.pts); });
     if (!all.length) return '<div class="empty">' + (o.empty || LL('Ще немає даних', "No data yet")) + '</div>';
     var t0 = Math.min.apply(null, all.map(function (p) { return p.t; })), t1 = Math.max.apply(null, all.map(function (p) { return p.t; }));
+    /* позначки дат (з 3.21.5 — початок циклу на графіку ваги): пунктир на всю висоту; проміжок розширюється, щоб позначку було видно */
+    var marks = (o.marks || []).filter(function (t) { return typeof t === 'number' && isFinite(t); });
+    marks.forEach(function (t) { if (t < t0) t0 = t; if (t > t1) t1 = t; });
     if (t0 === t1) { t0 -= 864e5 * 3; t1 += 864e5 * 3; }
     var vr = range(Math.min.apply(null, all.map(function (p) { return p.v; })), Math.max.apply(null, all.map(function (p) { return p.v; })));
     var x = function (t) { return L + (t - t0) / (t1 - t0) * (W - L - R); }, y = function (v) { return T + (1 - (v - vr[0]) / (vr[1] - vr[0])) * (H - T - B); };
     var g = '';
+    marks.forEach(function (t) { g += '<line class="mk" x1="' + x(t).toFixed(1) + '" x2="' + x(t).toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '"/>'; });
     [0.15, 0.5, 0.85].forEach(function (f) { var v = vr[0] + (vr[1] - vr[0]) * f; g += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v).toFixed(1) + '" y2="' + y(v).toFixed(1) + '"/><text class="tl" x="' + (L - 5) + '" y="' + (y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + fmt(v) + '</text>'; });
     var d0 = new Date(t0), d1 = new Date(t1), dm = new Date((t0 + t1) / 2);
     g += '<text class="tl" x="' + L + '" y="' + (H - 6) + '">' + pad(d0.getDate()) + '.' + pad(d0.getMonth() + 1) + '</text>';

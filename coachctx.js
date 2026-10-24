@@ -1,7 +1,8 @@
 var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Зріз програми для голосового тренера (сервер, server/src/coach.js): лише тренувальні дані.
-   Без імені, віку, зросту, ваги тіла, галочок здоровʼя, замірів, фото, харчування й самопочуття — слово Alexа 23.10:
-   тренер консультує «на базі створених завчасно програм тренувань», не на особистих даних. */
+   Без імені, віку, зросту, галочок здоровʼя, фото й самопочуття — слово Alexа 23.10: тренер консультує «на базі створених
+   завчасно програм тренувань», не на особистих даних. Додано згодом за словом Alexа: «Кухня» сьогодні (з 3.20.0) і вага, темп
+   і талія (з 3.21.5; 24.10 на питання «що з пункту 1 передавати тренеру»: «Усе з числами») — рядками kitchen і body. */
 var COACHCTX = (function () {
   var TYPE = { W: LL('розминковий', "warm-up"), N: LL('робочий', "working"), F: LL('до відмови', "to failure"), M: LL('міо-підхід', "myo-rep set"), D: LL('дроп-сет', "drop set") };
   var PLACE = { home: LL('вдома', "at home"), gym: LL('у залі', "at the gym") };
@@ -20,7 +21,8 @@ var COACHCTX = (function () {
     var l = load(ex, s.load);
     return (k + 1) + ') ' + (TYPE[s.type] || LL('робочий', "working")) + ': ' + (l ? l + ' × ' : '') + r + (s.done ? LL(' — зроблено', " — done") : '');
   }
-  /* Текст для моделі. o: { prog, plan, items, place, inProgress, cur: { i, j } | null, done, total, back: речення про повернення після перерви | '' } */
+  /* Текст для моделі. o: { prog, plan, items, place, inProgress, cur: { i, j } | null, done, total, back: речення про повернення після перерви | '',
+     kitchen, body: рядки «Кухні» й тіла | '' } */
   function text(o) {
     var prog = o.prog, plan = o.plan, out = [];
     var name = function (id) { return (prog.ex[id] || {}).name || id; };
@@ -53,6 +55,7 @@ var COACHCTX = (function () {
     });
     if (o.prog && o.prog.units === 'lb') out = out.map(function (l) { return String(l).replace(/кг/g, 'lb').replace(/\bkg\b/g, 'lb'); });  // програма у фунтах (з 3.18.0)
     if (o.kitchen) out.push(o.kitchen);  // кухня сьогодні (з 3.20.0): записане й норма — числа з бази USDA й записів людини
+    if (o.body) out.push(o.body);  // тіло (з 3.21.5): вага, середня за 7 днів, темп, талія — ті самі числа, що в «Замірах»
     return out.join('\n');
   }
   return { text: text };

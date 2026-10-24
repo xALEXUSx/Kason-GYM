@@ -689,6 +689,60 @@ var ENGINE = (function () {
     var days = Math.round((new Date(today + 'T12:00:00').getTime() - new Date(last + 'T12:00:00').getTime()) / 864e5);
     return { due: days >= 7, days: days };
   }
+  /* Тіло за місяць (з 3.21.5; слово Alexа 24.10, пункт 2: «місячний звіт — зміна ваги й талії»): вага — за середньою за 7 днів
+     (вага щодня коливається), обʼєми — самі заміри; «було» — останнє значення до місяця (немає — перше в місяці), «стало» — останнє
+     в місяці. У місяці записів немає — null; один запис і нічого раніше — лише «стало» (ch: null). */
+  function bodyMonth(points, ym, smooth) {
+    var all = smooth ? rolling7(points || []) : (points || []).slice().sort(function (a, b) { return a.d < b.d ? -1 : 1; }).map(function (q) { return { d: q.d, v: Number(q.v) }; });
+    var inM = all.filter(function (q) { return q.d.slice(0, 7) === ym; }), before = all.filter(function (q) { return q.d < ym + '-01'; });
+    if (!inM.length) return null;
+    var end = inM[inM.length - 1], start = before.length ? before[before.length - 1] : inM[0];
+    if (start === end) return { from: null, fromD: null, to: end.v, toD: end.d, ch: null };
+    return { from: start.v, fromD: start.d, to: end.v, toD: end.d, ch: round1(end.v - start.v) };
+  }
+  /* Скільки останніх тренувань поспіль із цією вправою людина позначала «Болить суглоб» (з 3.21.5; слово Alexа 24.10, пункт 7).
+     Тренування з вправою — де є її робочі підходи або позначка (позначили й замінили до першого підходу — підходів немає, а біль був). */
+  function painRun(sessions, exId) {
+    var ss = (sessions || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; }), n = 0;
+    for (var i = ss.length - 1; i >= 0; i--) {
+      var hurt = (ss[i].pain || []).indexOf(exId) >= 0;
+      if (!hurt && !(ss[i].sets || []).some(function (x) { return x.ex === exId && x.type !== 'W'; })) continue;
+      if (hurt) n++; else break;
+    }
+    return n;
+  }
+  /* Віхи (з 3.21.5; слово Alexа 24.10, пункт 3): тренування за весь час, тижні поспіль із тренуванням, рекорди; вага — за середньою
+     за 7 днів від першого зважування (мета «менше жиру» чи «рекомпозиція» — вниз, «набрати мʼязи» — вгору, підтримка — без віх ваги);
+     талія — лише вниз (менше жиру, рекомпозиція). Крок: вага 2 кг / 5 lb, талія 2 см / 1 in; уже досягнуте не повторюється, навіть
+     якщо вага повернулась. Усе — з історії, без збереженого стану. o: { sessions, weight, waist, goal, lb, today }
+     → { got: [{ k: 'n'|'st'|'pr'|'w'|'c', v, d }] (новіші першими), next: [{ k, v, left }] }; v ваги й талії — в одиницях профілю, зі знаком */
+  var MS_N = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000], MS_ST = [4, 8, 12, 26, 52, 104], MS_PR = [10, 25, 50, 100, 250, 500, 1000];
+  function milestones(o) {
+    var ss = (o.sessions || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+    var got = [], next = [], prs = 0, wk = null, run = 0, best = 0;
+    ss.forEach(function (s, i) {
+      if (MS_N.indexOf(i + 1) >= 0) got.push({ k: 'n', v: i + 1, d: s.date });
+      var p0 = prs; prs += s.prs || 0;
+      MS_PR.forEach(function (t) { if (p0 < t && prs >= t) got.push({ k: 'pr', v: t, d: s.date }); });
+      var k = weekKey(s.date);
+      if (k === wk) return;
+      run = wk && Math.round((new Date(k + 'T12:00:00').getTime() - new Date(wk + 'T12:00:00').getTime()) / 864e5) === 7 ? run + 1 : 1; wk = k;
+      MS_ST.forEach(function (t) { if (run === t && t > best) { best = t; got.push({ k: 'st', v: t, d: s.date }); } });
+    });
+    var dir = o.goal === 'gain' ? 1 : o.goal === 'loss' || o.goal === 'recomp' ? -1 : 0;
+    var wStep = o.lb ? 5 / LB : 2, wShow = o.lb ? 5 : 2, avg = dir ? rolling7(o.weight || []) : [], wBest = 0;
+    avg.forEach(function (q) { var m = Math.floor((q.v - avg[0].v) * dir / wStep + 1e-6); while (wBest < m) { wBest++; got.push({ k: 'w', v: dir * wBest * wShow, d: q.d }); } });
+    var cStep = o.lb ? 2.54 : 2, cShow = o.lb ? 1 : 2, cBest = 0;
+    var wa = dir === -1 ? (o.waist || []).slice().sort(function (a, b) { return a.d < b.d ? -1 : 1; }) : [];
+    wa.forEach(function (q) { var m = Math.floor((Number(wa[0].v) - Number(q.v)) / cStep + 1e-6); while (cBest < m) { cBest++; got.push({ k: 'c', v: -cBest * cShow, d: q.d }); } });
+    var nN = MS_N.filter(function (t) { return t > ss.length; })[0]; if (nN) next.push({ k: 'n', v: nN, left: nN - ss.length });
+    var cur = ss.length ? streakWeeks(ss, o.today || ss[ss.length - 1].date) : 0, nS = MS_ST.filter(function (t) { return t > cur; })[0]; if (nS) next.push({ k: 'st', v: nS, left: nS - cur });
+    var nP = MS_PR.filter(function (t) { return t > prs; })[0]; if (nP) next.push({ k: 'pr', v: nP, left: nP - prs });
+    if (avg.length) { var wl = (wBest + 1) * wStep - (avg[avg.length - 1].v - avg[0].v) * dir; next.push({ k: 'w', v: dir * (wBest + 1) * wShow, left: round1(o.lb ? wl * LB : wl) }); }
+    if (wa.length) { var cl = (cBest + 1) * cStep - (Number(wa[0].v) - Number(wa[wa.length - 1].v)); next.push({ k: 'c', v: -(cBest + 1) * cShow, left: round1(o.lb ? cl / 2.54 : cl) }); }
+    got.sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
+    return { got: got, next: next };
+  }
   function migrate(db) {
     if (!db || !db.profiles) return db;
     db.v = 3;
@@ -712,7 +766,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
