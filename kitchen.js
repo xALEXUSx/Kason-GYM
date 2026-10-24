@@ -64,6 +64,74 @@ var KITCHEN = (function () {
     return o;
   }
 
+  /* вітаміни й мінерали (з 3.21.6; слово Alexа 24.10, пункт 4: «кальцій, залізо, вітаміни C і D») — лише з продуктів бази (USDA SR
+     Legacy, mi на 100 г) і рецептів з них; свій продукт з етикетки, порції «руками» й швидкий запис — даних немає (невідомо, не нуль).
+     Норма — NIH ODS (Recommended Dietary Allowances, сторінки Consumer, звірено 24.10): кальцій 1000 мг (14–18 — 1300; жінки 51+ і всі
+     71+ — 1200), залізо 8 мг (жінки 19–50 — 18; 14–18 — 11 / 15), вітамін C 90 / 75 мг (14–18 — 75 / 65), вітамін D 15 мкг (71+ — 20). */
+  var MI_KEYS = ['ca', 'fe', 'vc', 'vd'];
+  function microNorm(sex, age) {
+    var f = sex === 'f', a = Number(age) || 30, teen = a < 19;
+    return { ca: teen ? 1300 : a >= 71 || (f && a >= 51) ? 1200 : 1000, fe: teen ? (f ? 15 : 11) : f && a <= 50 ? 18 : 8,
+             vc: teen ? (f ? 65 : 75) : f ? 75 : 90, vd: a >= 71 ? 20 : 15 };
+  }
+  /* одного запису: { ca, fe, vc, vd } — лише відомі, на його грами; даних немає — null */
+  function microsOf(e, ctx) {
+    if (!e || (e.t !== 'food' && e.t !== 'dish')) return null;
+    var b = per100(e, ctx), g = Number(e.g), mi = b && b.x && b.x.mi;
+    if (!mi || !(g > 0)) return null;
+    var o = {}, any = false;
+    MI_KEYS.forEach(function (k) { if (typeof mi[k] === 'number') { o[k] = mi[k] * g / 100; any = true; } });
+    return any ? o : null;
+  }
+  /* за день: суми відомого; n — записів із складом, none — без жодного числа, miss[k] — записів без числа k */
+  function dayMicros(day, sex, ctx) {
+    var t = { ca: 0, fe: 0, vc: 0, vd: 0 }, miss = { ca: 0, fe: 0, vc: 0, vd: 0 }, n = 0, none = 0;
+    ((day && day.items) || []).forEach(function (e) {
+      if (!macros(e, sex, ctx)) return;
+      n++;
+      var m = microsOf(e, ctx); if (!m) none++;
+      MI_KEYS.forEach(function (k) { if (m && typeof m[k] === 'number') t[k] += m[k]; else miss[k]++; });
+    });
+    return { ca: Math.round(t.ca), fe: r1(t.fe), vc: Math.round(t.vc), vd: r1(t.vd), n: n, none: none, miss: miss };
+  }
+
+  /* справжні витрати з журналу й ваги (з 3.21.6; слово Alexа 24.10, пункт 5: «як MacroFactor; лише для тих, хто записує їжу щодня ≥ 2 тижні»):
+     рівняння енергетичного балансу — витрати = середнє зʼїдене − 7700 ккал × зміна ваги за день (7700 ккал на кг — наближення: для
+     худорлявих воно завищує енергію втраченої ваги, Hall, Int J Obes 2008). days — [{ d, kcal }] днів із записами, w — зважування (кг),
+     end — останній повний день (учора). Вікно — 21 день; рахуються дні, де записано ≥ min ккал (половина нижньої межі норми — щоб не брати
+     явно неповні дні); треба ≥ 14 таких днів і зважування в перший і останній тиждень вікна (≥ 10 днів між ними). Інакше — null.
+     Результат поза 1000–6000 ккал — дані не сходяться, теж null. */
+  var BURN = { win: 21, need: 14, kcalKg: 7700 };
+  function realBurn(days, w, end, min) {
+    var t = function (s) { return new Date(s + 'T12:00:00').getTime(); }, te = t(end), ts = te - (BURN.win - 1) * 864e5;
+    var full = (days || []).filter(function (x) { var u = t(x.d); return u >= ts && u <= te && x.kcal >= (min || 0); });
+    if (full.length < BURN.need) return null;
+    var pts = (w || []).filter(function (q) { var u = t(q.d); return u >= ts && u <= te; });
+    var a = pts.filter(function (q) { return t(q.d) < ts + 7 * 864e5; }), b = pts.filter(function (q) { return t(q.d) > te - 7 * 864e5; });
+    if (!a.length || !b.length) return null;
+    var mean = function (l, f) { return l.reduce(function (s, x) { return s + f(x); }, 0) / l.length; };
+    var span = (mean(b, function (q) { return t(q.d); }) - mean(a, function (q) { return t(q.d); })) / 864e5;
+    if (span < 10) return null;
+    var dW = mean(b, function (q) { return Number(q.v); }) - mean(a, function (q) { return Number(q.v); }), intake = mean(full, function (x) { return x.kcal; });
+    var kcal = intake - BURN.kcalKg * dW / span;
+    if (!(kcal >= 1000 && kcal <= 6000)) return null;
+    return { kcal: Math.round(kcal / 50) * 50, intake: Math.round(intake), days: full.length, dW: r1(dW), span: Math.round(span) };
+  }
+
+  /* Open Food Facts → етикетка на 100 г (з 3.21.6; слово Alexа 24.10, пункт 6: «як помічник етикетки»): лише те, що є у відповіді;
+     ккал — з кДж (÷ 4,184), якщо ккал немає; назва — українська, інакше основна чи англійська, і марка; товару немає — null */
+  function offLabel(j) {
+    if (!j || j.status !== 1 || !j.product) return null;
+    var p = j.product, n = p.nutriments || {}, num = function (v) { var x = v === '' || v === null || v === undefined ? NaN : Number(v); return isFinite(x) && x >= 0 ? Math.round(x * 10) / 10 : null; };
+    var kcal = num(n['energy-kcal_100g']), kj = num(n['energy-kj_100g']) !== null ? num(n['energy-kj_100g']) : num(n.energy_100g);
+    if (kcal === null && kj !== null) kcal = Math.round(kj / 4.184);
+    var nm = String(p.product_name_uk || p.product_name || p.product_name_en || '').trim(), br = String(p.brands || '').split(',')[0].trim();
+    var name = (br && nm.toLowerCase().indexOf(br.toLowerCase()) < 0 ? [nm, br].filter(Boolean).join(' · ') : nm || br).slice(0, 60);  // марка — якщо її ще немає в назві
+    var o = { name: name, kcal: kcal, p: num(n.proteins_100g), f: num(n.fat_100g), c: num(n.carbohydrates_100g) };
+    o.missing = ['kcal', 'p', 'f', 'c'].filter(function (k) { return o[k] === null; });
+    return o;
+  }
+
   /* «Твоя тарілка»: на один прийом. Білок — 0,4 г/кг на прийом (Schoenfeld, Aragon 2018: ≥ 4 прийоми, ≥ 1,6 г/кг на день);
      овочі — шаблон Precision Nutrition (чоловіки 2 кулаки, жінки 1); вуглеводи й жири — порівну жменями й пальцями до калорій прийому.
      nu — ENGINE.nutrition(…), base — вага для білка (nu.base), meals — прийомів на день. Порції — кроком 0,5, це орієнтир. */
@@ -85,6 +153,10 @@ var KITCHEN = (function () {
     (ings || []).forEach(function (e) { var m = macros(e, sex, ctx); if (!m) return; add(t, m); q = worse(q, m.q); ok++; });
     if (!ok || !(cooked > 0)) return null;
     var k = 100 / cooked, per = round({ kcal: t.kcal * k, p: t.p * k, f: t.f * k, c: t.c * k, fib: t.fib * k });
+    /* вітаміни й мінерали страви (з 3.21.6): число — лише коли воно відоме для кожного інгредієнта (частина — занизила б) */
+    var mi = {}, ms = (ings || []).filter(function (e) { return macros(e, sex, ctx); }).map(function (e) { return microsOf(e, ctx) || {}; });
+    MI_KEYS.forEach(function (x) { if (ms.length && ms.every(function (m) { return typeof m[x] === 'number'; })) mi[x] = r1(ms.reduce(function (a, m) { return a + m[x]; }, 0) * k); });
+    if (Object.keys(mi).length) per.mi = mi;
     return { per100: per, total: round(t), q: q, n: ok };
   }
 
@@ -285,6 +357,6 @@ var KITCHEN = (function () {
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
-    plate: plate, recipe: recipe, proteinGap: proteinGap, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
+    plate: plate, recipe: recipe, proteinGap: proteinGap, MI_KEYS: MI_KEYS, microNorm: microNorm, microsOf: microsOf, dayMicros: dayMicros, BURN: BURN, realBurn: realBurn, offLabel: offLabel, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
 })();
 if (typeof module !== 'undefined') module.exports = KITCHEN;
