@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.21.3';
+  const VERSION = '3.21.4';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -1816,6 +1816,17 @@ window.APP_START = () => {
     return '';
   }
   /* головна: кухня сьогодні й вода з наступним нагадуванням (слово Alexа 23.10: «на головній було нагадування про воду») */
+  /* «Час зважитись» і «Час заміряти обʼєми» (з 3.21.4; слово Alexа 24.10: «Час зважитись» на головній; «обєми тіла потрібно відслідковувати
+     раз на тиждень»): від 7 днів без запису — короткий рядок з переходом у «Заміри»; без сповіщень */
+  function measureHome() {
+    const b = P().body, w = ENGINE.measureDue(b.weight || [], today()), s = ENGINE.measureDue(['waist', 'chest', 'hips', 'arm'].reduce((a, k) => a.concat(b[k] || []), []), today());
+    if (!w.due && !s.due) return '';
+    const ago = (n) => plural(n, LL('день', 'day'), LL('дні', 'days'), LL('днів', 'days')) + LL(' тому', ' ago');
+    const txt = w.due && s.due ? LL('Час зважитись і заміряти обʼєми', 'Time to weigh in and measure') + (w.days !== null ? LL(': останнє зважування ', ': last weigh-in ') + ago(w.days) : '')
+      : w.due ? LL('Час зважитись', 'Time to weigh in') + (w.days !== null ? LL(': останнє зважування ', ': last weigh-in ') + ago(w.days) : '')
+      : LL('Час заміряти обʼєми (раз на тиждень)', 'Time to measure (once a week)') + (s.days !== null ? LL(': останній замір ', ': last time ') + ago(s.days) : '');
+    return `<div class="card"><div class="sp"><span class="small">${txt}</span><button type="button" class="sm" data-act="goMeas">${LL('Заміри', 'Measurements')}</button></div></div>`;
+  }
   function kHomeCard() {
     const k = kit(), day = kday(today()), sx = ksex(), N = kNorm(), t = KITCHEN.dayTotals(day, sx, kctx()), wd = kWaterDay(), wday = kday(wd);
     const wT = kWTarget(wd), gl = kGlasses(wT, wday.water || 0, k.set.glass);
@@ -1897,7 +1908,7 @@ window.APP_START = () => {
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"))}</div>
         <div class="stat"><b>${streak}${LL(`</b><span>тижнів поспіль</span></div><div class="stat"><b>`, `</b><span>weeks in a row</span></div><div class="stat"><b>`)}${mprs}${LL(`</b><span>рекордів за місяць</span></div></div>
       `, `</b><span>PRs this month</span></div></div>
-      `)}${kHomeCard()}${dailyCard()}`;
+      `)}${kHomeCard()}${measureHome()}${dailyCard()}`;
     tourMaybe('home');
     badgeSync();
   }
@@ -1952,7 +1963,7 @@ window.APP_START = () => {
   /* ---------- прогрес ---------- */
   function rProgress() {
     const p = P(), prog = G(), h = p.handle;
-    const seg = `<div class="seg">${[['ex', LL('Вправи', "Exercises")], ['mu', LL('Мʼязи', "Muscles")], ['rep', LL('Звіт', "Report")]].map(([k, l]) => `<button type="button" class="${ui.progTab === k ? 'on' : ''}" data-act="progTab" data-v="${k}">${l}</button>`).join('')}</div>`;
+    const seg = `<div class="seg">${[['ex', LL('Вправи', "Exercises")], ['mu', LL('Мʼязи', "Muscles")], ['body', LL('Тіло', 'Body')], ['rep', LL('Звіт', "Report")]].map(([k, l]) => `<button type="button" class="${ui.progTab === k ? 'on' : ''}" data-act="progTab" data-v="${k}">${l}</button>`).join('')}</div>`;
     let body = '';
     if (ui.progTab === 'ex') {
       const used = {}; p.sessions.forEach((s) => s.sets.forEach((x) => { if (x.type !== 'W') used[x.ex] = 1; }));
@@ -1988,6 +1999,8 @@ window.APP_START = () => {
           <h2>Останні тренування</h2><div class="card"><ul class="list">`, `
           <h2>Recent workouts</h2><div class="card"><ul class="list">`)}${histAll.slice(-6).reverse().map((x) => `<li><span>${dm(x.date)}</span><span class="small">${x.sets.map((s) => esc(setText(ex, s))).join(', ')}</span></li>`).join('')}</ul></div>` : ''}
         ${ex.tip ? `<div class="note small">${esc(ex.tip)}</div>` : ''}`;
+    } else if (ui.progTab === 'body') {
+      body = progBodyHtml();
     } else if (ui.progTab === 'mu') {
       const days = ui.musDays, to = Date.now() + 864e5, from = Date.now() - days * 864e5;
       const raw = ENGINE.muscleSets(prog, p.sessions, from, to), wkv = {};
@@ -2154,7 +2167,7 @@ window.APP_START = () => {
     /* вага для норми (з 3.21.0, слово Alexа 23.10: «Прибери поле ваги з «Кухні»: лиши рядок, від якої ваги рахується норма (із «Замірів»), і пораду за темпом»):
        зважування — лише в «Тіло → Заміри» (до 3.21.0 тут було друге поле для тієї самої ваги); тут — від якої ваги норма, порада за темпом і перехід у «Заміри» */
     const weight = N.wNow ? `<div class="card"><div class="sp"><b>${LL('Вага для норми', 'Weight for your targets')}</b><button type="button" class="sm ghost" data-act="goMeas">${LL('Заміри', 'Measurements')}</button></div>
-      <p class="small" style="margin:6px 0 0">${N.wMeas ? fmt(BW(N.wMeas)) + ' ' + MU('weight') + LL(' — середня за 7 днів із «Замірів».', ' — the 7-day average from “Measurements.”') : fmt(BW(N.wAns)) + ' ' + MU('weight') + LL(' — з анкети: зважувань ще немає. Запишіть вагу в «Заміри» — норма стане точнішою.', ' — from your questionnaire: no weigh-ins yet. Log your weight in “Measurements” and your targets will get more accurate.')}</p>
+      <p class="small" style="margin:6px 0 0">${N.wMeas && N.wts.every((q) => q.src === 'q') ? fmt(BW(N.wMeas)) + ' ' + MU('weight') + LL(' — з анкети, перше зважування в «Замірах». Зважуйтесь там — норма стане точнішою.', ' — from your questionnaire, your first weigh-in in “Measurements.” Weigh in there and your targets will get more accurate.') : N.wMeas ? fmt(BW(N.wMeas)) + ' ' + MU('weight') + LL(' — середня за 7 днів із «Замірів».', ' — the 7-day average from “Measurements.”') : fmt(BW(N.wAns)) + ' ' + MU('weight') + LL(' — з анкети: зважувань ще немає. Запишіть вагу в «Заміри» — норма стане точнішою.', ' — from your questionnaire: no weigh-ins yet. Log your weight in “Measurements” and your targets will get more accurate.')}</p>
       ${N.tr && N.tr.rate !== null ? (() => { const tr = N.tr, g = nu && nu.guard;
         let adv = ENGINE.foodAdvice(g === 'under' || g === 'floor0' ? Object.assign({}, N.food, { goal: 'maintain' }) : N.food, tr);  // межа безпеки — порада як для підтримки
         if (g === 'floor' && adv.k === 'less') adv = { k: 'w', text: LL('Калорії вже на межі без нагляду лікаря — не зменшуйте їжу: додайте кроки й рух.', 'Your calories are already at the limit without a doctor’s supervision — don’t eat less: add steps and activity.') }; return `<div class="note ${adv.k === 'ok' ? 'ok' : adv.k === 'wait' ? '' : 'w'}" style="margin-top:8px">${LL('<b>За вашою вагою:</b> ', '<b>Based on your weight:</b> ')}${esc(LBT(adv.text))} <span class="tiny muted">(${LL('темп ', 'rate ')}${tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : ''}${fmt(Math.abs(BW(tr.rate)))}${KG(LL(' кг на тиждень', ' kg per week'))})</span></div>`; })() : `<p class="tiny muted" style="margin:6px 0 0">${LL('Порада за темпом — після 2 тижнів зважувань у «Замірах» (зранку натщесерце).', 'Advice on your rate comes after 2 weeks of weigh-ins in “Measurements” (in the morning before eating).')}</p>`}</div>` : '';
@@ -2605,18 +2618,41 @@ window.APP_START = () => {
     } catch (e) { return ''; }
   }
 
+  /* ряд заміру (з 3.21.4 — спільний для «Тіло → Заміри» й «Прогрес → Тіло»): у одиницях профілю; вага — кожне зважування й середня
+     за 7 днів (середня — по всіх зважуваннях, потім обрізка за проміжком); cut — мс, з якого показувати (0 — усе) */
+  function bodySeries(k, cut) {
+    const all = (P().body[k] || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1)).map((q) => ({ d: q.d, v: MV(k, q.v), src: q.src })), inR = (q) => !cut || tms(q.d) >= cut;
+    const arr = all.filter(inR), avg = k === 'weight' ? ENGINE.rolling7(all).filter(inR) : null;
+    const series = k === 'weight' ? [{ pts: arr.map((q) => ({ t: tms(q.d), v: Number(q.v) })), color: 'var(--muted)', width: 1 }, { pts: avg.map((q) => ({ t: tms(q.d), v: q.v })), color: 'var(--accent)', width: 2.5, dots: false, area: true }] : [{ pts: arr.map((q) => ({ t: tms(q.d), v: Number(q.v) })), color: 'var(--accent)', area: true }];
+    return { arr, avg, series };
+  }
+  /* «Прогрес → Тіло» (з 3.21.4; слово Alexа 24.10: «графік ваги й талії на «Прогресі»»; «обєми тіла потрібно відслідковувати раз на тиждень
+     а в Додати на «Прогрес» графік розмірів»): вага — кожне зважування, середня за 7 днів і темп; обʼєми — графік кожного, що вже міряли */
+  function progBodyHtml() {
+    const p = P(), cut = ui.range === '4' ? Date.now() - 28 * 864e5 : ui.range === '12' ? Date.now() - 84 * 864e5 : 0, none = [];
+    const rng = `<span class="seg" style="margin:0;padding:2px">${[['4', LL('4 т', "4 wk")], ['12', LL('12 т', "12 wk")], ['all', LL('усе', "all")]].map(([k, l]) => `<button type="button" class="${ui.range === k ? 'on' : ''}" style="min-height:40px;min-width:44px;padding:4px 10px" data-act="range" data-v="${k}">${l}</button>`).join('')}</span>`;
+    const cards = MEAS.map(([k, l]) => {
+      const { arr, series } = bodySeries(k, cut), u = MU(k), first = arr[0], last = arr[arr.length - 1];
+      if (!(p.body[k] || []).length) { none.push(l.toLowerCase()); return ''; }
+      const ch = last && first && last !== first ? Math.round((last.v - first.v) * 10) / 10 : null;
+      const tr = k === 'weight' ? ENGINE.weightTrend(p.body.weight || []) : null;
+      const sub = !arr.length ? LL('у цьому проміжку записів немає', 'no entries in this range') : fmt(first.v) + (ch !== null ? ' → ' + fmt(last.v) : '') + ' ' + u + (ch !== null ? ' · ' + (ch > 0 ? '+' : ch < 0 ? '−' : '') + fmt(Math.abs(ch)) : '') + ' · ' + dm(last.d);
+      const rate = k !== 'weight' ? '' : tr && tr.rate !== null ? LL('Темп за середньою: ', 'Rate by the average: ') + (tr.rate > 0 ? '+' : tr.rate < 0 ? '−' : '') + fmt(BW(Math.abs(tr.rate))) + ' ' + u + LL(' на тиждень.', ' a week.') : LL('Темп — після 2 тижнів зважувань.', 'Rate — after 2 weeks of weigh-ins.');
+      return `<div class="card"><div class="sp"><b>${l}</b><span class="small muted">${sub}</span></div>${arr.length >= 2 ? CHARTS.line(series, { h: 130, label: l }) : `<p class="tiny muted">${LL('Графік — з другого запису.', 'The chart starts from the second entry.')}</p>`}${rate ? `<p class="tiny muted" style="margin:6px 0 0">${rate}</p>` : ''}</div>`;
+    }).join('');
+    return `<div class="sp" style="margin:6px 0"><span class="tiny muted">${LL('Вага — тонка лінія кожне зважування, товста — середня за 7 днів', 'Weight — thin line is each weigh-in, thick is the 7-day average')}</span>${rng}</div>${cards}
+      ${none.length ? `<div class="card"><p class="small" style="margin:0 0 8px">${LL('Ще не міряли: ', 'Not measured yet: ')}${none.join(', ')}. ${LL('Обʼєми — раз на тиждень, в один день і час. Схуднення з набором мʼязів видно саме тут: вага може стояти, а талія — меншати.', 'Measure once a week, on the same day and time. Losing fat while building muscle shows up here: your weight can stay the same while your waist shrinks.')}</p><button type="button" class="sm" data-act="goMeas">${LL('Заміри', 'Measurements')}</button></div>` : ''}`;
+  }
   function rBody() {
     const p = P(), prog = G();
     const tabs = [['m', LL('Заміри', "Measurements")], ['f', LL('Фото', "Photos")]].concat(prog.tests ? [['t', LL('Тести', "Tests")]] : []);  // харчування — у «Кухні» (з 3.20.0)
     if (!tabs.some((t) => t[0] === ui.bodyTab)) ui.bodyTab = 'm';
     let body = '';
     if (ui.bodyTab === 'm') {
-      body = MEAS.map(([k, l]) => {
-        const u = MU(k), arr = (p.body[k] || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1)).map((q) => ({ d: q.d, v: MV(k, q.v) }));  // показ — у одиницях профілю
+      body = `<p class="tiny muted" style="margin:4px 0 8px">${LL('Вага — частіше, хоч щодня зранку: застосунок рахує середню за 7 днів. Обʼєми — раз на тиждень, в один день і час. Графіки — на «Прогресі» → «Тіло».', 'Weight — more often, even daily in the morning: the app uses the 7-day average. Measurements — once a week, on the same day and time. Charts are in Progress → Body.')}</p>` + MEAS.map(([k, l]) => {
+        const u = MU(k), { arr, series } = bodySeries(k);  // показ — у одиницях профілю (з 3.21.4 — спільний ряд, bodySeries)
         const last = arr[arr.length - 1], first = arr[0];
-        const avg = k === 'weight' ? ENGINE.rolling7(arr) : null;
-        const series = k === 'weight' ? [{ pts: arr.map((q) => ({ t: tms(q.d), v: Number(q.v) })), color: 'var(--muted)', width: 1 }, { pts: avg.map((q) => ({ t: tms(q.d), v: q.v })), color: 'var(--accent)', width: 2.5, dots: false, area: true }] : [{ pts: arr.map((q) => ({ t: tms(q.d), v: Number(q.v) })), color: 'var(--accent)', area: true }];
-        return `<div class="card"><div class="sp"><div><b>${l}</b><div class="small muted">${last ? fmt(last.v) + ' ' + u + ' · ' + dm(last.d) + (first && first !== last ? ' · ' + (last.v - first.v >= 0 ? '+' : '') + fmt(Math.round((last.v - first.v) * 10) / 10) + LL(' від першого', " since the first") : '') : LL('ще немає', "none yet")}</div></div><button type="button" class="sm" data-act="measAdd" data-m="${k}${LL(`">+ Додати</button></div>
+        return `<div class="card"><div class="sp"><div><b>${l}</b><div class="small muted">${last ? fmt(last.v) + ' ' + u + ' · ' + dm(last.d) + (last.src === 'q' ? LL(' (з анкети)', ' (from the questionnaire)') : '') + (first && first !== last ? ' · ' + (last.v - first.v >= 0 ? '+' : '') + fmt(Math.round((last.v - first.v) * 10) / 10) + LL(' від першого', " since the first") : '') : LL('ще немає', "none yet")}</div></div><button type="button" class="sm" data-act="measAdd" data-m="${k}${LL(`">+ Додати</button></div>
           `, `">+ Add</button></div>
           `)}${arr.length >= 2 ? CHARTS.line(series, { h: 130, label: l }) : ''}${k === 'weight' && arr.length ? LL('<p class="tiny muted">Зважуйтесь зранку натщесерце; дивіться на середню за 7 днів (лінія).</p>', "<p class=\"tiny muted\">Weigh yourself in the morning on an empty stomach; watch the 7-day average (the line).</p>") : ''}</div>`;
       }).join('');

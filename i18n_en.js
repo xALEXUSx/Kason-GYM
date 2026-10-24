@@ -1178,6 +1178,7 @@ I18N.add({
 I18N.add({
   "Інший день: подивитися чи дописати вчорашнє.": "Another day: view or add to yesterday.",
   "Білок на 100 г з етикетки.": "Protein per 100 g from the label.",
+  "Вага й обʼєми тіла: графіки, середня за 7 днів, темп.": "Body weight and measurements: charts, 7-day average, rate.",
   "Вага на вагах, г.": "Weight on the scale, g.",
   "Вага тіла сьогодні — зранку натщесерце.": "Your body weight today — in the morning before eating.",
   "Вага інгредієнта сирим чи сухим, г.": "Ingredient weight raw or dry, g.",

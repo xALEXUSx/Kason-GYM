@@ -670,6 +670,25 @@ var ENGINE = (function () {
     return same.length ? same : pick(false);
   }
   /* Перехід даних з версій 1–2. */
+  /* вага з анкети — перше зважування (з 3.21.4; слово Alexа 24.10: «вага з анкети — перше зважування»; «я вже встановив додаток, щоб не
+     видаляти профіль то застосуй уже записані данні як перше зважування»): лише коли зважувань ще немає — і для тих, хто вже заповнив анкету
+     (дата — дата анкети); раз (p.wSeed). Зважування вже є — перше справжнє й так старт, нічого не додаємо */
+  function seedWeight(p, kg, date) {
+    var w = Number(kg);
+    if (!p || !p.body || p.wSeed || (p.body.weight || []).length || !(w >= 25 && w <= 300)) return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) { var t = new Date(); date = t.getFullYear() + '-' + (t.getMonth() < 9 ? '0' : '') + (t.getMonth() + 1) + '-' + (t.getDate() < 10 ? '0' : '') + t.getDate(); }
+    p.body.weight = [{ d: date, v: round1(w), src: 'q' }]; p.wSeed = 1;
+    return true;
+  }
+  /* пора знову зважитись чи заміряти обʼєми (з 3.21.4; слово Alexа 24.10: «обєми тіла потрібно відслідковувати раз на тиждень»): днів від
+     останнього запису; пора — від 7 днів або записів ще немає */
+  function measureDue(points, today) {
+    var last = null;
+    (points || []).forEach(function (q) { if (q && q.d && (!last || q.d > last)) last = q.d; });
+    if (!last) return { due: true, days: null };
+    var days = Math.round((new Date(today + 'T12:00:00').getTime() - new Date(last + 'T12:00:00').getTime()) / 864e5);
+    return { due: days >= 7, days: days };
+  }
   function migrate(db) {
     if (!db || !db.profiles) return db;
     db.v = 3;
@@ -689,10 +708,11 @@ var ENGINE = (function () {
       if (!p.daily) p.daily = {};
       (p.sessions || []).forEach(function (s) { (s.sets || []).forEach(function (x) { if (!x.type) x.type = 'N'; }); });
     });
+    if (db.profiles.me && db.custom && db.custom.answers) seedWeight(db.profiles.me, db.custom.answers.weight, db.custom.date);  // з 3.21.4
     return db;
   }
 
-  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP };
 })();
