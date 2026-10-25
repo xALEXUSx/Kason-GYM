@@ -297,8 +297,11 @@ var KITCHEN = (function () {
      З 3.22.1 (per — 1 чи 2 склянки за раз; слово Alexа 25.10: «щоб додаток автоматично перераховував час та обєм якщо я випив більше чи менше а також
      раніше чи пізніше за сповіщення по графіку пиття»): після відмітки прийоми, що лишились, — рівно між нею й останньою склянкою (прийом за 1,5 год
      до тренування — на своєму місці; не ближче години між прийомами, інакше — як у розкладі); прийоми, які випите вже покрило наперед, зникають
-     (випили більше — прийомів менше); випили менше — решта переходить у наступні, як за пропущеного. Без per — як до 3.22.1. */
-  function waterDayPlan(times, target, glass, ml, at, now, per) {
+     (випили більше — прийомів менше); випили менше — решта переходить у наступні, як за пропущеного. Без per — як до 3.22.1.
+     З 3.22.2 — marks (часи відміток дня, 'HH:MM'; слово Alexа 25.10: «одна відмітка після пропущених прийомів має ставити лише одну ✓, а ранковий лишати «пропущено»»): прийом до останньої відмітки включно зроблено лише тоді,
+     коли в його вікні є відмітка (за годину до його часу — і до вікна наступного); решта — пропущені, їхня вода — у наступних прийомах. Час і порції
+     від marks не залежать: сервер (у нього лише сума й остання відмітка) рахує ті самі нагадування. Без marks — як до 3.22.2. */
+  function waterDayPlan(times, target, glass, ml, at, now, per, marks) {
     var n = (times || []).length; ml = Number(ml) || 0;
     if (!n || !(target > 0) || !(glass > 0)) return null;
     var h = glass / 2, H = Math.ceil(target / h - 1e-9), cap = per ? Math.min(halvesCap(glass), Math.max(2 * per, Math.ceil(H / n))) : halvesCap(glass), base = spread(H, n);
@@ -308,6 +311,7 @@ var KITCHEN = (function () {
     var r = times.map(function (x) { return rel(x.t); }), rn = rel(now), ra = rel(at), i, k, sum = 0;
     if (rn === null) return null;
     var own = -1; for (i = 0; i < n; i++) if (ra !== null && r[i] - WATER_GAP <= ra) own = i;
+    var mk = null; if (Array.isArray(marks)) { mk = {}; marks.forEach(function (t) { var a = rel(t), o = -1; if (a === null) return; for (var q = 0; q < n; q++) if (r[q] - WATER_GAP <= a) o = q; if (o >= 0) mk[o] = true; }); }
     var cum = [], m = r.slice(), skip = [];
     for (i = 0; i < n; i++) { sum += base[i]; cum.push(sum); }
     var doneV = function (j) { return ml >= Math.min(target, cum[j] * h) - 1e-6; };
@@ -328,7 +332,7 @@ var KITCHEN = (function () {
     var items = [], pend = [];
     for (i = 0; i < n; i++) {
       if (skip[i]) continue;
-      var done = doneV(i) || i === own, open = i > own && (i > c || (i === c && rn < m[i] + 30));  // прийом до відмітки — уже минув
+      var done = (mk && i <= own ? !!mk[i] : doneV(i)) || i === own, open = i > own && (i > c || (i === c && rn < m[i] + 30));  // прийом до відмітки — уже минув
       var it = { m: m[i], t: m[i] === r[i] ? times[i].t : abs(m[i]), h: base[i], k: times[i].k || '', st: done ? 'done' : open ? 'plan' : 'missed', up: false };
       items.push(it); if (it.st === 'plan') pend.push(it);
     }
@@ -363,7 +367,7 @@ var KITCHEN = (function () {
     for (i = 0; i < items.length; i++) if (items[i].st === 'plan') { var x = items[i]; tu = { i: i + 1, n: items.length, t: x.t, k: x.k, p: x.h / 2, ml: Math.round(x.h * h), up: x.up, capped: short > 0, now: x.m <= rn }; break; }
     return { items: items.map(function (x) { return { t: x.t, h: x.h, k: x.k, st: x.st, up: x.up }; }), turn: tu, short: short };
   }
-  function waterTurn(times, target, glass, ml, at, now, per) { var p = waterDayPlan(times, target, glass, ml, at, now, per); return p && p.turn; }
+  function waterTurn(times, target, glass, ml, at, now, per, marks) { var p = waterDayPlan(times, target, glass, ml, at, now, per, marks); return p && p.turn; }
 
   /* пошук звичними словами (з 3.20.1; жива перевірка 23.10: «курка» з підказки поля не знаходила нічого — у базі «Куряче філе»):
      основа слова → продукти бази. Лише для запитів від 3 літер; спершу — назви, що починаються з запиту, далі ці слова, далі решта збігів. */

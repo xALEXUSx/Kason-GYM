@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.22.1';
+  const VERSION = '3.22.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -2509,7 +2509,7 @@ window.APP_START = () => {
   /* план води на сьогодні з урахуванням відміченого (з 3.21.1): «08:00 ✓ · 12:20 пропущено · 16:40 — 3 склянки · 18:50 — 1 склянка (додатковий)» */
   function kDayPlan() {
     const wd = kWaterDay(), day = kday(wd), wl = day.wl || [];
-    return KITCHEN.waterDayPlan(kWaterTimes(wd), kWTarget(wd), kit().set.glass, day.water || 0, wl.length ? wl[wl.length - 1].t : '', kNowHM(), kit().set.per);
+    return KITCHEN.waterDayPlan(kWaterTimes(wd), kWTarget(wd), kit().set.glass, day.water || 0, wl.length ? wl[wl.length - 1].t : '', kNowHM(), kit().set.per, wl.map((x) => x.t).filter(Boolean));  // з 3.22.2 — ✓ лише прийомам з відміткою
   }
   const kPlanTxt = (items) => items.map((x) => x.t + (x.st === 'done' ? ' ✓' : x.st === 'missed' ? LL(' пропущено', ' missed') : ' — ' + kGlW(x.h / 2) + (x.k === 'extra' ? LL(' (додатковий)', ' (extra)') : ''))).join(' · ');
   /* прийомів на день і порції — для налаштувань: «4 прийоми по 2 склянки» (у день тренування — свої) */
