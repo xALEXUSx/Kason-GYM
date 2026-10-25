@@ -11,7 +11,7 @@ var ENGINE = (function () {
   function planFor(prog, n) {
     /* номер тренування не буває відʼємним: тиждень назад («Більше») + видалене тренування з журналу давали n < 0 — і головний екран падав (до 3.13.1) */
     n = Math.max(0, Math.floor(Number(n)) || 0);
-    var pw = prog.perWeek || 3;  // тренувань на тиждень (індивідуальна програма — 2…4)
+    var pw = prog.perWeek || 3;  // тренувань на тиждень (індивідуальна програма — 2…6; 5–6 — «верх / низ», з 3.27.0)
     var wIdx = Math.floor(n / pw), cycle = 1, wk;
     if (wIdx < 12) wk = wIdx + 1;
     else { var r = wIdx - 12; cycle = 2 + Math.floor(r / 8); wk = 5 + (r % 8); }
@@ -52,7 +52,7 @@ var ENGINE = (function () {
     var out = [];
     (profile.sessions || []).forEach(function (s) {
       var sets = (s.sets || []).filter(function (x) { return x.ex === exId && x.reps > 0 && (kind === 'all' ? x.type !== 'W' : isWork(x)); });
-      if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, back: s.back || 0, place: s.place, sets: sets });  // place — де було (дім / зал); back — частка ваги тренування повернення після перерви
+      if (sets.length) out.push({ date: s.date, n: s.n, deload: !!s.deload, back: s.back || 0, short: !!s.short, place: s.place, sets: sets });  // short — коротка версія (з 3.25.0)  // place — де було (дім / зал); back — частка ваги тренування повернення після перерви
     });
     return out;
   }
@@ -295,7 +295,7 @@ var ENGINE = (function () {
 
   /* Плато: 4+ сесій (без легких і повернення), останні 3 не перевищили найкращого до них. */
   function plateau(ex, hist, handle) {
-    var h = hist.filter(function (x) { return !x.deload && !x.back; });  // легкі тижні й повернення після перерви — легші за задумом
+    var h = hist.filter(function (x) { return !x.deload && !x.back && !x.short; });  // з 3.25.0 — і коротка версія (1–2 підходи); легкі тижні й повернення після перерви — легші за задумом
     if (h.length < 4) return false;
     var before = 0, recent = 0;
     h.slice(0, h.length - 3).forEach(function (x) { before = Math.max(before, bestOf(ex, x.sets, handle)); });
@@ -305,7 +305,7 @@ var ENGINE = (function () {
 
   /* Втома: у кожній з двох останніх (не легких і не повернення) сесій ≥ 2 головні вправи гірші, ніж минулого разу. */
   function fatigue(prog, profile, handle) {
-    var ss = (profile.sessions || []).filter(function (s) { return !s.deload && !s.back; });
+    var ss = (profile.sessions || []).filter(function (s) { return !s.deload && !s.back && !s.short; });  // коротка версія (з 3.25.0) — 1–2 підходи, не рівня
     if (ss.length < 3) return false;
     function drops(idx) {
       var s = ss[idx], cnt = 0;
@@ -535,13 +535,163 @@ var ENGINE = (function () {
     });
     return out;
   }
-  /* Серія тижнів поспіль із тренуванням (поточний тиждень не обриває серію, доки не скінчився). */
-  function streakWeeks(sessions, todayStr) {
-    var set = {}; (sessions || []).forEach(function (s) { set[weekKey(s.date)] = 1; });
-    var d = new Date(todayStr + 'T12:00:00'), n = 0;
-    if (!set[weekKey(todayStr)]) d.setDate(d.getDate() - 7);
-    for (;;) { var k = weekKey(d.toISOString().slice(0, 10)); if (set[k]) { n++; d.setDate(d.getDate() - 7); } else break; }
+  /* ---------- залучення (з 3.24.0; слово Alexа 25.10: «Роби в такому порядку: А → Б → В → Г»; план тренувань ці функції не змінюють) ---------- */
+  var noonKey = function (d) { return d.toISOString().slice(0, 10); };  // дата з полудня місцевого часу (як weekKey)
+  var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  /* Серія тижнів поспіль із тренуванням (поточний тиждень не обриває серію, доки не скінчився). З 3.24.0 (пункт 2) — запасний тиждень:
+     кожні 4 тижні поспіль з тренуванням дають 1 запасний (не більше 1 у запасі); тиждень без тренувань забирає запасний, і серія не рветься,
+     без запасного — рветься. Обірвана серія знижує охоту продовжувати, менше — коли її можна «полагодити» (Silverman, Barasch, JCR 2023);
+     «амулет вихідних» Duolingo: +4 % повернень через тиждень, −5 % втрат серії (блог Duolingo).
+     → { run — тижнів з тренуванням у серії, spare — запасних (0 або 1), saved — тижні, які врятував запасний, since — перший тиждень серії } */
+  var SPARE_EVERY = 4, SPARE_MAX = 1;
+  function streakInfo(sessions, todayStr) {
+    var set = {}; (sessions || []).forEach(function (s) { if (s && s.date && s.date <= todayStr) set[weekKey(s.date)] = 1; });
+    var keys = Object.keys(set).sort(), out = { run: 0, spare: 0, saved: [], since: null };
+    if (!keys.length) return out;
+    var cur = weekKey(todayStr), d = new Date(keys[0] + 'T12:00:00');
+    for (var k = noonKey(d); k <= cur; d.setDate(d.getDate() + 7), k = noonKey(d)) {
+      if (set[k]) { if (!out.run) out.since = k; out.run++; if (out.run % SPARE_EVERY === 0 && out.spare < SPARE_MAX) out.spare++; }
+      else if (k !== cur) { if (out.run && out.spare) { out.spare--; out.saved.push(k); } else out = { run: 0, spare: 0, saved: [], since: null }; }
+    }
+    return out;
+  }
+  function streakWeeks(sessions, todayStr) { return streakInfo(sessions, todayStr).run; }
+  /* крок серії за тренуваннями в порядку дат (віхи й підсумок року): st = { wk, run, spare }, k — тиждень тренування.
+     Тижні без тренувань між цим і попереднім забирають запасні; не вистачило — серія з 1. Те саме правило, що в streakInfo. → false, коли тиждень той самий */
+  function runStep(st, k) {
+    if (k === st.wk) return false;
+    var gap = st.wk ? Math.round((new Date(k + 'T12:00:00').getTime() - new Date(st.wk + 'T12:00:00').getTime()) / 864e5 / 7) - 1 : -1;
+    if (gap === 0 || (gap > 0 && st.spare >= gap)) { if (gap > 0) st.spare -= gap; st.run++; } else { st.run = 1; st.spare = 0; }
+    if (st.run % SPARE_EVERY === 0 && st.spare < SPARE_MAX) st.spare++;
+    st.wk = k; return true;
+  }
+  /* Пропуск (пункт 14): заплановані дні тренувань (дні людини) після останнього тренування й до сьогодні, коли тренування не було.
+     Найкращою з 54 програм мегадослідження (Milkman та ін., Nature 2021; 61 293 відвідувачі залів) була мікровинагорода саме за повернення
+     після пропущеного тренування. → { missed — скільки пропущено, last — дата останнього тренування } або null */
+  function missedDays(sessions, days, todayStr) {
+    var all = (sessions || []).map(function (s) { return s && s.date; }), ds = all.filter(function (x) { return x && x < todayStr; }).sort();
+    if (!ds.length || !days || !days.length || all.indexOf(todayStr) >= 0) return null;  // сьогодні вже тренувались — повернення вже зараховане
+    var last = ds[ds.length - 1], n = 0, d = new Date(last + 'T12:00:00');
+    for (var i = 0; i < 400; i++) { d.setDate(d.getDate() + 1); if (noonKey(d) >= todayStr) break; if (days.indexOf(d.getDay()) >= 0) n++; }
+    return n ? { missed: n, last: last } : null;
+  }
+  /* Відновлення мʼязів (пункт 1): години від останнього тренування, де мʼяз отримав ≥ 1 «дробовий» підхід (основний мʼяз 1, допоміжний 0,5;
+     розминкові не рахуються). До 48 год — «відпочиває» (ACSM 2011, Garber та ін., MSSE 43(7): основні групи мʼязів — 2–3 дні на тиждень,
+     щонайменше 48 год між тренуваннями тих самих груп), далі — «готовий». Орієнтир, не діагноз; план від цього не змінюється.
+     Час тренування — мітка збереження (id), якщо вона того самого дня, інакше 18:00 дня тренування. → { мʼяз: { h, rest, left } } */
+  var REST_H = 48;
+  function sessTime(s) { var d = new Date(s.id || 0); return s.id && noonKey(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12)) === s.date ? s.id : new Date(s.date + 'T18:00:00').getTime(); }
+  function recovery(prog, sessions, nowMs) {
+    var last = {}, out = {};
+    (sessions || []).forEach(function (s) {
+      if (!s || !s.date) return;
+      var t = sessTime(s), f = {};
+      if (t > nowMs) return;
+      (s.sets || []).forEach(function (x) { if (!(x.reps > 0) || x.type === 'W') return; var e = prog.ex[x.ex]; if (!e || !e.m) return;
+        (e.m.p || []).forEach(function (m) { f[m] = (f[m] || 0) + 1; }); (e.m.s || []).forEach(function (m) { f[m] = (f[m] || 0) + 0.5; }); });
+      Object.keys(f).forEach(function (m) { if (f[m] >= 1 && (!last[m] || last[m] < t)) last[m] = t; });
+    });
+    Object.keys(last).forEach(function (m) { var h = Math.max(0, (nowMs - last[m]) / 36e5); out[m] = { h: Math.floor(h), rest: h < REST_H, left: Math.max(0, Math.ceil(REST_H - h)) }; });
+    return out;
+  }
+  /* Виклик місяця (пункт 4) з власної історії — як щомісячні виклики Apple Fitness (за спільнотою Apple — під історію людини), але не більше
+     за план: ціль = минулий місяць + 1 (минулого не було — половина запланованого), не більше запланованих днів місяця (від першого
+     тренування, якщо воно цього місяця). Подарований старт (пункт 18; Nunes, Drèze 2006: 34 % проти 19 %): тренування, зроблені цього місяця до появи виклику, —
+     уже зараховані (справжні, не вигадані). → { target, done, planned, prev, left, met } або null */
+  function monthPlanned(days, ym, fromStr) {
+    var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)) - 1, n = 0, nd = new Date(y, m + 1, 0).getDate();
+    for (var d = 1; d <= nd; d++) { var dt = new Date(y, m, d, 12), k = noonKey(dt); if (fromStr && k < fromStr) continue; if (days.indexOf(dt.getDay()) >= 0) n++; }
     return n;
+  }
+  function prevYm(ym) { var y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)) - 1; var d = new Date(y, m - 1, 15); return d.getFullYear() + '-' + pad(d.getMonth() + 1); }
+  function monthChallenge(sessions, days, ym) {
+    if (!days || !days.length) return null;
+    var ss = (sessions || []).filter(function (s) { return s && s.date; }), first = ss.map(function (s) { return s.date; }).sort()[0];
+    var planned = monthPlanned(days, ym, first && first.slice(0, 7) === ym ? first : null);
+    if (!planned) return null;
+    var done = ss.filter(function (s) { return s.date.slice(0, 7) === ym; }).length, prev = ss.filter(function (s) { return s.date.slice(0, 7) === prevYm(ym); }).length;
+    var target = Math.min(planned, prev ? prev + 1 : Math.ceil(planned / 2));
+    return { target: target, done: done, planned: planned, prev: prev, left: Math.max(0, target - done), met: done >= target };
+  }
+  /* Підсумок минулого тижня (пункт 5): тренування з запланованих, рекорди, хвилини, ккал (як у підсумку тренування). → об'єкт або null */
+  function weekSummary(profile, prog, todayStr) {
+    var cur = weekKey(todayStr), d = new Date(cur + 'T12:00:00'); d.setDate(d.getDate() - 7); var wk = noonKey(d);
+    var ss = (profile.sessions || []).filter(function (s) { return s && s.date && weekKey(s.date) === wk; });
+    var kc = kcalSum(profile, ss);  // як «Цього тижня» на головній (до 3.24.0-чернетки тут додавався обʼєкт — ккал виходили порожніми)
+    return { week: wk, n: ss.length, planned: prog.perWeek || (profile.days || []).length || 3, prs: ss.reduce(function (a, s) { return a + (s.prs || 0); }, 0),
+      mins: ss.reduce(function (a, s) { return a + (s.mins || 0); }, 0), kcal: kc ? kc.total : null, streak: streakInfo(profile.sessions, todayStr) };  // хвилини — тривалість, як «Цього тижня» на головній
+  }
+  /* Коротка версія тренування (з 3.25.0, пункт 15; слово Alexа 25.10: «Роби в такому порядку: А → Б → В → Г», група В — «коротка версія 20 хв
+     (кожна велика група ≥ 1 вправа)»; план «якщо — то»: метааналіз 26 досліджень — ефект 0,31 одразу і 0,24 згодом, сильніший, коли план
+     враховує перешкоди): з сьогоднішнього тренування й іншого (А ↔ Б) — найменше вправ, щоб кожна велика група мʼязів, яка є в програмі
+     (квадрицепс, задня поверхня стегна, сідниці, спина, груди, плечі, біцепс, трицепс, прес — як у сторожі основи), мала ≥ 1 вправу як основний мʼяз.
+     Спершу — вправи сьогоднішнього тренування, що покривають найбільше груп; чого в ньому немає — з іншого. Порядок — як у тренуваннях. → вправи (it) */
+  var SHORT_GROUPS = { quads: ['quads'], hams: ['hams'], glutes: ['glutes'], back: ['lats'], chest: ['chest'], shoulders: ['delts'], biceps: ['biceps'], triceps: ['triceps'], abs: ['abs', 'obliques'] };
+  function shortPick(prog, wid, W) {
+    /* «верх / низ» (з 3.27.0): іншої половини не додаємо — вона наступна в розкладі, а тим самим мʼязам потрібно ≥ 48 год */
+    var other = wid === 'A' ? 'B' : wid === 'B' ? 'A' : null, today = ((W || {})[wid] || {}).items || [], alt = other ? ((W[other] || {}).items || []) : [];
+    var gOf = function (it) { var m = (prog.ex[it.ex] || {}).m || {}; return Object.keys(SHORT_GROUPS).filter(function (g) { return (m.p || []).some(function (x) { return SHORT_GROUPS[g].indexOf(x) >= 0; }); }); };
+    var left = [], out = [];
+    today.concat(alt).forEach(function (it) { gOf(it).forEach(function (g) { if (left.indexOf(g) < 0) left.push(g); }); });
+    [today, alt].forEach(function (pool) {
+      for (;;) {
+        var best = null, bn = 0;
+        pool.forEach(function (it) { if (out.indexOf(it) >= 0 || out.some(function (o) { return o.ex === it.ex; })) return; var n = gOf(it).filter(function (g) { return left.indexOf(g) >= 0; }).length; if (n > bn) { bn = n; best = it; } });
+        if (!best) break;
+        out.push(best); left = left.filter(function (g) { return gOf(best).indexOf(g) < 0; });
+      }
+    });
+    return out;
+  }
+  /* підходи короткої версії: кожній вправі 1, другий — спершу базовим (не ізоляція), потім решті — поки оцінка тривалості (estimateMins, без розминки)
+     ≤ SHORT_MIN хв; легкий тиждень — по 1. Замір на всіх анкетах (25.10): медіана 19 хв, найдовша 20, найкоротша 14. → { id вправи: підходів } */
+  var SHORT_MIN = 20;
+  function shortSets(prog, picks, pairs, deload) {
+    var items = orderItems(picks, pairs || []).map(function (o) { return { ex: o.it.ex, ss: o.ss, rest: o.it.rest, sets: [{ type: 'N' }] }; });
+    if (!deload) items.map(function (x, i) { return i; }).sort(function (i, j) { return ((prog.ex[items[i].ex] || {}).iso ? 1 : 0) - ((prog.ex[items[j].ex] || {}).iso ? 1 : 0) || i - j; })
+      .forEach(function (i) { items[i].sets.push({ type: 'N' }); if (estimateMins(prog, items) > SHORT_MIN) items[i].sets.pop(); });
+    var n = {}; items.forEach(function (x) { n[x.ex] = x.sets.length; }); return n;
+  }
+  /* Підсумок року (пункт 20; як Spotify Wrapped — історія з картками, якою діляться): усе з історії тренувань, без збереженого стану.
+     y — 'YYYY'. Приріст — як у звіті місяця: найкраще до року проти найкращого в році; почали цього року — перший місяць тренувань проти решти року.
+     → { year, sessions, mins, kcal, prs, sets, volume, weeks, bestRun, months, rets, top: [{ id, sets }], gains: [{ id, pct }], muscles: [[мʼяз, підходи]] } або null */
+  function yearSummary(profile, prog, y, handle) {
+    var all = (profile.sessions || []).filter(function (s) { return s && s.date; }).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
+    var ss = all.filter(function (s) { return s.date.slice(0, 4) === y; }); if (!ss.length) return null;
+    var r = { year: y, sessions: ss.length, mins: 0, kcal: null, prs: 0, sets: 0, volume: 0, weeks: 0, bestRun: 0, months: 0, rets: 0, top: [], gains: [], muscles: [] };
+    var wks = {}, mos = {}, per = {}, st = { wk: null, run: 0, spare: 0 };
+    ss.forEach(function (s) {
+      r.mins += s.mins || 0; r.prs += s.prs || 0; r.volume += sessionVolume(prog, s, handle); if (s.ret) r.rets++;
+      wks[weekKey(s.date)] = 1; mos[s.date.slice(0, 7)] = 1;
+      (s.sets || []).forEach(function (x) { if (x.reps > 0 && x.type !== 'W') { r.sets++; per[x.ex] = (per[x.ex] || 0) + 1; } });
+      if (runStep(st, weekKey(s.date)) && st.run > r.bestRun) r.bestRun = st.run;
+    });
+    var ks = kcalSum(profile, ss); r.kcal = ks ? ks.total : null; r.volume = round1(r.volume);
+    r.weeks = Object.keys(wks).length; r.months = Object.keys(mos).length;
+    r.top = Object.keys(per).filter(function (id) { return prog.ex[id]; }).map(function (id) { return { id: id, sets: per[id] }; }).sort(function (a, b) { return b.sets - a.sets; }).slice(0, 3);
+    var m0 = ss[0].date.slice(0, 7);
+    Object.keys(prog.ex).forEach(function (id) {
+      var ex = prog.ex[id], h = history(profile, id), pre = h.filter(function (x) { return x.date.slice(0, 4) < y; });
+      var a = pre.length ? pre : h.filter(function (x) { return x.date.slice(0, 7) === m0; }), b = h.filter(function (x) { return x.date.slice(0, 4) === y && (pre.length || x.date.slice(0, 7) > m0); });
+      if (!a.length || !b.length) return;
+      var b0 = 0; a.forEach(function (x) { b0 = Math.max(b0, bestOf(ex, x.sets, handle)); });
+      var b1 = 0; b.forEach(function (x) { b1 = Math.max(b1, bestOf(ex, x.sets, handle)); });
+      if (b0 > 0 && b1 > b0) r.gains.push({ id: id, pct: Math.round((b1 / b0 - 1) * 100) });
+    });
+    r.gains.sort(function (a, b) { return b.pct - a.pct; }); r.gains = r.gains.slice(0, 3);
+    var mu = muscleSets(prog, ss, 0, 9e15); r.muscles = Object.keys(mu).map(function (k) { return [k, round1(mu[k])]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 3);
+    return r;
+  }
+  /* «Новий старт» (пункт 3; Dai, Milkman, Riis 2014 — на початку тижня й місяця люди частіше беруться за цілі): сьогодні день тренування й
+     у цьому місяці / тижні ще не тренувались — 'month' / 'week'; пропустили заплановане — 'back' (пропущене не надолужуємо). Інакше null */
+  function freshStart(sessions, days, todayStr) {
+    var ss = (sessions || []).filter(function (s) { return s && s.date; });
+    if (!ss.length) return null;  // ще жодного тренування — веде «за руку», не «новий старт»
+    if (missedDays(ss, days, todayStr)) return 'back';
+    if (!days || days.indexOf(new Date(todayStr + 'T12:00:00').getDay()) < 0) return null;
+    if (!ss.some(function (s) { return s.date.slice(0, 7) === todayStr.slice(0, 7) && s.date <= todayStr; })) return 'month';
+    if (!ss.some(function (s) { return weekKey(s.date) === weekKey(todayStr) && s.date <= todayStr; })) return 'week';
+    return null;
   }
   /* ---------- калорії тренування (з 3.21.9; слово Alexа 24.10: «Скільки калорій за тренування я спалив? Це потрібно правильно вираховувати і показувати
      після тренування та в додатку … + за тиждень в цілому за всі тренування які зробив») ----------
@@ -782,17 +932,17 @@ var ENGINE = (function () {
      якщо вага повернулась. Усе — з історії, без збереженого стану. o: { sessions, weight, waist, goal, lb, today }
      → { got: [{ k: 'n'|'st'|'pr'|'w'|'c', v, d }] (новіші першими), next: [{ k, v, left }] }; v ваги й талії — в одиницях профілю, зі знаком */
   var MS_N = [10, 25, 50, 100, 150, 200, 300, 400, 500, 750, 1000], MS_ST = [4, 8, 12, 26, 52, 104], MS_PR = [10, 25, 50, 100, 250, 500, 1000];
+  var MS_RET = [1, 3, 5, 10, 25, 50];  // з 3.24.0 — повернень після пропуску (пункт 14)
   function milestones(o) {
     var ss = (o.sessions || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id; });
-    var got = [], next = [], prs = 0, wk = null, run = 0, best = 0;
+    var got = [], next = [], prs = 0, best = 0, rets = 0, st = { wk: null, run: 0, spare: 0 };
     ss.forEach(function (s, i) {
       if (MS_N.indexOf(i + 1) >= 0) got.push({ k: 'n', v: i + 1, d: s.date });
       var p0 = prs; prs += s.prs || 0;
       MS_PR.forEach(function (t) { if (p0 < t && prs >= t) got.push({ k: 'pr', v: t, d: s.date }); });
-      var k = weekKey(s.date);
-      if (k === wk) return;
-      run = wk && Math.round((new Date(k + 'T12:00:00').getTime() - new Date(wk + 'T12:00:00').getTime()) / 864e5) === 7 ? run + 1 : 1; wk = k;
-      MS_ST.forEach(function (t) { if (run === t && t > best) { best = t; got.push({ k: 'st', v: t, d: s.date }); } });
+      if (s.ret) { rets++; if (MS_RET.indexOf(rets) >= 0) got.push({ k: 'ret', v: rets, d: s.date }); }  // з 3.24.0 — повернення після пропуску (пункт 14)
+      if (!runStep(st, weekKey(s.date))) return;  // з 3.24.0 — з запасним тижнем, як streakInfo
+      MS_ST.forEach(function (t) { if (st.run === t && t > best) { best = t; got.push({ k: 'st', v: t, d: s.date }); } });
     });
     var dir = o.goal === 'gain' ? 1 : o.goal === 'loss' || o.goal === 'recomp' ? -1 : 0;
     var wStep = o.lb ? 5 / LB : 2, wShow = o.lb ? 5 : 2, avg = dir ? rolling7(o.weight || []) : [], wBest = 0;
@@ -800,6 +950,15 @@ var ENGINE = (function () {
     var cStep = o.lb ? 2.54 : 2, cShow = o.lb ? 1 : 2, cBest = 0;
     var wa = dir === -1 ? (o.waist || []).slice().sort(function (a, b) { return a.d < b.d ? -1 : 1; }) : [];
     wa.forEach(function (q) { var m = Math.floor((Number(wa[0].v) - Number(q.v)) / cStep + 1e-6); while (cBest < m) { cBest++; got.push({ k: 'c', v: -cBest * cShow, d: q.d }); } });
+    /* з 3.24.0 — виклик місяця виконано (пункт 4): місяці з першого тренування; дата — тренування, яким досягнуто ціль */
+    if (o.days && o.days.length && ss.length) {
+      var ym0 = ss[0].date.slice(0, 7), ymT = (o.today || ss[ss.length - 1].date).slice(0, 7);
+      for (var ym = ym0, guard = 0; ym <= ymT && guard < 240; guard++) {
+        var mc = monthChallenge(ss, o.days, ym);
+        if (mc && mc.met) { var inM = ss.filter(function (s) { return s.date.slice(0, 7) === ym; }); got.push({ k: 'mc', v: ym, d: inM[mc.target - 1].date }); }
+        var y2 = Number(ym.slice(0, 4)), m2 = Number(ym.slice(5, 7)); ym = (m2 === 12 ? y2 + 1 : y2) + '-' + pad(m2 === 12 ? 1 : m2 + 1);
+      }
+    }
     var nN = MS_N.filter(function (t) { return t > ss.length; })[0]; if (nN) next.push({ k: 'n', v: nN, left: nN - ss.length });
     var cur = ss.length ? streakWeeks(ss, o.today || ss[ss.length - 1].date) : 0, nS = MS_ST.filter(function (t) { return t > cur; })[0]; if (nS) next.push({ k: 'st', v: nS, left: nS - cur });
     var nP = MS_PR.filter(function (t) { return t > prs; })[0]; if (nP) next.push({ k: 'pr', v: nP, left: nP - prs });
@@ -835,7 +994,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
            KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };

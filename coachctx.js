@@ -34,7 +34,7 @@ var COACHCTX = (function () {
     if (o.back) out.push(LL('Повернення після перерви (застосунок сам зменшив вагу; до відмови не ходимо, міо й дропів немає): ', "Back after a break (the app lowered the weights automatically; no sets to failure, no myo-reps or drop sets): ") + o.back);
     var W = (o.place === 'gym' && prog.gymWorkouts ? prog.gymWorkouts : prog.workouts) || {};
     var wt = (W[o.workout] || {}).title || o.workout;
-    out.push((o.inProgress ? LL('Тренування триває', "Workout in progress") : LL('Наступне тренування', "Next workout")) + ': ' + wt + (o.place ? ', ' + (PLACE[o.place] || o.place) : '') + (o.inProgress && o.total ? LL('; зроблено ', "; completed ") + o.done + LL(' з ', " of ") + o.total + LL(' підходів', " sets") : '') + '.');
+    out.push((o.inProgress ? LL('Тренування триває', "Workout in progress") : LL('Наступне тренування', "Next workout")) + ': ' + wt + (o.short && /^[UL]$/.test(o.workout) ? LL(' — коротка версія (кожна група мʼязів цього тренування — по вправі, 1–2 підходи, ≈ 20 хв)', ' — short version (one exercise per muscle group of this workout, 1–2 sets, about 20 min)') : o.short ? LL(' — коротка версія (кожна велика група мʼязів — по вправі, 1–2 підходи, ≈ 20 хв)', ' — short version (one exercise per major muscle group, 1–2 sets, about 20 min)') : '') + (o.place ? ', ' + (PLACE[o.place] || o.place) : '') + (o.inProgress && o.total ? LL('; зроблено ', "; completed ") + o.done + LL(' з ', " of ") + o.total + LL(' підходів', " sets") : '') + '.');
     (o.items || []).forEach(function (it, i) {
       var ex = prog.ex[it.ex] || {};
       var head = '- ' + name(it.ex) + (it.skipped ? LL(' (пропущено)', " (skipped)") : '') + ': ' + reps(it) + (ex.type === 'time' ? LL(' с', " sec") : LL(' повторень', " reps")) + LL(', відпочинок ', ", rest ") + it.rest + LL(' с', " sec") +
@@ -42,15 +42,19 @@ var COACHCTX = (function () {
       var cur = o.cur && o.cur.i === i ? LL(' ← зараз підхід ', " ← current set ") + (o.cur.j + 1) : '';
       out.push(head + cur + LL(' Підходи: ', " Sets: ") + it.sets.map(function (s, k) { return setLine(ex, s, k); }).join('; ') + '.' + (it.note ? LL(' Підказка застосунку: ', " App hint: ") + it.note : ''));
     });
+    /* «верх / низ» (з 3.27.0) — словами: «U» / «L» тренеру нічого не кажуть */
+    var wname = function (x) { return ({ U: LL('«Верх тіла»', '“Upper body”'), L: LL('«Низ тіла»', '“Lower body”') })[x] || x; };
     out.push(LL('Розклад програми (тиждень: тренування — фаза):', "Program schedule (week: workouts — phase):"));
     for (var wk = 1; wk <= 12; wk++) {
       var nn = prog.note(wk) || {};
-      out.push('- ' + wk + ': ' + prog.week(wk).join(' · ') + ' — ' + (nn.phase || '') + (prog.deload && prog.deload.indexOf(wk) >= 0 ? LL(', легкий', ", deload") : ''));
+      out.push('- ' + wk + ': ' + prog.week(wk).map(wname).join(' · ') + ' — ' + (nn.phase || '') + (prog.deload && prog.deload.indexOf(wk) >= 0 ? LL(', легкий', ", deload") : ''));
     }
     [['workouts', prog.place === 'gym' ? LL('у залі', "at the gym") : LL('основне місце', "main location")], ['gymWorkouts', LL('у залі', "at the gym")]].forEach(function (p) {
       var ws = prog[p[0]]; if (!ws) return;
-      Object.keys(ws).forEach(function (w) {
-        out.push(LL('Тренування ', "Workout ") + w + ' (' + p[1] + '): ' + ws[w].items.map(function (it) { return name(it.ex) + ' ' + it.sets + '×' + reps(it); }).join('; ') + '.');
+      /* з 3.24.0 — лише тренування з розкладу (у «Гантелі 2×20» Д1–Д3 лишились для історії й шаблонів, у розкладі їх з 3.23.0 немає) */
+      var inPlan = {}; for (var k = 1; k <= 12; k++) prog.week(k).forEach(function (x) { inPlan[x] = 1; });
+      Object.keys(ws).filter(function (w) { return inPlan[w]; }).forEach(function (w) {
+        out.push(LL('Тренування ', "Workout ") + wname(w) + ' (' + p[1] + '): ' + ws[w].items.map(function (it) { return name(it.ex) + ' ' + it.sets + '×' + reps(it); }).join('; ') + '.');
       });
     });
     if (o.prog && o.prog.units === 'lb') out = out.map(function (l) { return String(l).replace(/кг/g, 'lb').replace(/\bkg\b/g, 'lb'); });  // програма у фунтах (з 3.18.0)

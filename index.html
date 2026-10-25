@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.22.2">
+<meta name="app-version" content="3.27.0">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -145,6 +145,7 @@ button.sm{min-height:44px;min-width:44px;padding:8px 14px;font-size:.86rem;borde
 button.wide{width:100%} button.big{min-height:54px;font-size:1.05rem;border-radius:var(--r-md)}
 /* поля вводу — втиснуті */
 input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--soft);border:1px solid var(--input-line);border-radius:var(--r-sm);padding:10px 12px;min-height:44px;width:100%;box-shadow:var(--in)}
+input[type=time]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%} input[type=time]::-webkit-date-and-time-value{text-align:left} .grid2>div:has(>input[type=time]){min-width:0}  /* Safari iOS: поле часу має власну мінімальну ширину й виходило за екран у «Налаштуваннях кухні» (два поруч, аудит 25.10, симулятор iPhone 16e) */
 textarea{min-height:70px;resize:vertical}
 label.f{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
 /* перемикач-сегменти: втиснута доріжка, обраний сегмент — опуклий (радіус = 12 − 3 відступ) */
@@ -233,6 +234,18 @@ nav#tabs,#rbar,#tour,#timer,#app :is(button,.btn,label,summary,select,[data-act]
 svg.chart{width:100%;height:auto;display:block;overflow:visible} .gl{stroke:var(--line);stroke-width:1}.mk{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:3 3} .tl{font-size:11px;fill:var(--muted);font-family:inherit}
 svg.ring{width:84px;height:84px} svg.ring .rv{font-size:15px;font-weight:700;fill:var(--ink)} svg.ring .rs{font-size:11px;fill:var(--muted)}
 svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
+.card.rec svg.bodymap{max-width:230px}
+.moodb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}
+.moodb button{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:56px;padding:6px 2px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:var(--r-sm);font:inherit}
+.moodb button span{font-size:1.35rem;line-height:1}
+.moodb button small{font-size:.78rem}
+.mood1{margin:10px 2px 0}
+.list li.qsum{align-items:center} .list li.qsum b{flex:1;text-align:right} .list li.qsum .sm{flex:none}
+.card.rdy{margin-top:8px}
+.qlist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.qrow{display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:var(--r-sm);font:inherit;text-align:left}
+.qrow.done{opacity:.72}
+.qrow .qmk{flex:0 0 22px;text-align:center;font-weight:700;color:var(--accent-text)}
 .legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:.74rem;color:var(--muted);margin-top:6px} .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;background:var(--accent)} .legend i.z{background:var(--ok-soft);outline:1px dashed var(--accent-text)}
 .hb{display:grid;gap:7px;margin-top:6px} .hbr{display:grid;grid-template-columns:110px 1fr 34px;gap:8px;align-items:center;font-size:.82rem}
 .hbt{position:relative;height:12px;background:var(--soft);border-radius:var(--r-pill);overflow:hidden;box-shadow:var(--in)} .hbz{position:absolute;top:0;bottom:0;background:var(--ok-soft);outline:1px dashed var(--accent-text)} .hbf{position:absolute;left:0;top:0;bottom:0;border-radius:var(--r-pill)}
@@ -246,7 +259,8 @@ svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 .slot{min-height:46px;padding:4px;border-radius:var(--r-sm);font-size:.78rem;font-weight:700;background:var(--soft);border:0;line-height:1.1;box-shadow:none}
 .slot small{display:block;font-weight:500;color:var(--muted);font-size:.7rem}
 .slot.done{background:var(--ok-soft);color:var(--accent-text)} .slot.next{background:var(--accent);color:var(--accent-ink);box-shadow:var(--e1)} .slot.next small{color:var(--accent-ink);opacity:.8}
-.wk.dl .wl b::after{content:" · легкий";font-size:.7rem;color:var(--ochre-text);font-weight:500}
+.wk .wl .dlm{display:block;font-size:.7rem;color:var(--ochre-text);font-weight:500}  /* легкий тиждень — окремим рядком і текстом (не стилями): «12 · легкий» не вміщався й переносився з крапкою; англійською — перекладом */
+.wk.c6{gap:3px} .wk.c6 .wl{font-size:.7rem} .wk.c6.dl .wl{color:var(--ochre-text)} .wk.c6 .slot{padding:4px 2px;width:100%;min-width:0}
 /* фото */
 .ph{display:grid;grid-template-columns:repeat(3,1fr);gap:6px} .ph img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:var(--r-sm);display:block}
 .cmp{position:relative;border-radius:var(--r-md);overflow:hidden;aspect-ratio:3/4;background:var(--soft);box-shadow:var(--e1)} .cmp img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
@@ -418,23 +432,23 @@ button.mic.busy{opacity:.55}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="i18n.js?v=3.22.2"></script>
-<script src="i18n_en.js?v=3.22.2"></script>
-<script src="program.js?v=3.22.2"></script>
-<script src="engine.js?v=3.22.2"></script>
-<script src="voice.js?v=3.22.2"></script>
-<script src="coach.js?v=3.22.2"></script>
-<script src="radio.js?v=3.22.2"></script>
-<script src="voicepack.js?v=3.22.2"></script>
-<script src="tips.js?v=3.22.2"></script>
-<script src="charts.js?v=3.22.2"></script>
-<script src="store.js?v=3.22.2"></script>
-<script src="generator.js?v=3.22.2"></script>
-<script src="food_db.js?v=3.22.2"></script>
-<script src="kitchen.js?v=3.22.2"></script>
-<script src="coachctx.js?v=3.22.2"></script>
-<script src="viz.js?v=3.22.2"></script>
-<script src="app.js?v=3.22.2"></script>
-<script src="accounts.js?v=3.22.2"></script>
+<script src="i18n.js?v=3.27.0"></script>
+<script src="i18n_en.js?v=3.27.0"></script>
+<script src="program.js?v=3.27.0"></script>
+<script src="engine.js?v=3.27.0"></script>
+<script src="voice.js?v=3.27.0"></script>
+<script src="coach.js?v=3.27.0"></script>
+<script src="radio.js?v=3.27.0"></script>
+<script src="voicepack.js?v=3.27.0"></script>
+<script src="tips.js?v=3.27.0"></script>
+<script src="charts.js?v=3.27.0"></script>
+<script src="store.js?v=3.27.0"></script>
+<script src="generator.js?v=3.27.0"></script>
+<script src="food_db.js?v=3.27.0"></script>
+<script src="kitchen.js?v=3.27.0"></script>
+<script src="coachctx.js?v=3.27.0"></script>
+<script src="viz.js?v=3.27.0"></script>
+<script src="app.js?v=3.27.0"></script>
+<script src="accounts.js?v=3.27.0"></script>
 </body>
 </html>

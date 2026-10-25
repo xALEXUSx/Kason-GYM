@@ -61,7 +61,7 @@ I18N.add({
   "«⋯ Ще» → «Замінити»: застосунок запропонує іншу вправу на ті самі мʼязи з того, що є під рукою.": "“⋯ More” → “Swap”: the app will suggest another exercise for the same muscles using what you have on hand.",
   "Є вдома чи ні. Програма одразу перебудується під обладнання; історія й рекорди лишаються.": "Whether you have it at home. The program rebuilds around your equipment right away; your history and PRs stay.",
   "І вдома, і в залі": "Both at home and at the gym",
-  "Ізоляція — міо-підхід в останньому підході. Присідання, румунська, розщеплений присід, фермерська, шраги — завжди запас 2.": "Isolation — a myo-rep set on the last set. Squats, Romanian deadlifts, split squats, farmer’s carries, shrugs — always 2 reps in reserve.",
+  "Ізоляція — міо-підхід в останньому підході. Присідання, румунська, розщеплений присід, фермерська — завжди запас 2.": "Isolation — a myo-rep set on the last set. Squats, Romanian deadlifts, split squats, farmer’s carries — always 2 reps in reserve.",
   "Алергія на латекс — еспандери T15 і петля латексні; з алергією не використовувати.": "Latex allergy — the T15 bands and the loop are latex; don’t use them if you’re allergic.",
   "Алергія на латекс — перевірте матеріал еспандера й петлі: латексні з алергією не використовувати.": "Latex allergy — check what your band and loop are made of: don’t use latex ones if you’re allergic.",
   "Без дієт: «підтягнутість» дадуть мʼязи, а не урізання їжі.": "No diets: muscle is what gives you a “toned” look, not cutting food.",
@@ -232,7 +232,12 @@ I18N.add({
   "Для легких вправ стрибок на 2,5 кг великий: спершу доводьте повторення до 15–20 і сповільнюйте опускання до 3 с, а потім додавайте вагу.": "For light exercises, a 2.5 kg jump is big: first build up to 15–20 reps and slow the lowering to 3 sec, then add weight.",
   "Для тяг (спина) потрібні гантелі, петля або блок": "Rows (back) need dumbbells, a band, or a cable machine",
   "Дні тренувань. Торкніться дня, щоб додати чи прибрати.": "Workout days. Tap a day to add or remove it.",
-  "Дні тренувань: від 2 до 4 на тиждень.": "Workout days: 2 to 4 per week.",
+  "Дні тренувань: від 2 до 6 на тиждень (5–6 — «верх / низ» по черзі).": "Workout days: 2 to 6 per week (5–6 — upper and lower body in turn).",
+  "Змінити цю відповідь; «Готово» поверне до всіх відповідей.": "Change this answer; “Done” takes you back to all answers.",
+  "Тренажер чи місце зайняте — зробіть спершу наступні вправи, а цю — в кінці. Пара суперсету переїде разом із нею.": "Machine or spot taken — do the next exercises first and this one at the end. Its superset pair moves with it.",
+  "Назад до всіх відповідей. Програма оновиться після «Оновити програму».": "Back to all answers. The program updates after “Update program.”",
+  "Верх тіла": "Upper body",
+  "Низ тіла": "Lower body",
   "До 24 знаків": "Up to 24 characters",
   "До відмови: робите, доки виходить з правильною технікою.": "To failure: keep going as long as your form holds.",
   "Довга голівка трицепса — більша частина обʼєму руки.": "The long head of the triceps — most of your arm’s size.",
@@ -585,9 +590,11 @@ I18N.add({
   "Нічого з цього": "None of these",
   "О котрій нагадувати в дні тренувань. Якщо цього дня ви вже тренувались — нагадування не прийде.": "What time to remind you on workout days. If you’ve already worked out that day, no reminder is sent.",
   "Оберіть вправу, щоб побачити її графік і рекорди.": "Pick an exercise to see its chart and PRs.",
-  "Оберіть від 2 до 4 днів": "Choose 2 to 4 days",
+  "Оберіть від 2 до 6 днів": "Choose 2 to 6 days",
+  "Для 55+ і з тиском чи серцем — від 2 до 4 днів": "For 55+ and with blood pressure or heart issues — 2 to 4 days",
   "Оберіть досвід": "Choose your experience level",
   "Оберіть мету": "Choose a goal",
+  "«Сила й здоровʼя» не поєднується зі схудненням і набором мʼязів": "“Strength and health” can’t be combined with losing weight or building muscle",
   "Оберіть стать": "Select your sex",
   "Оберіть, де тренуєтесь": "Choose where you train",
   "Обрати цей голос тренера: чоловічий або жіночий.": "Choose this coach voice: male or female.",
@@ -846,7 +853,7 @@ I18N.add({
   "Спина й грижі: як застосунок береже поперек і коли до лікаря.": "Back and herniated discs: how the app protects your lower back and when to see a doctor.",
   "Спина й задня дельта: тяга, що вирівнює плечі після сидіння за столом.": "Back and rear delts: a row that straightens your shoulders after sitting at a desk.",
   "Спина й лікті біля стіни, руки ковзають угору-вниз, поперек не відривається.": "Back and elbows against the wall, arms slide up and down, lower back stays on the wall.",
-  "Спина й осанка": "Back and posture",
+  "Сильна спина й осанка": "Strong back and posture",
   "Спина на спинці. Розводьте ноги плавно, коротка пауза, повертайте повільно, не кидаючи вагу.": "Back against the backrest. Push your legs apart smoothly, brief pause, return slowly without letting the weight drop.",
   "Спина ниє — сьогодні тренуємось розумно, а не героїчно.": "Back’s achy — today we train smart, not heroic.",
   "Спина притиснута до спинки крісла, ребра не «виходять» уперед.": "Back pressed against the chair back, ribs don’t flare forward.",
@@ -1273,7 +1280,7 @@ I18N.add({
   "Число з етикетки чи вага.": "A number from the label or a weight.",
   "Як важите — так і обирайте: суху крупу чи сире мʼясо — «сухий» / «сирий», приготоване — «готовий». Суха крупа в кілька разів калорійніша.": "Pick how you weigh it: dry grains or raw meat — “dry” / “raw”; already cooked — “cooked”. Dry grains have several times more calories.",
   "набрати мʼязи": "build muscle",
-  "спина й осанка": "back and posture"
+  "сильна спина й осанка": "strong back and posture"
 });
 
 /* 3.21.7 — «Перший погляд» і «за руку» (ручні доповнення) */

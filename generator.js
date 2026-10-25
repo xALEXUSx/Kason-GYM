@@ -6,9 +6,9 @@ var GEN = (function () {
   var VER = 1;
 
   /* ---------- анкета: усі поля обовʼязкові ---------- */
-  var GOALS = { loss: 'Схуднути', muscle: 'Набрати мʼязи', health: 'Сила й здоровʼя', posture: 'Спина й осанка' };
+  var GOALS = { loss: 'Схуднути', muscle: 'Набрати мʼязи', health: 'Сила й здоровʼя', posture: 'Сильна спина й осанка' };  // до 3.27.0 — «Спина й осанка» (слово Alexа 25.10: «змінюй на „Сильна спина й осанка“»)
   /* кілька цілей (з 3.19.0, слово Alexа 23.10: «потрібно надавати обрати декілька варіантів … тільки те що логічне»):
-     «Схуднути» й «Набрати мʼязи» — разом (рекомпозиція: менше жиру й більше мʼязів); «Спина й осанка» — з будь-якою;
+     «Схуднути» й «Набрати мʼязи» — разом (рекомпозиція: менше жиру й більше мʼязів); «Сильна спина й осанка» — з будь-якою;
      «Сила й здоровʼя» — без перших двох: її калорії підтримки й обʼєм 6–12 підходів суперечать дефіциту, надлишку й обʼєму 10–20.
      Несумісна мета в анкеті — неактивна кнопка (слово Alexа 23.10). */
   var GOAL_CLASH = { loss: ['health'], muscle: ['health'], health: ['loss', 'muscle'], posture: [] };
@@ -49,6 +49,11 @@ var GEN = (function () {
   var DAYS = [[1, 'Пн'], [2, 'Вт'], [3, 'Ср'], [4, 'Чт'], [5, 'Пт'], [6, 'Сб'], [0, 'Нд']];
 
   /* Перевірка відповідей: { ok, errors: {поле: текст}, block: текст — коли програму скласти не можна } */
+  /* найбільше днів (з 3.27.0): 55+ і тиск / серце — 4, решта — 6 (рішення Claude 25.10 за дорученням Alexа: «приймай сам рішення як експерт»).
+     Чому: у них стеля 3 підходи на вправу, а «верх / низ» збирає в одне тренування вправу, що в А і Б стоїть двічі, — обсяг падає (замір на всіх анкетах:
+     5 днів — до −17 % проти плану на 3 дні, 6 днів — до −25 % проти 4 днів); а поради для людей із серцем (AHA 2023, Circulation) стоять на дослідженнях
+     з 2–3 силовими тренуваннями на тиждень — про 5–6 даних немає. Тож тут — як було до 3.27.0: від 2 до 4 */
+  function maxDays(a) { a = a || {}; return Number(a.age) >= 55 || (a.limits || []).indexOf('heart') >= 0 ? 4 : 6; }
   function check(a) {
     var e = {};
     a = a || {};
@@ -70,7 +75,7 @@ var GEN = (function () {
     if (a.sex === 'm') lim = lim.filter(function (x) { return x !== 'pregnant'; });
     if (!lim.length) e.limits = 'Позначте, що у вас є, або «Нічого з цього»';
     var d = a.days || [];
-    if (d.length < 2 || d.length > 4) e.days = 'Оберіть від 2 до 4 днів';
+    if (d.length < 2 || d.length > maxDays(a)) e.days = maxDays(a) === 4 ? 'Для 55+ і з тиском чи серцем — від 2 до 4 днів' : 'Оберіть від 2 до 6 днів';  // 5–6 — «верх / низ» (з 3.27.0, Г-25)
     if (!a.agree) e.agree = 'Підтвердіть, щоб продовжити';
     var block = '';
     if (lim.indexOf('pregnant') >= 0) block = 'Під час вагітності програму тренувань складає лікар. Застосунок не складатиме її автоматично.';
@@ -95,14 +100,19 @@ var GEN = (function () {
   };
   /* Варіант вправи з однієї з програм, що не годиться при обмеженні (жіноча тяга зверху — на колінах). */
   var AVOID_DEF = { knees: { her: ['pulldown'] } };
-  /* Тренування на все тіло: місце в тренуванні → вправи за перевагою. */
+  /* Тренування на все тіло: місце в тренуванні → вправи за перевагою.
+     З 3.23.0 (сторож «кожна велика група мʼязів ≥ 2 дні на тиждень», ВООЗ 2020, ACSM 2026): у Б «одна нога» — після розщепленого присіду
+     присідання до крісла (обмеження «коліна» прибирає розщеплений присід, і квадрицепс лишався лише в А); у залі — жим ногами
+     (квадрицепс і сідниці, як розщеплений присід удома; з розгинанням ніг сідниці в Б не працювали) */
   var FULL = {
     A: [['squat', ['goblet', 'splitsquat']], ['push', ['floorpress', 'pushup']], ['row', ['row1', 'bandrow']], ['vpull', ['pulldown', 'pullover']],
       ['press', ['seatedpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['curl', 'hammer']]],
-    B: [['hinge', ['rdl', 'bridge', 'abduct']], ['single', ['splitsquat', 'calf']], ['row', ['row1', 'bandrow']], ['side', ['lateral', 'extrot', 'facepull']],
+    B: [['hinge', ['rdl', 'bridge', 'abduct']], ['single', ['splitsquat', 'goblet', 'calf']], ['row', ['row1', 'bandrow']], ['side', ['lateral', 'extrot', 'facepull']],
       ['rear', ['facepull', 'reardelt', 'extrot']], ['chest', ['floorfly', 'pushup']], ['tri', ['ohext', 'closegrip']], ['core', ['pallof', 'sideplank', 'deadbug']]]
   };
-  var PAIRS = { A: [['push', 'row'], ['press', 'vpull'], ['glute', 'arms']], B: [['side', 'rear'], ['chest', 'tri'], ['single', 'core']] };
+  var PAIRS = { A: [['push', 'row'], ['press', 'vpull'], ['glute', 'arms']], B: [['side', 'rear'], ['chest', 'tri'], ['single', 'core']],
+    /* «верх / низ» (з 3.27.0): ті самі пари протилежних мʼязів, що в А / Б; прес — два різні місця (з А і з Б) */
+    U: [['push', 'row'], ['press', 'vpull'], ['chest', 'tri'], ['side', 'rear']], L: [['glute', 'coreA'], ['single', 'coreB']] };
 
   /* ---------- тренажерний зал ---------- */
   /* Ті самі місця в тренуванні, що й удома; на кожне — тренажер чи блок для того самого руху й тих самих мʼязів.
@@ -161,14 +171,14 @@ var GEN = (function () {
   var GFULL = {
     A: [['squat', ['g_legpress']], ['push', ['g_chestpress', 'pushup']], ['row', ['g_cablerow']], ['vpull', ['g_latpull']],
       ['press', ['g_shpress', 'g_facepull']], ['glute', ['g_abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['g_cablecurl']]],
-    B: [['hinge', ['g_legcurl']], ['single', ['g_legext', 'splitsquat', 'calf']], ['row', ['g_cablerow']], ['side', ['g_cablelat', 'g_facepull']],
+    B: [['hinge', ['g_legcurl']], ['single', ['g_legpress', 'g_legext', 'splitsquat', 'calf']], ['row', ['g_cablerow']], ['side', ['g_cablelat', 'g_facepull']],
       ['rear', ['g_facepull', 'g_cablelat']], ['chest', ['g_pecdeck', 'pushup']], ['tri', ['g_pushdown']], ['core', ['g_pallof', 'sideplank', 'deadbug']]]
   };
   /* Вдома з тренажерами: на кожне місце — спершу тренажер того самого руху (як у залі; є вдома — вдома як у залі),
      далі затверджені домашні вправи (FULL), далі запасні вправи залу. Без тренажерів удома — рівно FULL, як і раніше. */
   var HM = {
     A: { squat: ['g_legpress'], push: ['g_chestpress'], row: ['g_cablerow', 'g_machrow'], vpull: ['g_latpull'], press: ['g_shpress'], glute: ['g_abduct'], arms: ['g_cablecurl', 'g_machcurl'] },
-    B: { hinge: ['g_legcurl'], single: ['g_legext'], row: ['g_cablerow', 'g_machrow'], side: ['g_cablelat'], rear: ['g_facepull'], chest: ['g_pecdeck'], tri: ['g_pushdown', 'g_triext'], core: ['g_pallof'] }
+    B: { hinge: ['g_legcurl'], single: ['g_legpress', 'g_legext'], row: ['g_cablerow', 'g_machrow'], side: ['g_cablelat'], rear: ['g_facepull'], chest: ['g_pecdeck'], tri: ['g_pushdown', 'g_triext'], core: ['g_pallof'] }
   };
   var HFULL = {};
   ['A', 'B'].forEach(function (w) {
@@ -195,7 +205,7 @@ var GEN = (function () {
     /* коротка розминка (3 хв) — лише без обмежень, до 55 і до 100 кг: тіло розігріває перший легкий підхід вправи;
        з тиском чи серцем, спиною, суглобами, від 55 або від 100 кг — повна, 10 хв (поступово, як радить ACSM) */
     var shortWarm = !lim.length && !older && !(Number(a.weight) >= 100);
-    var perWeek = Math.min(4, Math.max(2, (a.days || []).length || 3));
+    var perWeek = Math.min(6, Math.max(2, (a.days || []).length || 3));  // 5–6 — «верх / низ» (з 3.27.0)
 
     /* визначення вправ: своєї статі, інакше — з другої програми; лише ті, що можна з цим обладнанням і цими обмеженнями */
     var ex = {}, coachFrom = {}, T = {}, ts = templates(src), ta = templates(alt);
@@ -238,7 +248,7 @@ var GEN = (function () {
           used[pick] = true; slots[w][slot[0]] = pick;
           var t = T[pick], it = { ex: pick, sets: t.sets, min: t.min, max: t.max, rest: t.rest };
           if (older || heart) it.sets = Math.min(it.sets, 3);
-          if ((slot[0] === 'arms' && !hasG('muscle')) || (perWeek >= 4 && (slot[0] === 'arms' || slot[0] === 'tri'))) it.optional = true;
+          if ((slot[0] === 'arms' && !hasG('muscle')) || (perWeek === 4 && (slot[0] === 'arms' || slot[0] === 'tri'))) it.optional = true;
           if (/за бажанням/.test(ex[pick].name)) it.optional = true;  // назва вже каже «за бажанням» — так і показуємо
           items.push(it);
         });
@@ -246,19 +256,85 @@ var GEN = (function () {
       });
       return out;
     };
+    /* пункт 24 (з 3.23.0; слово Alexа 25.10 «Роби в такому порядку: А → Б → В → Г»): для мети «мʼязи» з тижня 5 — +1 підхід вправам, чий основний мʼяз
+       за звичайний тиждень (3 дні — середнє А,Б,А і Б,А,Б; 2 дні — А+Б; 4 — 2А+2Б) отримує менше 10 «дробових» підходів (основний мʼяз — 1,
+       допоміжний — 0,5): доза-відповідь — більше росту до 10+ підходів на тиждень (Schoenfeld, Ogborn, Krieger 2016), ACSM 2026 — ≈ 10+.
+       Не для 55+ і тиску / серця (там підходів не більше 3) і не для вправ на поперек, коли позначено спину; лише +1 на вправу */
+    var BIG = ['chest', 'lats', 'delts', 'quads', 'hams', 'glutes', 'biceps', 'triceps'];
+    function markPlus(wos, kForce) {
+      var ws = Object.keys(wos);
+      if (!hasG('muscle') || older || heart || ws.length < 2) return;
+      /* скільки разів на тиждень кожне тренування; kForce — 5–6 днів: +1 рахуємо як у плані на 4 дні (А / Б по 2 рази), далі «верх / низ» бере той самий обсяг */
+      var k = kForce || (perWeek === 2 ? 1 : perWeek === 4 ? 2 : 1.5), f = {};
+      ws.forEach(function (w) { wos[w].items.forEach(function (it) { var m = ex[it.ex].m || { p: [], s: [] };
+        (m.p || []).forEach(function (x) { f[x] = (f[x] || 0) + it.sets * k; }); (m.s || []).forEach(function (x) { f[x] = (f[x] || 0) + it.sets * k * 0.5; }); }); });
+      ws.forEach(function (w) { wos[w].items.forEach(function (it) { var e = ex[it.ex];
+        if (back && e.spine) return;
+        if (((e.m || {}).p || []).some(function (x) { return BIG.indexOf(x) >= 0 && (f[x] || 0) < 10; })) it.plus = 1; }); });
+    }
+    /* Г-25 (з 3.27.0; слово Alexа 25.10: «Роби Г-25 за уточненою рекомендацією: 5 і 6 днів «верх / низ» усім, обсяг не менший, ніж зараз, обмеження здоровʼя як зараз»):
+       5–6 днів — «верх / низ» з тих самих місць і вправ, що й А / Б: кожне тренування «верху» — усі місця верху з А і Б, «низу» — усі місця низу,
+       тож кожна велика група мʼязів є в кожному тренуванні своєї половини — 2–3 дні на тиждень, а тренування тієї самої половини поспіль не йдуть
+       (щонайменше 48 год між тренуваннями тих самих мʼязів — ACSM 2011, Garber та ін.). Підходи на тренування — від тижневого обсягу плану на 4 дні
+       (А, Б, А, Б: підходи вправи × 2 на кожне її місце), поділеного на тренування цієї половини за тиждень (6 днів — 3; 5 днів — 2,5: тижні чергуються
+       3 / 2, обсяг — за 2 тижні, як і в плані на 3 дні), з округленням угору — обсяг не менший; 55+ і тиск / серце — не більше 3 підходів, як в А / Б.
+       Частота за рівного обсягу не змінює росту мʼязів (ACSM 2026 — Currier та ін., MSSE 58(4):851–872; Schoenfeld 2019), сила трохи росте з частотою
+       (Pelland та ін., Sports Med 2026). Нових вправ немає — техніка, 3D, голос і заміни ті самі */
+    var UPPER = ['push', 'row', 'vpull', 'press', 'chest', 'side', 'rear', 'tri', 'arms'], LOWER = ['squat', 'hinge', 'single', 'glute', 'core'];
+    /* підходи на тренування для трьох станів — звичайний тиждень (base), з +1 підходом для «мʼязи» з тижня 5 (plus; як у плані на 4 дні) і перші
+       2 тижні новачка (nov — до 2 підходів, як в А / Б): ceil(тижневі ÷ тренувань половини); понад стелю (новачок — 2, 55+ і тиск / серце — 3, решта — 4,
+       як найбільше в затвердженій програмі) — віддаємо іншій вправі цієї половини на той самий основний мʼяз (тяга → тяга зверху); немає такої — новачку,
+       55+ і тиску / серцю стеля сувора (правило безпеки важливіше за обсяг), решті — лишаємо (обсяг не менший) */
+    /* «дробовий» внесок вправи в мʼяз: основний — 1, допоміжний — 0,5 (як рахує сторож) */
+    var share = function (id, mu) { var m = ex[id].m || {}; return (m.p || []).indexOf(mu) >= 0 ? 1 : (m.s || []).indexOf(mu) >= 0 ? 0.5 : 0; };
+    var GROUPS = ['quads', 'hams', 'glutes', 'lats', 'chest', 'delts', 'biceps', 'triceps', 'abs', 'obliques'];
+    var fitSets = function (rows, key, cap, strict, per) {
+      var n = rows.map(function (r) { return Math.max(1, Math.ceil(r[key] / per - 1e-9)); });
+      rows.forEach(function (r, i) {
+        var main = ((ex[r.id].m || {}).p || [])[0];
+        while (n[i] > cap) {
+          /* суворо — будь-яка вправа з тим самим основним мʼязом; м'яко — лише та, що дає кожній групі не менше (тяга → тяга зверху), інакше обсяг упав би */
+          var j = rows.map(function (q, k) { return k; }).filter(function (k) { return k !== i && n[k] < cap && share(rows[k].id, main) === 1 &&
+              (strict || GROUPS.every(function (mu) { return share(rows[k].id, mu) >= share(r.id, mu); })); })
+            .sort(function (x, y) { return n[x] - n[y]; })[0];
+          if (j === undefined) { if (strict) n[i] = cap; else if (n[i] > cap + 1) n[i] = cap + 1; break; }  // м'яко — щонайбільше на 1 понад стелю (5 підходів)
+          n[j]++; n[i]--;
+        }
+      });
+      return n;
+    };
+    var toUL = function (wos, slots) {
+      var per = perWeek / 2, out = {}, cap = (older || heart) ? 3 : 4;
+      ['U', 'L'].forEach(function (w) {
+        var rows = [], byId = {}, sl = {};
+        (w === 'U' ? UPPER : LOWER).forEach(function (name) {
+          ['A', 'B'].forEach(function (ab) {
+            var id = (slots[ab] || {})[name], it = id && wos[ab] ? wos[ab].items.filter(function (x) { return x.ex === id; })[0] : null;
+            if (!it) return;
+            var key = name === 'core' ? 'core' + ab : name;
+            if (!sl[key] && !Object.keys(sl).some(function (k) { return sl[k] === id; })) sl[key] = id;  // одна вправа — одне місце (і одна пара суперсету)
+            var add = { base: it.sets * 2, plus: (it.sets + (it.plus ? 1 : 0)) * 2, nov: Math.min(it.sets, 2) * 2 };  // × 2 — так часто в плані на 4 дні
+            if (byId[id]) { ['base', 'plus', 'nov'].forEach(function (k) { byId[id][k] += add[k]; }); return; }
+            byId[id] = Object.assign({ id: id, it: it }, add); rows.push(byId[id]);
+          });
+        });
+        slots[w] = sl;
+        var nb = fitSets(rows, 'base', cap, older || heart, per), np = fitSets(rows, 'plus', cap, older || heart, per), nn = fitSets(rows, 'nov', 2, true, per);
+        out[w] = { title: w === 'U' ? 'Верх тіла' : 'Низ тіла', items: rows.map(function (r, i) {
+          var it = Object.assign({}, r.it, { sets: nb[i], nov: nn[i] });  // повторення, відпочинок і «за бажанням» — як в А / Б
+          delete it.plus; if (np[i] > nb[i]) it.plus = np[i] - nb[i];
+          return it;
+        }) };
+      });
+      return out;
+    };
     var slotEx = {}, slotGym = {};
     var workouts = home ? build1(HFULL, homeOk, slotEx) : {}, gymWorkouts = has.gym ? build1(GFULL, gymOk, slotGym) : null;
-    /* досвідченим із гантелями й петлею, 3 дні, без обмежень — з тижня 5 спліт Д1–Д3 (як у програмі з гантелями) */
-    var split = !novice && perWeek === 3 && has.db && has.band && !has.gym && !has.mach && !lim.length && (hasG('muscle') || hasG('loss')) && !older;
-    if (split) ['D1', 'D2', 'D3'].forEach(function (w) {
-      var Pw = PROGRAMS.him.workouts[w];
-      workouts[w] = { title: Pw.title, items: Pw.items.filter(function (it) { return ex[it.ex]; }).map(function (it) {
-        var o = Object.assign({}, it), t = T[it.ex];
-        /* «скільки зможете» (0–0) лише для вправ такого типу; інакше — повторення з шаблону цієї вправи */
-        if (!o.max && ex[it.ex].type !== 'amrap' && t) { o.min = t.min; o.max = t.max; }
-        return o;
-      }) };
-    });
+    /* 5–6 днів: спершу +1 підхід — як у плані на 4 дні (А / Б), тоді «верх / низ» з тим самим тижневим обсягом */
+    if (perWeek >= 5) { if (home) { markPlus(workouts, 2); workouts = toUL(workouts, slotEx); } if (gymWorkouts) { markPlus(gymWorkouts, 2); gymWorkouts = toUL(gymWorkouts, slotGym); } }
+    /* до 3.23.0 досвідченим із гантелями й петлею (3 дні, без обмежень) з тижня 5 був спліт Д1–Д3: ноги й руки — 1 день на тиждень.
+       Знято (пункт 23; ВООЗ 2020, ACSM 2026 — кожна велика група мʼязів щонайменше 2 дні): усім — усе тіло А / Б, обʼєм для мети «мʼязи» — пункт 24 */
+    else { markPlus(workouts); if (gymWorkouts) markPlus(gymWorkouts); }
 
     var goalTxt = goalText(a);
     var dayTxt = (a.days || []).slice().sort(function (x, y) { return ((x + 6) % 7) - ((y + 6) % 7); }).map(function (d) { return (DAYS.filter(function (x) { return x[0] === d; })[0] || [0, ''])[1].toLowerCase(); }).join(' / ');
@@ -271,24 +347,29 @@ var GEN = (function () {
       days: (a.days || []).slice(), sex: sex, askReady: back,
       ready: { swap: back ? { rdl: 'bridge' } : {} },
       myoFrom: (heart || older) ? 0 : 5,
-      tests: older || hasG('posture'),
+      /* тести форми (тижні 1, 4, 8, 12 — приблизно раз на місяць): 55+ і «осанка» — повний набір; решті з 3.25.0 — віджимання (пункт 19, слово Alexа 25.10: «Роби в такому порядку: А → Б → В → Г»;
+         1 104 активні чоловіки, 10 років: понад 40 віджимань за раз — на 96 % менше серцевих подій, ніж менше 10; звʼязок, не доказ причини — Yang 2019).
+         Тиск / серце — без тестів «до відмови» (віджимання, бічна планка, валізна прогулянка: цих вправ і в тренуваннях немає) */
+      tests: older || hasG('posture') ? ['chair', 'bal', 'sp', 'push', 'car'].filter(function (k) { return !heart || ['sp', 'push', 'car'].indexOf(k) < 0; }) : heart ? false : ['push'],
       gymWarm: has.gym ? (shortWarm ? GYM_WARM_SHORT : GYM_WARM).slice() : null,
       warm: (has.db || has.gym || has.mach) ? PROGRAMS.him.warm : PROGRAMS.her.warm, heavy: Number(a.weight) >= 100,
       week: function (wk) {
-        if (split && wk >= 5) return ['D1', 'D2', 'D3'];
+        /* «верх / низ» (з 3.27.0): по черзі, тож та сама половина двічі поспіль не йде; 5 днів — тижні чергуються (кінець тижня 12 — «низ», початок 5 — «верх») */
+        if (perWeek === 6) return ['U', 'L', 'U', 'L', 'U', 'L'];
+        if (perWeek === 5) return wk % 2 ? ['U', 'L', 'U', 'L', 'U'] : ['L', 'U', 'L', 'U', 'L'];
         if (perWeek === 2) return ['A', 'B'];
         if (perWeek === 4) return ['A', 'B', 'A', 'B'];
         return wk % 2 ? ['A', 'B', 'A'] : ['B', 'A', 'B'];
       },
       setsFor: function (item, wk) {
         if (this.deload.indexOf(wk) >= 0) return Math.ceil(item.sets / 2);
-        if (novice && wk <= 2) return Math.min(item.sets, 2);
-        return item.sets;
+        if (novice && wk <= 2) return item.nov || Math.min(item.sets, 2);  // nov — «верх / низ» (з 3.27.0): уже з урахуванням двох місць вправи
+        return item.sets + (item.plus && wk >= 5 ? item.plus : 0);  // з 3.23.0 — пункт 24: +1 підхід для мети «мʼязи» з фази 2 («верх / низ» — скільки треба, з 3.27.0)
       },
       /* where: 'gym' — тренування в залі (для «і вдома, і в залі»); без нього — основне місце */
       supersets: function (wk, wid, where) {
         if (novice && wk <= 2) return [];
-        if (wid === 'D1' || wid === 'D2' || wid === 'D3') return PROGRAMS.him.supersets(wk, wid).filter(function (p) { return ex[p[0]] && ex[p[1]]; });
+        if (wid === 'D1' || wid === 'D2' || wid === 'D3') return PROGRAMS.him.supersets(wk, wid).filter(function (p) { return ex[p[0]] && ex[p[1]]; });  // чернетка Д1–Д3, почата до 3.23.0
         var sl = (where === 'gym' || !home) ? slotGym : slotEx;
         return (PAIRS[wid] || []).map(function (p) { return [(sl[wid] || {})[p[0]], (sl[wid] || {})[p[1]]]; }).filter(function (p) { return p[0] && p[1]; });
       },
@@ -444,6 +525,6 @@ var GEN = (function () {
     return out.filter(Boolean);
   }
 
-  return { VER: VER, GOALS: GOALS, GOAL_CLASH: GOAL_CLASH, goalsOf: goalsOf, goalText: goalText, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
+  return { VER: VER, maxDays: maxDays, GOALS: GOALS, GOAL_CLASH: GOAL_CLASH, goalsOf: goalsOf, goalText: goalText, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
 })();
 if (typeof module !== 'undefined') module.exports = GEN;
