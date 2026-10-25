@@ -404,5 +404,30 @@ function VIZ3D(THREE) {
   const standing = () => ({ pelvis: V(0, 0.93, 0), lumb: 0, chest: 0, head: 0, ank: [V(0, 0.07, 0.11), V(0, 0.07, -0.11)], foot: [V(0.985, 0, 0.17), V(0.985, 0, -0.17)],
     kneePole: [V(1, 0, 0.1), V(1, 0, -0.1)], hand: [V(0.02, 0.84, 0.25), V(0.02, 0.84, -0.25)], elbowPole: [V(-1, 0, 0.3), V(-1, 0, -0.3)] });
 
-  return { THREE, V, UP, RAD, lerp, ease, dir, L, ik, place, dark, PAL, makeBody, styleBody, poseBody, eqKit, angAt, inTorso, inBody, lowY, hitsEq, torso2, toLocal, dir2, lint, renderer3, stage, exScene, mirrorP, mountCard, standing, seated };
+  /* мапа відновлення мʼязів (з 3.24.0, пункт 1; слово Alexа 25.10: «… включаючи нові записи та 3д візуалізації»): два манекени стоять рівно —
+     спереду (ліворуч) і ззаду (праворуч), як на 2D-мапі. Мʼяз, що відпочиває (rec[мʼяз].rest — менше restH год від тренування), — охра,
+     свіжіший світиться сильніше (left / restH); готовий — звичайний колір мʼязів. rec — з ENGINE.recovery. Сцена статична — малюється на дію */
+  function recScene(rec, restH) {
+    const st0 = stage(1.3), scene = st0.scene, camera = st0.camera, floor = st0.floor;
+    let bodies = [];
+    const build = () => {
+      const pal = PAL();
+      bodies = [0, 180].map((ry, k) => { const b = makeBody(scene, 'body'), P = standing(); P.rot = [0, ry, 0]; P.at = V(0, 0, k ? -0.5 : 0.5); poseBody(b, P); return b; });
+      bodies.forEach((b) => Object.entries(b.muscles).forEach(([name, list]) => list.forEach((m) => {
+        const r = rec[name], f = r && r.rest ? Math.max(0.2, Math.min(1, r.left / (restH || 48))) : 0;
+        m.visible = true; m.material.color.setHex(f ? pal.ochre : pal.mus);
+        m.material.emissive = new THREE.Color(f ? pal.ochre : 0x000000); m.material.emissiveIntensity = f ? 0.1 + 0.3 * f : 0;
+      })));
+    };
+    build();
+    /* кадр: обидва тіла цілком (34° по вертикалі, 4:3) з невеликим запасом; камера трохи вище пояса */
+    const bx = new THREE.Box3(); bodies.forEach((b) => { b.root.updateMatrixWorld(true); bx.expandByObject(b.root); });
+    const target = bx.getCenter(V(0, 0, 0)), sz = bx.getSize(V(0, 0, 0)), t17 = Math.tan(17 * RAD);
+    const base = V(1, 0.12, 0).normalize().multiplyScalar(Math.max(sz.y / 2 / t17, sz.z / 2 / (t17 * 4 / 3)) * 1.1 + sz.x / 2);
+    function draw(yaw) { camera.position.copy(target).add(base.clone().applyAxisAngle(UP, yaw || 0)); camera.lookAt(target); }
+    const rebuild = () => { scene.remove(...scene.children.filter((c) => (c.isMesh || c.isGroup) && c !== floor)); build(); };
+    return { scene, camera, draw, rebuild, bodies };
+  }
+
+  return { THREE, V, UP, RAD, lerp, ease, dir, L, ik, place, dark, PAL, makeBody, styleBody, poseBody, eqKit, angAt, inTorso, inBody, lowY, hitsEq, torso2, toLocal, dir2, lint, renderer3, stage, exScene, mirrorP, mountCard, standing, seated, recScene };
 }
