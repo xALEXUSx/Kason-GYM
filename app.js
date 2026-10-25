@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.0';
+  const VERSION = '3.27.1';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG;
   const app = document.getElementById('app');
@@ -67,6 +67,8 @@ window.APP_START = () => {
   VOICE.init(DB.settings.voice);
   RADIO.setDuck(DB.settings.radio.duck);
   let view = DB.active ? 'home' : 'onboard';
+  /* відкрили з нагадування про воду (з 3.27.1, sw.js → «./#kitchen»): одразу «Кухня» сьогодні; знак з адреси прибираємо, щоб оновлення сторінки не вертало сюди */
+  if (location.hash === '#kitchen') { if (view === 'home') view = 'kitchen'; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* без історії */ } }
   const ui = { ob: 1, obProg: null, progTab: 'ex', progEx: null, metric: 'e1rm', range: 'all', musDays: 7, repMonth: null, bodyTab: 'm', planTab: 'w', calMonth: null, summary: null, photoPose: 'front', cmp: 50 };
   let audio = null, wakeLock = null, kp = null;
   /* голосовий тренер-співрозмовник: розмова, запис, сеанс Gemini Live, потоковий звук; gen — номер дії: нова дія глушить усі попередні */
@@ -1537,13 +1539,13 @@ window.APP_START = () => {
         <li style="display:block"><b>☀️ Готовність до тренування</b><div class="small muted">У день тренування, коли відповіли на ранкове питання, — під відповіддю: самопочуття й чи відпочили мʼязи сьогоднішнього тренування. Погано чи так собі — порада «Коротка версія» й правило застуди. Лише показ: план не змінюється.</div></li>
         <li style="display:block"><b>💪 Тест віджимань</b><div class="small muted">Тепер у кожній програмі: раз на місяць (тижні 1, 4, 8, 12) — «Тіло» → «Тести». Головне — щоб число росло. З тиском чи серцем тестів «до відмови» немає.</div></li>
         <li style="display:block"><b>🔀 Новий варіант на початку фази</b><div class="small muted">На тижнях 5 і 9 тренер може запропонувати складніший варіант вправи, яку ви вже впевнено робите, — лише порада, вибір ваш.</div></li>
-        <li style="display:block"><b>⏱ Коротка версія ≈ 20 хв</b><div class="small muted">Мало часу — «Інше тренування» → «Коротка версія»: кожна велика група мʼязів — по вправі, 1–2 підходи. Краще коротке тренування, ніж пропуск; план іде далі.</div></li>
+        <li style="display:block"><b>⏱ Коротка версія ≈ 20 хв</b><div class="small muted">Мало часу — «Інше» → «Коротка версія»: кожна велика група мʼязів — по вправі, 1–2 підходи. Краще коротке тренування, ніж пропуск; план іде далі.</div></li>
         <li style="display:block"><b>🛡 Серія із запасним тижнем</b><div class="small muted">Кожні 4 тижні поспіль з тренуваннями дають запасний (не більше одного): тиждень без тренувань забирає його, і серія не рветься.</div></li>
         <li style="display:block"><b>🔁 Повернення після пропуску</b><div class="small muted">Пропустили тренування за планом і повернулись — «З поверненням!», віха й слово тренера. Пропущене не надолужуємо: далі — за планом.</div></li>
         <li style="display:block"><b>💪 Відновлення мʼязів</b><div class="small muted">На головній — які мʼязи ще відпочивають (до 48 год від тренування) і які готові; 3D — спереду й ззаду. Лише показ: план не змінюється.</div></li>
         <li style="display:block"><b>🌱 Новий старт</b><div class="small muted">На початку тижня й місяця та після пропуску — на головній і голосом тренера.</div></li>
         <li style="display:block"><b>☀️ Ранкове питання</b><div class="small muted">Як спали й почуваєтесь — одним дотиком; за місяць — у «Прогрес» → «Звіт». Тренеру не передається, план не змінює.</div></li>
-        <li style="display:block"><b>☑️ Завдання й 📖 урок дня</b><div class="small muted">Три маленькі цілі на день — галочка ставиться сама; урок — одна порада з «Порадника» вашої програми або термін зі словника.</div></li>
+        <li style="display:block"><b>📖 Урок дня</b><div class="small muted">Одна порада з «Порадника» вашої програми або термін зі словника, щодня інша.</div></li>
         <li style="display:block"><b>🎯 Виклик місяця</b><div class="small muted">На одне тренування більше, ніж минулого місяця (не більше днів за планом); зроблені цього місяця вже зараховані.</div></li>
         <li style="display:block"><b>📊 Підсумок тижня й 🎁 року</b><div class="small muted">Тиждень — щопонеділка на головній; рік — у грудні на головній і завжди в «Прогрес» → «Звіт», можна поділитися картинкою.</div></li>
         <li style="display:block"><b>🎧 Радіо лише на тренуванні</b><div class="small muted">За бажанням (радіо → «Лише на тренуванні»): обрана станція заграє сама, щойно почнете тренування, і вимкнеться, коли завершите.</div></li>
@@ -1558,13 +1560,13 @@ window.APP_START = () => {
         <li style="display:block"><b>☀️ Workout readiness</b><div class="small muted">On a workout day, once you’ve answered the morning check-in — below your answer: how you feel and whether today’s workout muscles have rested. Feeling poorly or so-so — a tip about the short version and the cold rule. Display only: your plan doesn’t change.</div></li>
         <li style="display:block"><b>💪 Push-up test</b><div class="small muted">Now in every program: once a month (weeks 1, 4, 8, 12) — “Body” → “Tests.” What matters is that the number goes up. With blood pressure or heart issues, there are no all-out tests.</div></li>
         <li style="display:block"><b>🔀 A new variation at the start of a phase</b><div class="small muted">In weeks 5 and 9, the coach may suggest a harder variation of an exercise you already do confidently — just a suggestion, the choice is yours.</div></li>
-        <li style="display:block"><b>⏱ Short version ≈ 20 min</b><div class="small muted">Short on time — “Different workout” → “Short version”: one exercise for each major muscle group, 1–2 sets. A short workout beats skipping; the plan carries on.</div></li>
+        <li style="display:block"><b>⏱ Short version ≈ 20 min</b><div class="small muted">Short on time — “Other” → “Short version”: one exercise for each major muscle group, 1–2 sets. A short workout beats skipping; the plan carries on.</div></li>
         <li style="display:block"><b>🛡 Streak with a spare week</b><div class="small muted">Every 4 weeks in a row with workouts earn a spare (one at most): a week without workouts uses it up, and the streak doesn’t break.</div></li>
         <li style="display:block"><b>🔁 Comeback after a miss</b><div class="small muted">Missed a planned workout and came back — “Welcome back!”, a milestone, and a word from the coach. Missed workouts aren’t made up: the plan carries on.</div></li>
         <li style="display:block"><b>💪 Muscle recovery</b><div class="small muted">On Home — which muscles are still resting (under 48 hours since a workout) and which are ready; 3D — front and back. Display only: your plan doesn’t change.</div></li>
         <li style="display:block"><b>🌱 Fresh start</b><div class="small muted">At the start of a week or month and after a miss — on Home and in the coach’s voice.</div></li>
         <li style="display:block"><b>☀️ Morning check-in</b><div class="small muted">How you slept and feel — in one tap; the month’s answers are in “Progress” → “Report.” Not sent to the coach, doesn’t change your plan.</div></li>
-        <li style="display:block"><b>☑️ Daily tasks and 📖 lesson</b><div class="small muted">Three small goals a day — checked off automatically; the lesson is one tip from your program’s guide or a glossary term.</div></li>
+        <li style="display:block"><b>📖 Today’s lesson</b><div class="small muted">One tip from your program’s guide or a glossary term, different every day.</div></li>
         <li style="display:block"><b>🎯 Monthly challenge</b><div class="small muted">One workout more than last month (no more than your planned days); workouts already done this month count.</div></li>
         <li style="display:block"><b>📊 Weekly and 🎁 yearly summary</b><div class="small muted">The week — every Monday on Home; the year — on Home in December and always in “Progress” → “Report,” and you can share it as an image.</div></li>
         <li style="display:block"><b>🎧 Radio only during workouts</b><div class="small muted">Optional (radio → “Only during workouts”): your station starts by itself when you start a workout and stops when you finish.</div></li>
@@ -2127,31 +2129,32 @@ window.APP_START = () => {
     const wT = kWTarget(wd), gl = kGlasses(wT, wday.water || 0, k.set.glass);
     const tu = kTurn();  // з 3.21.1 — склянка на черзі (з доганянням), не просто наступна за часом; кількість — лише в рядку «Вода: … з … л» (огляд 24.10)
     return `<div class="card"><div class="sp"><b>${LL('Кухня сьогодні', 'Kitchen today')}</b><button type="button" class="sm" data-act="goKitchen">${LL('Відкрити', 'Open')}</button></div>
-      <div class="grid2"><div class="stat"><b>${t.kcal}</b><span>${N.nu ? LL('ккал з ', 'kcal of ') + N.nu.kLo + '–' + N.nu.kHi : LL('ккал', 'kcal')}</span></div><div class="stat"><b>${fmt(t.p)}</b><span>${N.nu ? LL('г білка з ', 'g protein of ') + N.nu.pLo : LL('г білка', 'g protein')}</span></div></div>
-      <div class="sp" style="margin-top:10px"><span class="small">${LL('Вода: ', 'Water: ')}<b>${fmt((wday.water || 0) / 1000)}</b>${LL(' з ', ' of ')}${fmt(wT / 1000)}${LL(' л', ' L')}</span>
+      <div class="sp" style="margin-top:6px"><span class="small">${LL('Вода: ', 'Water: ')}<b>${fmt((wday.water || 0) / 1000)}</b>${LL(' з ', ' of ')}${fmt(wT / 1000)}${LL(' л', ' L')}</span>
         <button type="button" class="sm pri" data-act="kWaterHome">+ ${tu ? kGlW(tu.p) : LL('склянка', 'glass')}</button></div>
       ${gl.icons}<p class="tiny muted" style="margin:0">${(wday.water || 0) >= wT ? gl.line + (tu ? ' · ' + kTurnTxt(tu, true) : '') : tu ? kTurnTxt(tu) : kDayPlan() ? W_NOMORE() : ''}</p>
-      ${k.set.water || !pushOk() ? '' : `<button type="button" class="sm ghost wide" data-act="kWaterRemind">${LL('Нагадувати пити воду', 'Remind me to drink water')}</button>`}</div>`;
+      ${k.set.water || !pushOk() ? '' : `<button type="button" class="sm ghost wide" data-act="kWaterRemind">${LL('Нагадувати пити воду', 'Remind me to drink water')}</button>`}
+      <div class="grid2" style="margin-top:10px"><div class="stat"><b>${t.kcal}</b><span>${N.nu ? LL('ккал з ', 'kcal of ') + N.nu.kLo + '–' + N.nu.kHi : LL('ккал', 'kcal')}</span></div><div class="stat"><b>${fmt(t.p)}</b><span>${N.nu ? LL('г білка з ', 'g protein of ') + N.nu.pLo : LL('г білка', 'g protein')}</span></div></div></div>`;
   }
   function dailyCard() {
     const p = P(), prog = G(), t = today(), rec = p.daily[t] || {};
     const wk = ENGINE.planFor(prog, Math.max(0, nextN() - 1)).week;
-    /* «Виконано» — кнопка замість галочки (слово Alexа 23.10: з галочками незрозуміло, чи треба натискати й чи це зарахується);
-       ще раз — скасувати; відмітка лише на сьогодні, такі дні зеленіють у «План» → «Історія» */
+    /* відмітка лише на сьогодні, ще раз — скасувати; такі дні зеленіють у «План» → «Історія».
+       З 3.27.1 — вигляд колишніх «Завдань дня» (слово Alexа 25.10: «дизайн і формат у картці Щодня … як це було в блоці Завдання дня»): рядок — кнопка з ○ / ✓
+       і підписом, угорі — скільки зроблено; до 3.27.1 — окрема кнопка «Виконано» (слово Alexа 23.10: з галочками було незрозуміло, чи натискати), тепер підказка під списком */
     const isDone = (it) => (it.jumps ? (rec.jumps || 0) >= prog.jumpsFor(wk).times : !!rec[it.id]);
-    const nDone = prog.daily.filter(isDone).length;
-    return `${LL(`<div class="sp"><h2>Щодня</h2><span class="small muted">зроблено `, `<div class="sp"><h2>Daily</h2><span class="small muted">done `)}${nDone}${LL(` з `, ` of `)}${prog.daily.length}</span></div><div class="card dly">${prog.daily.map((it) => {
+    const nDone = prog.daily.filter(isDone).length, all = nDone === prog.daily.length;
+    return `<div class="card qst dly" data-tip="${esc(LL('Щоденні звички вашої програми. Торкніться рядка — відмітка на сьогодні; ще раз — скасувати.', 'Daily habits from your program. Tap a row to check it off for today; tap again to undo.'))}"><div class="sp"><b>${all ? LL('✓ Щодня — усе зроблено', '✓ Daily — all done') : LL('☑️ Щодня', '☑️ Daily')}</b><span class="small muted">${nDone} / ${prog.daily.length}</span></div><div class="qlist">${prog.daily.map((it) => {
       if (it.jumps) {
-        const j = prog.jumpsFor(wk), done = rec.jumps || 0;
-        return `<div class="chk" style="flex-wrap:wrap"><div style="flex:1 1 100%"><b>${esc(it.label)}${LL(`</b><div class="tiny muted">Тиждень `, `</b><div class="tiny muted">Week `)}${wk}: ${j.n}${LL(` стрибків × `, ` jumps × `)}${j.times}${LL(` на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">як стрибати</button></div></div>
-          <div class="row">`, ` a day, 30 sec between jumps. Only if your knees, feet, and pelvic floor are problem-free. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">how to jump</button></div></div>
-          <div class="row">`)}${Array.from({ length: j.times }, (_, k) => `<button type="button" class="sm${k < done ? ' pri' : ''}" data-act="jump" data-k="${k + 1}">${k < done ? '✓ ' : ''}${LL(`${k + 1}-й раз`, `Round ${k + 1}`)}</button>`).join('')}</div></div>`;
+        const j = prog.jumpsFor(wk), done = rec.jumps || 0, ok = done >= j.times;
+        return `<div class="qrow qbox${ok ? ' done' : ''}"><span class="qmk">${ok ? '✓' : '○'}</span><div style="flex:1;min-width:0"><span>${esc(it.label)}</span>${LL(`<div class="tiny muted">Тиждень `, `<div class="tiny muted">Week `)}${wk}: ${j.n}${LL(` стрибків × `, ` jumps × `)}${j.times}${LL(` на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">як стрибати</button></div>`, ` a day, 30 sec between jumps. Only if your knees, feet, and pelvic floor are problem-free. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">how to jump</button></div>`)}
+          <div class="row" style="margin-top:6px">${Array.from({ length: j.times }, (_, k) => `<button type="button" class="sm${k < done ? ' pri' : ''}" data-act="jump" data-k="${k + 1}">${k < done ? '✓ ' : ''}${LL(`${k + 1}-й раз`, `Round ${k + 1}`)}</button>`).join('')}</div></div></div>`;
       }
-      const how = it.how && (G().guide || []).some((g) => g.id === it.how) ? ` <button type="button" class="sm ghost" data-act="guide" data-id="${it.how}${LL(`">як робити</button>`, `">how to do it</button>`)}` : '';
+      const how = it.how && (G().guide || []).some((g) => g.id === it.how) ? `<button type="button" class="sm ghost" data-act="guide" data-id="${it.how}${LL(`">як робити</button>`, `">how to do it</button>`)}` : '';
       const ok = !!rec[it.id];
-      return `<div class="chk"><div style="flex:1;min-width:0"><span>${esc(it.label)}</span>${how ? '<div>' + how + '</div>' : ''}</div><button type="button" class="sm${ok ? ' done' : ' pri'}" data-act="dailyDone" data-id="${it.id}" aria-pressed="${ok}">${ok ? LL('✓ Зроблено', "✓ Done") : LL('Виконано', "Mark done")}</button></div>`;
-    }).join('')}${LL(`</div><p class="tiny muted">Відмітка — на сьогодні; ще раз торкніться, щоб скасувати. Дні з відмітками зеленіють у «План» → «Історія».</p>`, `</div><p class="tiny muted">The check mark is for today; tap again to undo. Days with check marks turn green in “Plan” → “History”.</p>`)}`;
+      return `<div class="qline"><button type="button" class="qrow${ok ? ' done' : ''}" data-act="dailyDone" data-id="${it.id}" aria-pressed="${ok}"><span class="qmk">${ok ? '✓' : '○'}</span><span>${esc(it.label)}</span></button>${how}</div>`;
+    }).join('')}</div>${LL(`<p class="tiny muted" style="margin:8px 0 0">Торкніться рядка — відмітка на сьогодні; ще раз — скасувати. Дні з відмітками зеленіють у «План» → «Історія».</p></div>`, `<p class="tiny muted" style="margin:8px 0 0">Tap a row to check it off for today; tap again to undo. Days with check marks turn green in “Plan” → “History”.</p></div>`)}`;
   }
+
   function alerts() {
     const out = [], p = P(), prog = G();
     if (ENGINE.fatigue(prog, p, p.handle)) out.push(LL('<div class="note b">Два тренування поспіль головні вправи падають. Зробіть легкий тиждень: половина підходів, вага та сама або на крок нижча.</div>', "<div class=\"note b\">Your main lifts have dropped two workouts in a row. Take a deload week: half the sets, same weight or one step lower.</div>"));
@@ -2194,6 +2197,8 @@ window.APP_START = () => {
     const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
     const warmMin = (warmList().title.match(/(\d+)\s*(?:хв|min)/) || [])[1];
     const nd = nextDayText(p.days);
+    /* порядок головної (з 3.27.1; слово Alexа 25.10: «Так, роби в 3.27.1 як радиш: порядок Тренування → Кухня → Як ви сьогодні → Завдання дня → Щодня → Урок дня,
+       вода першим рядком у картці кухні…»; «Завдання дня» прибрано — «Прибери картку «Завдання дня» з головної в 3.27.1»: усі її пункти вже мають свої картки поруч): найчастіше застосунок відкривають відмітити воду — «+ склянка» на першому екрані (замір 390 × 844: було 2 047 px, стало ≈ 570) */
     app.innerHTML = `<div class="brand">${MARK}${LL(`<b>Тренування</b>`, `<b>Workouts</b>`)}${themeBtn()}${LL(`</div><p class="muted small" style="margin-top:4px">`, `</div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
       ${alerts()}
       ${d ? `${LL(`<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">`, `<div class="card"><div class="sp"><div><b>Workout in progress</b><div class="small muted">`)}${esc(wTitle(d))} · ${draftStats(d).done}/${draftStats(d).total}${LL(` підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>`, ` sets</div></div><button type="button" class="pri" data-act="resume">Resume</button></div></div>`)}` : ''}${LL(`
@@ -2202,14 +2207,14 @@ window.APP_START = () => {
         <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises"))} · ≈ ${est}${LL(` хв`, ` min`)}${warmMin ? LL(' + розминка ', " + warm-up ") + warmMin + LL(' хв', " min") : ''} · ${esc(pv.back ? LL('запас 3–4', "RIR 3–4") : plan.note.rir)}${nd ? LL(' · за планом ', " · scheduled ") + nd : ''}</p>
         <p class="small" style="opacity:.92">${pv.back ? '↩ ' + esc(backText(pv.back)) : esc(plan.note.phase)}</p>
         ${fsk && !(fsk === 'back' && pv.back) ? `<p class="small fsl" style="opacity:.92" data-tip="${esc(FS_TIP())}">${esc(FS_TXT()[fsk])}</p>` : ''}
-        ${d ? '' : LL('<button type="button" class="pri wide big" data-act="start">Почати тренування</button><button type="button" class="ghost wide hlink" data-act="other">Інше тренування</button>', "<button type=\"button\" class=\"pri wide big\" data-act=\"start\">Start workout</button><button type=\"button\" class=\"ghost wide hlink\" data-act=\"other\">Different workout</button>")}</div>
-      ${moodHome()}${questsHome()}
+        ${d ? '' : LL('<div class="hbtn"><button type="button" class="pri big" data-act="start">Почати</button><button type="button" class="ghost big" data-act="other">Інше</button></div>', "<div class=\"hbtn\"><button type=\"button\" class=\"pri big\" data-act=\"start\">Start</button><button type=\"button\" class=\"ghost big\" data-act=\"other\">Other</button></div>")}</div>
+      ${kHomeCard()}${moodHome()}${dailyCard()}${lessonHome()}
       ${S().tour.tips ? '' : LL('<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1 секунду — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>💡 Tips on every button</b><div class=\"small muted\">Press and hold any button or label for 1 second to see a short explanation.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"tipsOk\">Got it</button></div></div>")}
-      ${!S().tour.v5 ? LL('<div class="card"><div class="sp"><div><b>Нове: серія, відновлення, завдання дня</b><div class="small muted">Запасний тиждень для серії, мапа відновлення мʼязів (і 3D), завдання й урок дня, ранкове питання, виклик місяця, підсумок тижня й року.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: streaks, recovery, daily tasks</b><div class=\"small muted\">A spare week for your streak, a muscle recovery map (with 3D), daily tasks and a lesson, a morning check-in, a monthly challenge, weekly and yearly summaries.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>") : S().tour.v4 ? '' : LL('<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: ask the coach</b><div class=\"small muted\">Tap the mic button at the top to ask by voice, text, or photo — about your program, weights, and form.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>")}
+      ${!S().tour.v5 ? LL('<div class="card"><div class="sp"><div><b>Нове: серія, відновлення, урок дня</b><div class="small muted">Запасний тиждень для серії, мапа відновлення мʼязів (і 3D), урок дня, ранкове питання, виклик місяця, підсумок тижня й року.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: streaks, recovery, daily lesson</b><div class=\"small muted\">A spare week for your streak, a muscle recovery map (with 3D), a daily lesson, a morning check-in, a monthly challenge, weekly and yearly summaries.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>") : S().tour.v4 ? '' : LL('<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: ask the coach</b><div class=\"small muted\">Tap the mic button at the top to ask by voice, text, or photo — about your program, weights, and form.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>")}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"))}</div>
         <div class="stat stk" data-tip="${esc(SPARE_TIP(si))}"><b>${streak}${si.spare ? '<small class="spare" aria-label="' + LL('є запасний тиждень', 'spare week saved') + '"> 🛡</small>' : ''}${LL(`</b><span>тижнів поспіль</span></div><div class="stat"><b>`, `</b><span>weeks in a row</span></div><div class="stat"><b>`)}${mprs}${LL(`</b><span>рекордів за місяць</span></div></div>
       `, `</b><span>PRs this month</span></div></div>
-      `)}${yearHome()}${weekHome()}${mcHome()}${lessonHome()}${weekKcal()}${recHome()}${kHomeCard()}${measureHome()}${dailyCard()}`;
+      `)}${yearHome()}${weekHome()}${mcHome()}${weekKcal()}${recHome()}${measureHome()}`;
     recAttach();
     tourMaybe('home');
     badgeSync();
@@ -3086,7 +3091,7 @@ window.APP_START = () => {
     const p = P(), v = (p.mood || {})[today()];
     if (v) { const m = MOOD().find((x) => x[0] === v) || MOOD()[2]; return `<div class="sp mood1" data-tip="${esc(MOOD_TIP())}"><span class="small muted">${LL('☀️ Сьогодні: ', '☀️ Today: ')}${m[1]} ${esc(m[2].toLowerCase())}</span><button type="button" class="sm ghost" data-act="moodEdit">${LL('Змінити', 'Change')}</button></div>${readyHome(v)}`; }
     return `<div class="card mood" data-tip="${esc(MOOD_TIP())}"><b>${LL('☀️ Як ви сьогодні — сон і самопочуття?', '☀️ How are you today — sleep and how you feel?')}</b>
-      <div class="moodb">${MOOD().map(([k, e, l]) => `<button type="button" data-act="mood" data-v="${k}"><span>${e}</span><small>${l}</small></button>`).join('')}</div></div>`;
+      <div class="moodb">${MOOD().map(([k, e, l]) => `<button type="button" data-act="mood" data-v="${k}" aria-label="${esc(l)}" data-tip="${esc(e + ' ' + l + '. ' + MOOD_TIP())}"><span>${e}</span></button>`).join('')}</div></div>`;
   }
   function moodMonth(ym) {
     const mo = Object.keys(P().mood || {}).filter((d) => d.slice(0, 7) === ym); if (!mo.length) return '';
@@ -3119,29 +3124,7 @@ window.APP_START = () => {
     if (v <= 2 && md(1) && md(1) <= 2 && md(2) && md(2) <= 2) out.push(`<p class="small" style="margin:${out.length ? '6px' : '0'} 0 0">${esc(LL('Третій день поспіль «погано» чи «так собі»: дорослим — щонайменше 7 год сну щоночі; якщо так триває — варто показатися лікарю.', 'Third day in a row “poorly” or “so-so”: adults need at least 7 hours of sleep a night; if it keeps up, see a doctor.'))}</p>`);
     return out.length ? `<div class="card rdy" data-tip="${esc(READY_TIP())}">${out.join('')}</div>` : '';
   }
-  /* завдання дня (пункт 22; як «квести» Duolingo — офіційних даних про ефект немає): 3 маленькі цілі на сьогодні, щодня інші (по колу);
-     галочка ставиться сама — з того, що людина й так робить у застосунку; у день тренування перша ціль — тренування. План від цього не змінюється */
-  function quests() {
-    const p = P(), prog = G(), t = today(), k = kit(), day = kday(t), wk7 = iso(new Date(tms(t) - 7 * 864e5));
-    const trained = p.sessions.some((s) => s.date === t), out = [], pool = [];
-    if (trained || trainDays().indexOf(new Date(t + 'T12:00:00').getDay()) >= 0) out.push({ txt: LL('Тренування за планом', 'Your planned workout'), done: trained, go: p.draft ? 'resume' : 'start' });
-    pool.push({ txt: LL('Відповісти на ранкове питання', 'Answer the morning check-in'), done: !!(p.mood || {})[t], go: 'mood' });
-    const recent = Object.keys(k.days || {}).filter((d) => d >= wk7 && d <= t);
-    if (k.set.water || recent.some((d) => (k.days[d].water || 0) > 0)) pool.push({ txt: LL('Норма води на сьогодні', 'Today’s water goal'), done: (day.water || 0) >= kWTarget(t), go: 'goKitchen' });
-    if (recent.some((d) => (k.days[d].items || []).length)) pool.push({ txt: LL('Записати прийом їжі', 'Log a meal'), done: (day.items || []).length > 0, go: 'goKitchen' });
-    const wt = (p.body.weight || []).some((x) => x.d === t);
-    if (wt || ENGINE.measureDue(p.body.weight || [], t).due) pool.push({ txt: LL('Зважитися', 'Weigh in'), done: wt, go: 'goMeas' });
-    (prog.daily || []).filter((it) => !it.jumps).forEach((it) => pool.push({ txt: it.label, done: !!((p.daily || {})[t] || {})[it.id], go: 'daily' }));
-    const n = Math.floor(tms(t) / 864e5);
-    for (let i = 0; out.length < 3 && i < pool.length; i++) out.push(pool[(n + i) % pool.length]);
-    return out;
-  }
-  function questsHome() {
-    const q = quests(); if (!q.length) return '';
-    const n = q.filter((x) => x.done).length;
-    return `<div class="card qst" data-tip="${esc(LL('Три маленькі цілі на сьогодні — щодня інші. Галочка ставиться сама, коли ви робите це в застосунку: тренування, ранкове питання, вода, їжа, зважування, «Щодня». Торкніться цілі — відкриється, де її виконати. План від цього не змінюється.', 'Three small goals for today — different every day. They’re checked off automatically when you do them in the app: a workout, the morning check-in, water, food, a weigh-in, “Daily.” Tap a goal to open where to do it. Your plan doesn’t change.'))}"><div class="sp"><b>${n === q.length ? LL('✓ Завдання дня виконано', '✓ Today’s tasks done') : LL('☑️ Завдання дня', '☑️ Today’s tasks')}</b><span class="small">${n} / ${q.length}</span></div>
-      <div class="qlist">${q.map((x) => `<button type="button" class="qrow${x.done ? ' done' : ''}" data-act="${x.done ? 'noop' : x.go === 'mood' || x.go === 'daily' ? 'qgo' : x.go}"${!x.done && (x.go === 'mood' || x.go === 'daily') ? ' data-v="' + x.go + '"' : ''}><span class="qmk">${x.done ? '✓' : '○'}</span><span>${esc(x.txt)}</span></button>`).join('')}</div></div>`;
-  }
+
   /* урок дня (пункт 21; як у Noom — доказ слабкий, тож лише показ): одна порада з «Порадника» вашої програми або термін зі словника, щодня інша, по колу;
      тексти — ті самі, що вже в застосунку; «✓ Прочитано» ховає урок до завтра */
   function lessons() {
@@ -3696,7 +3679,6 @@ window.APP_START = () => {
     if (act === 'say') return sayWhat(b);
     if (act === 'whatsnew') return whatsNew();
     if (act === 'tipsOk') { S().tour.tips = true; save(); return render(); }
-    if (act === 'qgo') { const el = app.querySelector(b.dataset.v === 'mood' ? '.card.mood, .mood1' : '.dly'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (act === 'lessonOk') { P().lessonSeen = today(); save(); return rHome(); }
     if (act === 'year') return yearSheet(b.dataset.v);
     if (act === 'yearShare') return yearShare(b.dataset.v);
@@ -4023,6 +4005,8 @@ window.APP_START = () => {
     /* нова версія взяла керування — один раз перезавантажитись, щоб не лишатися на старих файлах.
        Перший запуск (керування ще не було) — без перезавантаження: файли вже нові, а анкета не має губитися. */
     const hadCtl = !!navigator.serviceWorker.controller;
+    /* дотик до нагадування про воду, коли застосунок уже відкритий (з 3.27.1): «Кухня» сьогодні — але не посеред тренування й анкети */
+    navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.go === 'kitchen' && DB.active && P() && view !== 'workout' && view !== 'onboard') { view = 'kitchen'; ui.kDate = null; render(); window.scrollTo(0, 0); } });
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (!hadCtl) return; try { if (sessionStorage.getItem('swReloaded') !== VERSION) { sessionStorage.setItem('swReloaded', VERSION); location.reload(); } } catch (e) { /* немає */ } });
   }
   /* сторінка й код різних версій (недокачане оновлення) — чистимо кеш файлів і перезавантажуємось один раз */

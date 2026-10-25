@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Тренування">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.27.0">
+<meta name="app-version" content="3.27.1">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -236,9 +236,8 @@ svg.ring{width:84px;height:84px} svg.ring .rv{font-size:15px;font-weight:700;fil
 svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 .card.rec svg.bodymap{max-width:230px}
 .moodb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}
-.moodb button{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:56px;padding:6px 2px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:var(--r-sm);font:inherit}
-.moodb button span{font-size:1.35rem;line-height:1}
-.moodb button small{font-size:.78rem}
+.moodb button{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:44px;padding:4px 2px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:var(--r-sm);font:inherit}
+.moodb button span{font-size:1.35rem;line-height:1}  /* з 3.27.1 — без підписів (слово Alexа 25.10: «Забирай підписи … можна затиснути і подивитись підсказку»): назва — у підказці й aria-label */
 .mood1{margin:10px 2px 0}
 .list li.qsum{align-items:center} .list li.qsum b{flex:1;text-align:right} .list li.qsum .sm{flex:none}
 .card.rdy{margin-top:8px}
@@ -269,7 +268,7 @@ svg.bodymap{width:100%;max-width:360px;display:block;margin:0 auto}
 .sw{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)} .sw:last-child{border-bottom:0}
 .sw input[type=checkbox]{width:48px;height:28px;min-height:0;flex:0 0 auto;accent-color:var(--accent);box-shadow:none}
 .chk{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)} .chk:last-child{border-bottom:0}
-.dly .chk>button{flex:0 0 auto} .dly button.done{background:var(--ok-soft);color:var(--ok);border:1px solid var(--line);box-shadow:none;font-weight:700}
+.qline{display:flex;gap:6px;align-items:center} .qline .qrow{flex:1;min-width:0} .qrow.qbox{align-items:flex-start} .qrow.qbox .qmk{margin-top:2px}  /* «Щодня» (з 3.27.1) — вигляд колишніх «Завдань дня» */
 .chk input[type=checkbox]{width:26px;height:26px;min-height:0;flex:0 0 auto;accent-color:var(--accent);box-shadow:none}
 .pick{display:grid;gap:12px} .pick button{text-align:left;padding:16px;border-radius:var(--r-md)} .pick b{display:block;font-size:1.1rem;margin-bottom:2px}
 .hap{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden}
@@ -310,6 +309,7 @@ button.q{min-height:40px;min-width:40px;width:40px;padding:0;border-radius:50%;f
 .pick.rd button{display:flex;flex-direction:column;gap:2px}
 .rdot{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--accent-text)} .rdot.y{background:var(--ochre)} .rdot.r{background:var(--bad)}
 .hero button.ghost{color:var(--accent-text);border-color:var(--accent-text);margin-top:6px}
+.hero .hbtn{display:flex;gap:8px;margin-top:12px} .hero .hbtn button{margin:0;min-width:0} .hero .hbtn .pri{flex:2 1 0} .hero .hbtn .ghost{flex:1 1 0}  /* з 3.27.1 — «Почати» й «Інше» в один ряд (слово Alexа 25.10: «Роби як сказав, але кнопки підпиши Почати та Інше»), картка нижча */
 .prb.mi{padding-top:2px}
 body.coachv #timer{display:none!important}
 /* техніка вправи */
@@ -432,23 +432,23 @@ button.mic.busy{opacity:.55}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="i18n.js?v=3.27.0"></script>
-<script src="i18n_en.js?v=3.27.0"></script>
-<script src="program.js?v=3.27.0"></script>
-<script src="engine.js?v=3.27.0"></script>
-<script src="voice.js?v=3.27.0"></script>
-<script src="coach.js?v=3.27.0"></script>
-<script src="radio.js?v=3.27.0"></script>
-<script src="voicepack.js?v=3.27.0"></script>
-<script src="tips.js?v=3.27.0"></script>
-<script src="charts.js?v=3.27.0"></script>
-<script src="store.js?v=3.27.0"></script>
-<script src="generator.js?v=3.27.0"></script>
-<script src="food_db.js?v=3.27.0"></script>
-<script src="kitchen.js?v=3.27.0"></script>
-<script src="coachctx.js?v=3.27.0"></script>
-<script src="viz.js?v=3.27.0"></script>
-<script src="app.js?v=3.27.0"></script>
-<script src="accounts.js?v=3.27.0"></script>
+<script src="i18n.js?v=3.27.1"></script>
+<script src="i18n_en.js?v=3.27.1"></script>
+<script src="program.js?v=3.27.1"></script>
+<script src="engine.js?v=3.27.1"></script>
+<script src="voice.js?v=3.27.1"></script>
+<script src="coach.js?v=3.27.1"></script>
+<script src="radio.js?v=3.27.1"></script>
+<script src="voicepack.js?v=3.27.1"></script>
+<script src="tips.js?v=3.27.1"></script>
+<script src="charts.js?v=3.27.1"></script>
+<script src="store.js?v=3.27.1"></script>
+<script src="generator.js?v=3.27.1"></script>
+<script src="food_db.js?v=3.27.1"></script>
+<script src="kitchen.js?v=3.27.1"></script>
+<script src="coachctx.js?v=3.27.1"></script>
+<script src="viz.js?v=3.27.1"></script>
+<script src="app.js?v=3.27.1"></script>
+<script src="accounts.js?v=3.27.1"></script>
 </body>
 </html>
