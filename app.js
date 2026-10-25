@@ -5,9 +5,9 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.1';
+  const VERSION = '3.27.2';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
-  const MARK = window.MARK_SVG;
+  const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
   const sheetEl = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
   let DB = STORE.load();
@@ -315,7 +315,7 @@ window.APP_START = () => {
 
   /* ---------- мова (з 3.17.0): перший запуск і «Більше»; зміна — перезапуск сторінки ---------- */
   function rLang() {
-    app.innerHTML = `<div class="brand">${MARK}<b>Тренування · Workouts</b></div><h1 style="margin-top:18px">Мова · Language</h1>
+    app.innerHTML = `<div class="brand">${MARK}${WORD}</div><h1 style="margin-top:18px">Мова · Language</h1>
       <div class="pick"><button type="button" class="wide big" data-act="langPick" data-v="uk"><b>🇺🇦 Українська</b><span class="small muted">Тексти, голос і тренер — українською</span></button>
       <button type="button" class="wide big" data-act="langPick" data-v="en"><b>🇺🇸 English (US)</b><span class="small muted">Texts, voice and coach in American English</span></button></div>
       <p class="small muted">Змінити можна в «Більше» · You can change it later in “More”.</p>`;
@@ -450,9 +450,8 @@ window.APP_START = () => {
         <label class="chk"><input type="checkbox" id="qAgree"${a.agree ? ' checked' : ''}${LL(`><span>Розумію: застосунок не замінює лікаря. При болю під час вправи — зупиняюсь.</span></label>`, `><span>I understand: this app doesn’t replace a doctor. If I feel pain during an exercise, I’ll stop.</span></label>`)}${err('agree')}`;
     }
     const last = q.step === QS.length - 1;
-    app.innerHTML = `<div class="brand">${MARK}${LL(`<b>Тренування</b></div>
-      <div class="qprog" aria-hidden="true"><i style="width:`, `<b>Workouts</b></div>
-      <div class="qprog" aria-hidden="true"><i style="width:`)}${q.edit ? 100 : Math.round((q.step + 1) / QS.length * 100)}${LL(`%"></i></div><p class="tiny muted">`, `%"></i></div><p class="tiny muted">`)}${q.edit ? LL('Зміна анкети', "Editing questionnaire") : LL('Крок ', "Step ") + (q.step + 1) + LL(' з ', " of ") + QS.length}</p>
+    app.innerHTML = `<div class="brand">${MARK}${WORD}${`</div>
+      <div class="qprog" aria-hidden="true"><i style="width:`}${q.edit ? 100 : Math.round((q.step + 1) / QS.length * 100)}${LL(`%"></i></div><p class="tiny muted">`, `%"></i></div><p class="tiny muted">`)}${q.edit ? LL('Зміна анкети', "Editing questionnaire") : LL('Крок ', "Step ") + (q.step + 1) + LL(' з ', " of ") + QS.length}</p>
       ${body}
       ${(() => { const left = q.ret && !last ? LL('<button type="button" class="ghost" data-act="qSum">До відповідей</button>', "<button type=\"button\" class=\"ghost\" data-act=\"qSum\">To answers</button>")
           : q.step && !(q.edit && last) ? LL('<button type="button" class="ghost" data-act="qBack">Назад</button>', "<button type=\"button\" class=\"ghost\" data-act=\"qBack\">Back</button>") : q.edit ? LL('<button type="button" class="ghost" data-act="qCancel">Скасувати</button>', "<button type=\"button\" class=\"ghost\" data-act=\"qCancel\">Cancel</button>") : '';
@@ -1413,7 +1412,7 @@ window.APP_START = () => {
     });
     g.font = F(500, 40); let y = 920;
     (s.prList || []).slice(0, 5).forEach((x) => { g.fillText('🏆 ' + prog.ex[x.ex].name, 80, y); y += 64; });
-    g.font = F(700, 32); g.globalAlpha = 0.85; g.fillText(LL('Тренування', "Workouts"), 80, 1280);
+    window.BRAND_DRAW(g, 80, 1280, 23, '#ffffff', '#c8a96a');  // знак і назва FORTES (з 3.27.2)
     c.toBlob((b) => { if (b) shareFile('trenuvannia-' + s.date + '.png', b, 'image/png'); }, 'image/png');
   }
 
@@ -2047,7 +2046,7 @@ window.APP_START = () => {
     let body;
     /* значок «1» на іконці — лише iPhone (iOS 16.4+, застосунок з іконки); Chrome на Android значків-цифр не вміє (MDN, setAppBadge) */
     if (!pushOk()) body = `<p class="small muted">${TX(standalone ? LL('Нагадуванням потрібен iOS 16.4 або новіший.', "Reminders need iOS 16.4 or later.") : LL('Нагадування працюють, коли застосунок відкрито з іконки на початковому екрані (Safari → «Поділитися» → «На початковий екран»).', "Reminders work when the app is opened from its Home Screen icon (Safari → “Share” → “Add to Home Screen”)."), LL('Цей браузер не вміє нагадувань — відкрийте застосунок у Chrome.', "This browser doesn’t support reminders — open the app in Chrome."))}</p>`;
-    else if (Notification.permission === 'denied') body = LL('<div class="note w small"><b>Сповіщення заборонено.</b> Увімкнути: ', "<div class=\"note w small\"><b>Notifications are blocked.</b> To turn them on: ") + TX(LL('«Параметри» iPhone → «Сповіщення» → «Тренування» → «Дозволити сповіщення».', "iPhone “Settings” → “Notifications” → “Workouts” → “Allow Notifications”."), LL('«Налаштування» Android → «Додатки» → «Тренування» (або Chrome, якщо відкриваєте в браузері) → «Сповіщення» → увімкнути.', "Android “Settings” → “Apps” → “Workouts” (or Chrome, if you use it in the browser) → “Notifications” → turn on.")) + '</div>';
+    else if (Notification.permission === 'denied') body = LL('<div class="note w small"><b>Сповіщення заборонено.</b> Увімкнути: ', "<div class=\"note w small\"><b>Notifications are blocked.</b> To turn them on: ") + TX(LL('«Параметри» iPhone → «Сповіщення» → назва застосунку (FORTES або «Тренування» — як підписана іконка) → «Дозволити сповіщення».', "iPhone “Settings” → “Notifications” → the app’s name (FORTES or “Workouts” — as under the icon) → “Allow Notifications”."), LL('«Налаштування» Android → «Додатки» → назва застосунку (FORTES або «Тренування» — як підписана іконка; або Chrome, якщо відкриваєте в браузері) → «Сповіщення» → увімкнути.', "Android “Settings” → “Apps” → the app’s name (FORTES or “Workouts” — as under the icon; or Chrome, if you use it in the browser) → “Notifications” → turn on.")) + '</div>';
     else if (r.on) body = `${LL(`<p class="small"><b>✓ Увімкнено</b> · `, `<p class="small"><b>✓ On</b> · `)}${ds.length ? dayNames(ds) : LL('дні тренувань', "workout days")}${LL(`, якщо ще не тренувались.`, `, if you haven’t worked out yet.`)}${TX(LL(' Значок «1» на іконці — поки сьогодні не почали тренування.', " A “1” badge on the app icon until you start today’s workout."), '')}${LL(`</p>
       <label class="f" for="remindTime">Час нагадування</label><input type="time" id="remindTime" value="`, `</p>
       <label class="f" for="remindTime">Reminder time</label><input type="time" id="remindTime" value="`)}${esc(r.time || '18:00')}${LL(`" step="300">
@@ -2143,7 +2142,7 @@ window.APP_START = () => {
        і підписом, угорі — скільки зроблено; до 3.27.1 — окрема кнопка «Виконано» (слово Alexа 23.10: з галочками було незрозуміло, чи натискати), тепер підказка під списком */
     const isDone = (it) => (it.jumps ? (rec.jumps || 0) >= prog.jumpsFor(wk).times : !!rec[it.id]);
     const nDone = prog.daily.filter(isDone).length, all = nDone === prog.daily.length;
-    return `<div class="card qst dly" data-tip="${esc(LL('Щоденні звички вашої програми. Торкніться рядка — відмітка на сьогодні; ще раз — скасувати.', 'Daily habits from your program. Tap a row to check it off for today; tap again to undo.'))}"><div class="sp"><b>${all ? LL('✓ Щодня — усе зроблено', '✓ Daily — all done') : LL('☑️ Щодня', '☑️ Daily')}</b><span class="small muted">${nDone} / ${prog.daily.length}</span></div><div class="qlist">${prog.daily.map((it) => {
+    return `<div class="card qst dly${all ? ' all' : ''}" data-tip="${esc(LL('Щоденні звички вашої програми. Торкніться рядка — відмітка на сьогодні; ще раз — скасувати.', 'Daily habits from your program. Tap a row to check it off for today; tap again to undo.'))}"><div class="sp"><b>${all ? '<span class="qmk">✓</span> ' + LL('Щодня — усе зроблено', 'Daily — all done') : LL('☑️ Щодня', '☑️ Daily')}</b><span class="small muted">${nDone} / ${prog.daily.length}</span></div><div class="qlist">${prog.daily.map((it) => {
       if (it.jumps) {
         const j = prog.jumpsFor(wk), done = rec.jumps || 0, ok = done >= j.times;
         return `<div class="qrow qbox${ok ? ' done' : ''}"><span class="qmk">${ok ? '✓' : '○'}</span><div style="flex:1;min-width:0"><span>${esc(it.label)}</span>${LL(`<div class="tiny muted">Тиждень `, `<div class="tiny muted">Week `)}${wk}: ${j.n}${LL(` стрибків × `, ` jumps × `)}${j.times}${LL(` на день, 30 с між стрибками. Лише якщо коліна, стопи й тазове дно без проблем. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">як стрибати</button></div>`, ` a day, 30 sec between jumps. Only if your knees, feet, and pelvic floor are problem-free. <button type="button" class="sm ghost" style="min-height:40px;padding:0 6px" data-act="guide" data-id="jumps">how to jump</button></div>`)}
@@ -2199,7 +2198,7 @@ window.APP_START = () => {
     const nd = nextDayText(p.days);
     /* порядок головної (з 3.27.1; слово Alexа 25.10: «Так, роби в 3.27.1 як радиш: порядок Тренування → Кухня → Як ви сьогодні → Завдання дня → Щодня → Урок дня,
        вода першим рядком у картці кухні…»; «Завдання дня» прибрано — «Прибери картку «Завдання дня» з головної в 3.27.1»: усі її пункти вже мають свої картки поруч): найчастіше застосунок відкривають відмітити воду — «+ склянка» на першому екрані (замір 390 × 844: було 2 047 px, стало ≈ 570) */
-    app.innerHTML = `<div class="brand">${MARK}${LL(`<b>Тренування</b>`, `<b>Workouts</b>`)}${themeBtn()}${LL(`</div><p class="muted small" style="margin-top:4px">`, `</div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
+    app.innerHTML = `<div class="brand">${MARK}${WORD}${themeBtn()}${LL(`</div><p class="muted small" style="margin-top:4px">`, `</div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
       ${alerts()}
       ${d ? `${LL(`<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">`, `<div class="card"><div class="sp"><div><b>Workout in progress</b><div class="small muted">`)}${esc(wTitle(d))} · ${draftStats(d).done}/${draftStats(d).total}${LL(` підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>`, ` sets</div></div><button type="button" class="pri" data-act="resume">Resume</button></div></div>`)}` : ''}${LL(`
       <div class="card hero"><div class="row"><span class="chip">Тиждень `, `
@@ -2211,7 +2210,7 @@ window.APP_START = () => {
       ${kHomeCard()}${moodHome()}${dailyCard()}${lessonHome()}
       ${S().tour.tips ? '' : LL('<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1 секунду — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>💡 Tips on every button</b><div class=\"small muted\">Press and hold any button or label for 1 second to see a short explanation.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"tipsOk\">Got it</button></div></div>")}
       ${!S().tour.v5 ? LL('<div class="card"><div class="sp"><div><b>Нове: серія, відновлення, урок дня</b><div class="small muted">Запасний тиждень для серії, мапа відновлення мʼязів (і 3D), урок дня, ранкове питання, виклик місяця, підсумок тижня й року.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: streaks, recovery, daily lesson</b><div class=\"small muted\">A spare week for your streak, a muscle recovery map (with 3D), a daily lesson, a morning check-in, a monthly challenge, weekly and yearly summaries.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>") : S().tour.v4 ? '' : LL('<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: ask the coach</b><div class=\"small muted\">Tap the mic button at the top to ask by voice, text, or photo — about your program, weights, and form.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>")}
-      <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"))}</div>
+      <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"), true)}</div>
         <div class="stat stk" data-tip="${esc(SPARE_TIP(si))}"><b>${streak}${si.spare ? '<small class="spare" aria-label="' + LL('є запасний тиждень', 'spare week saved') + '"> 🛡</small>' : ''}${LL(`</b><span>тижнів поспіль</span></div><div class="stat"><b>`, `</b><span>weeks in a row</span></div><div class="stat"><b>`)}${mprs}${LL(`</b><span>рекордів за місяць</span></div></div>
       `, `</b><span>PRs this month</span></div></div>
       `)}${yearHome()}${weekHome()}${mcHome()}${weekKcal()}${recHome()}${measureHome()}`;
@@ -2565,7 +2564,7 @@ window.APP_START = () => {
     /* з 3.21.3 (жива перевірка 3.21.2: «Випито 0 з 7 склянок · залишилось 6½ склянки»): загальна кількість — теж у половинках, як залишок
        і порції; неповна остання склянка — половинний значок (слово Alexа 24.10: «загальна кількість склянок у половинках, як залишок») */
     const n = Math.ceil(target / (glass / 2) - 1e-9) / 2, done = Math.floor(ml / glass * 2 + 1e-9) / 2, left = Math.max(0, Math.ceil((target - ml) / (glass / 2) - 1e-9)) / 2, leftMl = Math.max(0, target - ml);  // з 3.21.1 — по половинці
-    const icons = `<div class="glasses" role="img" aria-label="${LL('випито ', 'drank ')}${kGlN(ml >= target ? n : Math.min(done, n))}${LL(' з ', ' of ')}${kGlN(n)}">${Array.from({ length: Math.ceil(n) }, (_, j) => { const cap = Math.min(1, n - j), f = Math.min(cap, Math.max(0, (ml >= target ? n : done) - j)); return `<i class="${[f >= cap ? 'on' : f >= 0.5 ? 'half' : '', cap < 1 ? 'part' : ''].filter(Boolean).join(' ')}"></i>`; }).join('')}</div>`;
+    const icons = `<div class="glasses${ml >= target ? ' done' : ''}" data-tip="${esc(LL('Склянки: заповнені — випито. Норму на сьогодні виконано — усі стають охровими.', 'Glasses: filled — drunk. When today’s goal is done, they all turn ochre.'))}" role="img" aria-label="${LL('випито ', 'drank ')}${kGlN(ml >= target ? n : Math.min(done, n))}${LL(' з ', ' of ')}${kGlN(n)}">${Array.from({ length: Math.ceil(n) }, (_, j) => { const cap = Math.min(1, n - j), f = Math.min(cap, Math.max(0, (ml >= target ? n : done) - j)); return `<i class="${[f >= cap ? 'on' : f >= 0.5 ? 'half' : '', cap < 1 ? 'part' : ''].filter(Boolean).join(' ')}"></i>`; }).join('')}</div>`;
     const line = ml < target ? LL('Випито ', 'Drank ') + kGlN(Math.min(done, n)) + LL(' з ', ' of ') + kGlN(n) + (n % 1 ? LL(' склянки', ' glasses') : I18N.lang === 'en' ? (n === 1 ? ' glass' : ' glasses') : (n === 1 ? ' склянки' : ' склянок'))
       + ' · ' + LL('залишилось ', '') + kGlW(left) + LL('', ' left') + ' (' + fmt(leftMl / 1000) + LL(' л)', ' L)')
       : LL('Норму води на сьогодні виконано ✓', 'Today’s water goal is done ✓');
@@ -2619,8 +2618,10 @@ window.APP_START = () => {
   }
   /* відмітка води: скільки й коли (з 3.21.1 — журнал дня: «−» прибирає саме останню відмітку, час — для склянки на черзі) */
   function kWaterLog(d, ml) {
-    const day = kdayW(d); day.water = (day.water || 0) + ml;
+    const day = kdayW(d), was = day.water || 0; day.water = was + ml;
     (day.wl = day.wl || []).push({ ml, t: d === kWaterDay() ? kNowHM() : '' }); if (day.wl.length > 60) day.wl.shift();
+    /* охра — досягнення (з 3.27.2; слово Alexа 25.10: «роби пункти 1–4 … охра як досягнення»): норму на сьогодні щойно виконано — одне золоте повідомлення, як рекорд */
+    const T = kWTarget(d); if (d === kWaterDay() && was < T && day.water >= T) toast(LL('💧 Норму води на сьогодні виконано', '💧 Today’s water goal is done'), true);
   }
 
   /* ---- додати запис: шторка з чотирма способами ---- */
@@ -3073,9 +3074,9 @@ window.APP_START = () => {
     let remain = 0; for (let k = Number(today().slice(8, 10)) + (trainedToday() ? 1 : 0); k <= nd; k++) if (td.indexOf(new Date(y, m, k, 12).getDay()) >= 0) remain++;
     const why = !mc.prev ? LL('ціль — половина днів тренувань за планом', 'goal — half of your planned workout days') : mc.prev + 1 > mc.planned ? LL('ціль — усі дні тренувань за планом', 'goal — all of your planned workout days')
       : LL('минулого місяця — ', 'last month — ') + mc.prev + LL(', тепер на одне більше', ', now one more');
-    const txt = mc.met ? LL('✓ Виконано: ', '✓ Done: ') + mc.done + LL(' з ', ' of ') + mc.target
+    const txt = mc.met ? '<span class="mk">✓</span> ' + LL('Виконано: ', 'Done: ') + mc.done + LL(' з ', ' of ') + mc.target
       : LL('Зроблено ', 'Done ') + mc.done + LL(' з ', ' of ') + mc.target + (mc.left <= remain ? LL(' — ще ', ' — ') + mc.left + LL('', ' to go') : LL(' · днів тренувань до кінця місяця за планом: ', ' · planned workout days left this month: ') + remain);
-    return `<div class="card mch" data-tip="${esc(MC_TIP())}"><div class="sp"><b>${LL('🎯 Виклик ', '🎯 ')}${esc(monthGen(ym))}${LL('', ' challenge')}</b><span class="small">${mc.done} / ${mc.target}</span></div>
+    return `<div class="card mch${mc.met ? ' met' : ''}" data-tip="${esc(MC_TIP())}"><div class="sp"><b>${LL('🎯 Виклик ', '🎯 ')}${esc(monthGen(ym))}${LL('', ' challenge')}</b><span class="small">${mc.done} / ${mc.target}</span></div>
       <div class="kbar"><i style="width:${Math.min(100, Math.round(mc.done / mc.target * 100))}%"></i></div><p class="small muted" style="margin:6px 0 0">${txt} (${why}).</p></div>`;
   }
   /* у підсумку тренування — поступ виклику (поточний місяць, ще не виконаний: виконаний — це «🏅 Нова віха») */
@@ -3191,7 +3192,7 @@ window.APP_START = () => {
     });
     g.fillStyle = '#fff'; g.font = F(500, 38); let yy = 800;
     yearRows(r).slice(0, 6).forEach(([e, l, v]) => { let t2 = e + ' ' + l + ': ' + v; while (g.measureText(t2).width > 920 && t2.length > 8) t2 = t2.slice(0, -2) + '…'; g.fillText(t2, 80, yy); yy += 66; });
-    g.font = F(700, 32); g.globalAlpha = 0.85; g.fillText(LL('Тренування', 'Workouts'), 80, 1280); g.globalAlpha = 1;
+    window.BRAND_DRAW(g, 80, 1280, 23, '#ffffff', '#c8a96a');  // знак і назва FORTES (з 3.27.2)
     c.toBlob((b) => { if (b) shareFile('trenuvannia-' + y + '.png', b, 'image/png'); }, 'image/png');
   }
   /* радіо лише на тренуванні (пункт 16; «звʼязка спокуси»: Milkman, Minson, Volpp 2014, 226 людей — аудіокниги лише в залі спершу +51 % відвідувань, далі ефект слабшав) */
@@ -4029,7 +4030,7 @@ window.APP_START = () => {
   themeApply(themeNow());
   render();
   initPacks();
-  document.title = LL('Тренування', 'Workouts');
+  document.title = 'FORTES';  // назва застосунку (з 3.27.2; слово Alexа 25.10: «Замість слова Тренування має писатись FORTES. Це буде назва додатку») — однакова обома мовами
   { const TABS = { home: LL('Головна', 'Home'), plan: LL('План', 'Plan'), kitchen: LL('Кухня', 'Kitchen'), body: LL('Тіло', 'Body'), progress: LL('Прогрес', 'Progress'), more: LL('Більше', 'More') };
     document.querySelectorAll('#tabs button').forEach((b) => { const t = TABS[b.dataset.tab], n = [...b.childNodes].find((x) => x.nodeType === 3 && x.textContent.trim()); if (t && n) n.textContent = t; }); }
   badgeSync(); setTimeout(() => remindSync(false), 1500);  // підписка iPhone могла злетіти — тихо поновити й оновити розклад

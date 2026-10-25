@@ -54,11 +54,11 @@ var CHARTS = (function () {
     }).join('') + '</div><div class="legend"><span><i class="z"></i>' + esc(o.zoneLabel || LL('орієнтир ', "target ") + lo + '–' + hi + LL(' підходів', " sets")) + '</span></div>';
   }
 
-  /* Кільце прогресу */
-  function ring(val, max, label, sub) {
+  /* Кільце прогресу; gold — повне кільце охрове: досягнення (з 3.27.2 — тиждень: усі заплановані тренування; охра — досягнення, §8) */
+  function ring(val, max, label, sub, gold) {
     var r = 30, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, max ? val / max : 0));
     return '<svg class="ring" viewBox="0 0 80 80" aria-label="' + esc(label) + '"><circle cx="40" cy="40" r="' + r + '" fill="none" style="stroke:var(--soft)" stroke-width="8"/>' +
-      '<circle cx="40" cy="40" r="' + r + '" fill="none" style="stroke:' + (f >= 1 ? 'var(--ok)' : 'var(--accent)') + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 40 40)"/>' +
+      '<circle cx="40" cy="40" r="' + r + '" fill="none" style="stroke:' + (f >= 1 ? (gold ? 'var(--ochre-text)' : 'var(--ok)') : 'var(--accent)') + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 40 40)"/>' +
       '<text x="40" y="38" text-anchor="middle" class="rv">' + esc(label) + '</text><text x="40" y="53" text-anchor="middle" class="rs">' + esc(sub || '') + '</text></svg>';
   }
 
