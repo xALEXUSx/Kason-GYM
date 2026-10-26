@@ -5,7 +5,8 @@
    three.js 0.180.0 (MIT) — vendor/three/. Вантажиться лише тоді, коли блок розгорнули (≈ 790 КБ; у кеші застосунку — sw.js — для роботи без інтернету).
    Одне WebGL-полотно на весь застосунок: картка малюється заново після кожної дії, полотно переноситься в нову; не видно (прокрутили, згорнули,
    відпочинок, інша вкладка, телефон заблоковано) — не малює; 30 кадрів за секунду — береже батарею на тренуванні.
-   З 3.24.0 те саме полотно показує й мапу відновлення мʼязів на головній (rec, внизу файла) — статичну, без анімації. */
+   З 3.24.0 те саме полотно показує й мапу відновлення мʼязів на головній (rec, внизу файла) — статичну, без анімації; з 3.27.3 — завжди відкриту.
+   З 3.27.3 — і тести форми в «Тіло» → «Тести» → «Як виконувати тести»: кожен тест — свій блок, відкритий — один. */
 var VIZ = (function () {
   'use strict';
   /* ключі анімацій = ex3d.js (перевіряє test_engine.js): id вправи, варіант — після «:» (перший варіант — без суфікса) */
@@ -13,7 +14,8 @@ var VIZ = (function () {
     'birddog', 'sideplank', 'sideplank:f', 'goblet', 'goblet:s2', 'rdl', 'slrdl', 'shrug', 'lateral', 'hammer', 'bentrow', 'calf', 'splitsquat', 'splitsquat:l',
     'splitsquat:b', 'farmer', 'suitcase', 'curl', 'seatedpress', 'ohext', 'reardelt', 'row1', 'bandrow', 'pulldown', 'pulldown:k', 'facepull', 'pallof', 'extrot',
     'abduct', 'g_legpress', 'g_latpull', 'g_cablerow', 'g_chestpress', 'g_shpress', 'g_abduct', 'g_legcurl', 'g_legext', 'g_pecdeck', 'g_revfly', 'g_machrow',
-    'g_machcurl', 'g_triext', 'g_cablelat', 'g_facepull', 'g_pushdown', 'g_cablecurl', 'g_pallof'];
+    'g_machcurl', 'g_triext', 'g_cablelat', 'g_facepull', 'g_pushdown', 'g_cablecurl', 'g_pallof',
+    't_chair', 't_bal', 't_srt', 't_walk'];  // тести форми (з 3.27.3): «Тіло» → «Тести» → «Як виконувати тести»
   /* вправа програми → анімація. raw — опис вправи з програми мовою оригіналу (до перекладу): тяга зверху в жіночій програмі — на колінах (той самий id) */
   function keyFor(id, variant, raw) {
     raw = raw || {};
@@ -23,7 +25,9 @@ var VIZ = (function () {
   }
   var st = { lib: null, wait: null, R: null, X: null, ex: null, key: null, det: null, box: null, o: null, raf: 0, t0: 0, tp: 0, last: 0, play: true, v: 'move', yaw: 0, vis: true, w: 0, h: 0, broken: false, io: null, theme: false, dk: null, mode: 'ex' };
   /* мапа відновлення (з 3.24.0): своя сцена на тому самому полотні; mode — чия зараз картинка на полотні ('ex' — вправа, 'rec' — відновлення) */
-  var rs = { X: null, det: null, yaw: 0.35, dk: null };
+  var rs = { X: null, det: null, yaw: 0.35, dk: null, key: null };
+  /* блок відновлення з 3.27.3 — завжди відкритий <div>; <details> — як було (закритий — не малюємо) */
+  var shown = function (d) { return d.tagName !== 'DETAILS' || d.open; };
   var reduce = function () { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
   var ver = function () { var m = document.querySelector('meta[name="app-version"]'); return m ? m.content : ''; };
   function script(src) { return new Promise(function (ok, no) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
@@ -131,7 +135,9 @@ var VIZ = (function () {
     if (!det) return;
     /* toggle приходить і тоді, коли картку щойно намалювали розгорнутою, — зважаємо лише на справжню зміну */
     var was = det.open;
-    det.addEventListener('toggle', function () { if (det.open === was) return; was = det.open; if (o.onToggle) o.onToggle(det.open); if (det.open) start(det, o); else stop(); });
+    /* у «Тестах» (з 3.27.3) блоків кілька, полотно одне: розгорнули блок — полотно переходить до нього; згорнули — зупинити, лише якщо полотно ще його
+       (відкрили інший — цей згортається, а toggle приходить пізніше) */
+    det.addEventListener('toggle', function () { if (det.open === was) return; was = det.open; if (o.onToggle) o.onToggle(det.open); if (det.open) { stop(); st.det = det; st.o = o; wire(det, o); start(det, o); } else if (st.det === det) stop(); });
     wire(det, o);
     if (det.open) start(det, o);
   }
@@ -139,7 +145,7 @@ var VIZ = (function () {
      det — <details class="vz3 vzr"> на головній; o: { rec — ENGINE.recovery, restH, esc, onToggle(open), L: { wait, fail } }.
      Без анімації: кадр — коли розгорнули, повернули пальцем, змінилась тема чи розмір (батарею не їсть) */
   function recDraw() {
-    if (!rs.X || !st.R || st.mode !== 'rec' || !rs.det || !rs.det.isConnected || !rs.det.open) return;
+    if (!rs.X || !st.R || st.mode !== 'rec' || !rs.det || !rs.det.isConnected || !shown(rs.det)) return;
     rs.X.draw(rs.yaw); rs.X.camera.aspect = st.w / st.h; rs.X.camera.updateProjectionMatrix(); st.R.render(rs.X.scene, rs.X.camera);
   }
   function recStart(det, o) {
@@ -147,18 +153,22 @@ var VIZ = (function () {
     if (st.broken) { box.textContent = o.L.fail; return; }
     if (!box.firstChild) box.innerHTML = '<span class="vzwait">' + o.esc(o.L.wait) + '</span>';
     load().then(function (lib) {
-      if (rs.det !== det || !det.open) return;
+      if (rs.det !== det || !shown(det)) return;
       if (!renderer(lib)) { box.textContent = o.L.fail; return; }
-      stop(); dispose(rs.X); rs.X = lib.E.recScene(o.rec, o.restH); rs.dk = lib.E.dark();
+      /* головна перемальовується після кожної дії (+ склянка, «Щодня»…) — сцену будуємо заново лише тоді, коли змінилось відновлення чи тема (з 3.27.3) */
+      var key = JSON.stringify(o.rec) + '|' + o.restH;
+      stop(); if (!rs.X || rs.key !== key || rs.dk !== lib.E.dark()) { dispose(rs.X); rs.X = lib.E.recScene(o.rec, o.restH); rs.key = key; rs.dk = lib.E.dark(); }
       st.mode = 'rec'; st.box = box; st.w = 0; box.textContent = ''; box.appendChild(st.R.domElement); size(); recDraw();
     }, function () { box.textContent = o.L.fail; });
   }
   function rec(det, o) {
     rs.det = det || null;
     if (!det) return;
-    var was = det.open;
-    det.addEventListener('toggle', function () { if (det.open === was) return; was = det.open; if (o.onToggle) o.onToggle(det.open); if (det.open) recStart(det, o); });
-    if (det.open) recStart(det, o);
+    if (det.tagName === 'DETAILS') {
+      var was = det.open;
+      det.addEventListener('toggle', function () { if (det.open === was) return; was = det.open; if (o.onToggle) o.onToggle(det.open); if (det.open) recStart(det, o); });
+    }
+    if (shown(det)) recStart(det, o);
   }
   /* _draw(sec) — для перевірок: кадр на секунді sec (у прихованій вкладці браузер не дає кадрів анімації) */
   return { KEYS: KEYS, keyFor: keyFor, attach: attach, rec: rec, has: function (k) { return KEYS.indexOf(k) >= 0; }, _st: st, _rs: rs, _draw: function (sec) { if (sec !== undefined) st.tp = sec * 1000; draw(); }, _recDraw: recDraw };

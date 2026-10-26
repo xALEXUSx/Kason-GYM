@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="FORTES">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.27.2">
+<meta name="app-version" content="3.27.3">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -329,6 +329,7 @@ details.vz3 summary b::after{content:" ▾";color:var(--muted);font-weight:400} 
 .vzcap button{min-width:44px;min-height:44px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;font:inherit;font-size:1rem}
 .vznote{font-size:.8rem;color:var(--muted);min-height:1.2em}.vznote.bad{color:var(--bad)}
 .vz3 .seg{margin-top:8px}
+div.vzr{margin-top:8px}  /* «Відновлення мʼязів» — 3D завжди відкрите (з 3.27.3) */
 details.tech{margin-top:12px;background:var(--soft);border-radius:var(--r-md);padding:10px 14px}
 details.tech summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:3px;min-height:44px;justify-content:center}
 details.tech summary::-webkit-details-marker{display:none}
@@ -371,7 +372,7 @@ h3.rg{margin:14px 0 6px;font-size:.7rem;font-weight:700;color:var(--muted);text-
 .pick.acc button>span:last-child{display:flex;flex-direction:column;gap:2px;min-width:0}
 /* поки не обрано користувача — без нижнього меню й панелей застосунку */
 body:not(.started) nav#tabs,body:not(.started) #rbar,body:not(.started) #timer{display:none!important}
-#tour{position:fixed;inset:0;z-index:60}
+#tour{position:fixed;inset:0;z-index:60;touch-action:none;overscroll-behavior:contain}
 #tour .th{position:fixed;border-radius:var(--r-md);box-shadow:0 0 0 9999px rgba(8,32,31,.66);outline:2px solid var(--ochre);outline-offset:2px;pointer-events:none;transition:all .2s}
 #tour .tbx{position:fixed;left:16px;right:16px;max-width:520px;margin:0 auto;background:var(--bg);color:var(--ink);border:1px solid var(--card-line);border-radius:var(--r-lg);box-shadow:var(--e2);padding:16px}
 #tour .tbx p{margin:0 0 10px;font-size:.95rem}
@@ -436,23 +437,23 @@ button.mic.busy{opacity:.55}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="i18n.js?v=3.27.2"></script>
-<script src="i18n_en.js?v=3.27.2"></script>
-<script src="program.js?v=3.27.2"></script>
-<script src="engine.js?v=3.27.2"></script>
-<script src="voice.js?v=3.27.2"></script>
-<script src="coach.js?v=3.27.2"></script>
-<script src="radio.js?v=3.27.2"></script>
-<script src="voicepack.js?v=3.27.2"></script>
-<script src="tips.js?v=3.27.2"></script>
-<script src="charts.js?v=3.27.2"></script>
-<script src="store.js?v=3.27.2"></script>
-<script src="generator.js?v=3.27.2"></script>
-<script src="food_db.js?v=3.27.2"></script>
-<script src="kitchen.js?v=3.27.2"></script>
-<script src="coachctx.js?v=3.27.2"></script>
-<script src="viz.js?v=3.27.2"></script>
-<script src="app.js?v=3.27.2"></script>
-<script src="accounts.js?v=3.27.2"></script>
+<script src="i18n.js?v=3.27.3"></script>
+<script src="i18n_en.js?v=3.27.3"></script>
+<script src="program.js?v=3.27.3"></script>
+<script src="engine.js?v=3.27.3"></script>
+<script src="voice.js?v=3.27.3"></script>
+<script src="coach.js?v=3.27.3"></script>
+<script src="radio.js?v=3.27.3"></script>
+<script src="voicepack.js?v=3.27.3"></script>
+<script src="tips.js?v=3.27.3"></script>
+<script src="charts.js?v=3.27.3"></script>
+<script src="store.js?v=3.27.3"></script>
+<script src="generator.js?v=3.27.3"></script>
+<script src="food_db.js?v=3.27.3"></script>
+<script src="kitchen.js?v=3.27.3"></script>
+<script src="coachctx.js?v=3.27.3"></script>
+<script src="viz.js?v=3.27.3"></script>
+<script src="app.js?v=3.27.3"></script>
+<script src="accounts.js?v=3.27.3"></script>
 </body>
 </html>

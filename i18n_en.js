@@ -1498,3 +1498,15 @@ I18N.add({
   "Випрямляй руки вперед і тримай": "Straighten your arms forward and hold",
   "✕ Не повертай корпус за тросом": "✕ Don’t rotate toward the cable"
 });
+/* тести форми — підписи 3D (з 3.27.3; app/viz/ex3d.js, «Тіло» → «Тести» → «Як виконувати тести») */
+I18N.add({
+  "Сядь повністю — руки схрещені на грудях": "Sit all the way down — arms crossed on your chest",
+  "Встань повністю — і знову сідай": "Stand all the way up — then sit again",
+  "Підніми ногу — руки на поясі, погляд уперед": "Lift your leg — hands on hips, eyes forward",
+  "Тримай до 60 с — і на іншу ногу": "Hold up to 60 sec — then switch legs",
+  "✕ Не завалюйся корпусом убік": "✕ Don’t let your body tip to the side",
+  "Схрести ноги й сідай на підлогу без опори": "Cross your legs and sit down on the floor without support",
+  "Встань так само — без рук і колін": "Stand up the same way — no hands or knees",
+  "✕ Не спирайся рукою об підлогу": "✕ Don’t push off the floor with your hand",
+  "Іди якомога швидше рівним кроком — не біжи": "Walk as fast as you can at an even pace — don’t run"
+});

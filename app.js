@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.2';
+  const VERSION = '3.27.3';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -69,7 +69,7 @@ window.APP_START = () => {
   let view = DB.active ? 'home' : 'onboard';
   /* відкрили з нагадування про воду (з 3.27.1, sw.js → «./#kitchen»): одразу «Кухня» сьогодні; знак з адреси прибираємо, щоб оновлення сторінки не вертало сюди */
   if (location.hash === '#kitchen') { if (view === 'home') view = 'kitchen'; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* без історії */ } }
-  const ui = { ob: 1, obProg: null, progTab: 'ex', progEx: null, metric: 'e1rm', range: 'all', musDays: 7, repMonth: null, bodyTab: 'm', planTab: 'w', calMonth: null, summary: null, photoPose: 'front', cmp: 50 };
+  const ui = { ob: 1, obProg: null, progTab: 'ex', progEx: null, metric: 'e1rm', range: 'all', musDays: 7, repMonth: null, bodyTab: null, planTab: 'w', calMonth: null, summary: null, photoPose: 'front', cmp: 50 };
   let audio = null, wakeLock = null, kp = null;
   /* голосовий тренер-співрозмовник: розмова, запис, сеанс Gemini Live, потоковий звук; gen — номер дії: нова дія глушить усі попередні */
   const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1, gen: 0, help: false, warn: false, photo: null };  // photo — фото до наступного питання { b64, src }
@@ -1077,10 +1077,13 @@ window.APP_START = () => {
     if (typeof VIZ === 'undefined') return '';
     const k = vzKey(it); if (!k) return '';
     const open = vizOpen(d, it);
-    return `<details class="vz3" data-k="${k}"${open ? ' open' : ''}><summary><b>${LL('Як рухатись — 3D', 'How to move — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>
-      <div class="vzb"><div class="vzc"></div><div class="vzcap"><span class="vzph"></span><button type="button" class="ic" data-vz="pp" data-tip="${esc(LL('Пауза або знову грати. Пальцем по картинці — повернути вигляд.', 'Pause or play again. Drag the picture to turn the view.'))}">⏸</button></div><div class="vznote"></div>
+    return `<details class="vz3" data-k="${k}"${open ? ' open' : ''}><summary><b>${LL('Як рухатись — 3D', 'How to move — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>${vizInner()}</details>`;
+  }
+  /* начинка блоку 3D: полотно, підпис фази, пауза, режими й стилі (картка «Тренер» і з 3.27.3 — «Як виконувати тести») */
+  function vizInner() {
+    return `<div class="vzb"><div class="vzc"></div><div class="vzcap"><span class="vzph"></span><button type="button" class="ic" data-vz="pp" data-tip="${esc(LL('Пауза або знову грати. Пальцем по картинці — повернути вигляд.', 'Pause or play again. Drag the picture to turn the view.'))}">⏸</button></div><div class="vznote"></div>
       <div class="seg vzm"><button type="button" data-vzm="move" data-tip="${esc(LL('Рух: як виконувати — підпис показує фазу.', 'Motion: how to do it — the caption shows the phase.'))}">${LL('Рух', 'Motion')}</button><button type="button" data-vzm="mus" data-tip="${esc(LL('Мʼязи, що працюють, — підсвічені охрою.', 'The working muscles are highlighted in ochre.'))}">${LL('Мʼязи', 'Muscles')}</button><button type="button" data-vzm="bad" data-tip="${esc(LL('Найчастіша помилка — червоним поверх правильного руху.', 'The most common mistake — in red over the correct movement.'))}">${LL('Помилка', 'Mistake')}</button></div>
-      <div class="seg vzs"><button type="button" data-vzs="clay" data-tip="${esc(LL('Манекен — суцільне тіло, рух видно найчіткіше.', 'Mannequin — a solid body, the movement is easiest to see.'))}">${LL('Манекен', 'Mannequin')}</button><button type="button" data-vzs="xray" data-tip="${esc(LL('Анатомія — напівпрозоре тіло, мʼязи видно всередині.', 'Anatomy — a see-through body with the muscles inside.'))}">${LL('Анатомія', 'Anatomy')}</button></div></div></details>`;
+      <div class="seg vzs"><button type="button" data-vzs="clay" data-tip="${esc(LL('Манекен — суцільне тіло, рух видно найчіткіше.', 'Mannequin — a solid body, the movement is easiest to see.'))}">${LL('Манекен', 'Mannequin')}</button><button type="button" data-vzs="xray" data-tip="${esc(LL('Анатомія — напівпрозоре тіло, мʼязи видно всередині.', 'Anatomy — a see-through body with the muscles inside.'))}">${LL('Анатомія', 'Anatomy')}</button></div></div>`;
   }
   function vizAttach(d) {
     if (typeof VIZ === 'undefined') return;
@@ -1366,10 +1369,11 @@ window.APP_START = () => {
     return `<div class="grid2 kcal" style="margin-top:10px" data-tip="${esc(KC_TIP())}"><div class="stat"><b>≈ ${k.total}</b><span>${LL('ккал за тренування', 'kcal this workout')}</span></div><div class="stat"><b>≈ ${k.active}</b><span>${LL('ккал понад спокій', 'kcal above rest')}</span></div></div>`;
   }
   /* тиждень (з 3.21.9): тренування, хвилини й калорії за всі тренування цього тижня — на головній, під кільцем тижня */
+  /* з 3.27.3 — без кількості тренувань: її вже показує кільце тижня поруч (слово Alexа 25.10: «Роби усе крім 2D»; дубль — огляд 25.10) */
   function weekKcal() {
     const p = P(), wk = ENGINE.weekKey(today()), ss = p.sessions.filter((x) => ENGINE.weekKey(x.date) === wk); if (!ss.length) return '';
     const k = ENGINE.kcalSum(p, ss), mins = ss.reduce((a, x) => a + (x.mins || 0), 0);
-    return `<p class="small muted wkcal" style="text-align:center" data-tip="${esc(KC_TIP())}">${LL('Цього тижня: ', 'This week: ')}${plural(ss.length, LL('тренування', 'workout'), LL('тренування', 'workouts'), LL('тренувань', 'workouts'))} · ${mins}${LL(' хв', ' min')}${k ? ' · ≈ ' + fmt(k.total) + LL(' ккал', ' kcal') : ''}</p>`;
+    return `<p class="small muted wkcal" style="text-align:center" data-tip="${esc(KC_TIP())}">${LL('Цього тижня: ', 'This week: ')}${mins}${LL(' хв', ' min')}${k ? ' · ≈ ' + fmt(k.total) + LL(' ккал', ' kcal') : ''}</p>`;
   }
   function rSummary() {
     const p = P(), prog = G(), s = p.sessions.find((x) => x.id === ui.summary); if (!s) { view = 'home'; return render(); }
@@ -1471,7 +1475,7 @@ window.APP_START = () => {
       ['.slot.next', LL('Наступне тренування — торкніться, щоб почати. ✓ — зроблені: торкніться, щоб переглянути чи виправити.', "Your next workout — tap to start. ✓ marks finished ones: tap to view or edit them.")]],
     progress: [['#app > .seg', LL('Вправи — графік кожної вправи. Мʼязи — скільки підходів отримав кожен мʼяз. Тіло — вага й заміри. Звіт — місяць: що змінилось і віхи.', "Exercises: a chart for each exercise. Muscles: how many sets each muscle got. Body: weight and measurements. Report: your month — what changed and milestones.")],
       ['#exSel', LL('Оберіть вправу — графік покаже, як ростуть вага чи повторення; ◎ — рекорд.', "Pick an exercise — the chart shows how your weight or reps grow; ◎ marks a PR.")]],
-    body: [['#app > .seg', () => LL('Заміри — вага й обʼєми. Фото — фото тіла, лише в цьому телефоні.', "Measurements: weight and body measurements. Photos: body photos, kept only on this phone.") + (G().tests ? LL(' Тести — прості контрольні вправи: видно, як ростуть сила й рівновага.', " Tests: simple check-in exercises that show how your strength and balance improve.") : '')],
+    body: [['#app > .seg', () => (G().tests ? LL('Тести — раз на місяць: сила, рівновага й витривалість; до кожного — 3D. ', 'Tests: once a month — strength, balance and endurance; each has a 3D guide. ') : '') + LL('Заміри — вага й обʼєми. Фото — фото тіла, лише в цьому телефоні.', "Measurements: weight and body measurements. Photos: body photos, kept only on this phone.")],
       ['[data-act="measAdd"]', LL('«+ Додати» — записати вагу (краще зранку натщесерце, хоч щодня) чи обʼєм (раз на тиждень).', "“+ Add” logs your weight (best in the morning before eating, even daily) or a measurement (once a week).")]],
     more: [['#mVoice label:has(#voiceOn)', LL('Голос тренера: увімкнути чи вимкнути, обрати голос, характер і скільки говорити.', "The coach’s voice: turn it on or off, choose the voice, the personality, and how much it talks.")],
       ['#mWork .seg', LL('Екран тренування: тренер крок за кроком чи список усіх вправ.', "Workout screen: the step-by-step coach or a list of all exercises.")],
@@ -1528,20 +1532,24 @@ window.APP_START = () => {
       <div class="tbx" style="${below ? 'top:' + Math.round(r.bottom + 14) + 'px' : 'bottom:' + Math.round(H - r.top + 14) + 'px'}"><p>${esc(typeof steps[k][1] === 'function' ? steps[k][1]() : steps[k][1])}</p>
       <div class="sp"><span class="tiny">${pos}${LL(` з `, ` of `)}${vis.length}${LL(`</span><span class="row"><button type="button" class="sm ghost" data-tour="skip">Пропустити</button><button type="button" class="sm pri" data-tour="next">`, `</span><span class="row"><button type="button" class="sm ghost" data-tour="skip">Skip</button><button type="button" class="sm pri" data-tour="next">`)}${pos === vis.length ? LL('Зрозуміло', "Got it") : LL('Далі', "Next")}</button></span></div></div>`;
     document.body.appendChild(ov);
+    /* з 3.27.3: поки навчання відкрите, сторінка під затемненням не прокручується — рамка рахується раз, і свайп пальцем зсував сторінку під нею
+       (Safari iPhone, 25.10: на 389 точок, рамка обвела чуже; tests/browser/iostour.js); поворот чи зміна розміру й так закривають навчання (не позначаючи «показано») */
+    const hold = (e) => e.preventDefault();
+    ov.addEventListener('touchmove', hold, { passive: false }); ov.addEventListener('wheel', hold, { passive: false });
     /* дотик повз підказку теж закриває навчання — щоб екран ніколи не «завис» під затемненням */
     ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) { if (!e.target.closest('.tbx')) { ov.remove(); S().tour[id] = true; save(); } return; } if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
   }
   function whatsNew() {
     openSheet(`${LL(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
+        <li style="display:block"><b>📏 Тести форми</b><div class="small muted">«Тіло» → «Тести», раз на місяць (тижні 1, 4, 8, 12): свій набір за віком і здоровʼям — віджимання, вставання з крісла, бічна планка, від 51 — рівновага, від 46 — сісти й встати з підлоги, ходьба 2 км чи 6 хв; до кожного — короткий рядок і 3D. Пульс у спокої й талія / зріст — без дня тестів; у залі — сила з журналу. З тиском чи серцем тестів «до відмови» немає.</div></li>
         <li style="display:block"><b>📅 5–6 днів: «верх / низ»</b><div class="small muted">В анкеті й у «Більше» → «Дні тренувань» можна обрати 5 або 6 днів: тренування «Верх тіла» і «Низ тіла» по черзі, коротші, кожна група мʼязів 2–3 рази на тиждень, тижневий обсяг — не менший, ніж на 4 дні. Вправи ті самі. Для 55+ і з тиском чи серцем — як і було, до 4 днів.</div></li>
         <li style="display:block"><b>☀️ Готовність до тренування</b><div class="small muted">У день тренування, коли відповіли на ранкове питання, — під відповіддю: самопочуття й чи відпочили мʼязи сьогоднішнього тренування. Погано чи так собі — порада «Коротка версія» й правило застуди. Лише показ: план не змінюється.</div></li>
-        <li style="display:block"><b>💪 Тест віджимань</b><div class="small muted">Тепер у кожній програмі: раз на місяць (тижні 1, 4, 8, 12) — «Тіло» → «Тести». Головне — щоб число росло. З тиском чи серцем тестів «до відмови» немає.</div></li>
         <li style="display:block"><b>🔀 Новий варіант на початку фази</b><div class="small muted">На тижнях 5 і 9 тренер може запропонувати складніший варіант вправи, яку ви вже впевнено робите, — лише порада, вибір ваш.</div></li>
         <li style="display:block"><b>⏱ Коротка версія ≈ 20 хв</b><div class="small muted">Мало часу — «Інше» → «Коротка версія»: кожна велика група мʼязів — по вправі, 1–2 підходи. Краще коротке тренування, ніж пропуск; план іде далі.</div></li>
         <li style="display:block"><b>🛡 Серія із запасним тижнем</b><div class="small muted">Кожні 4 тижні поспіль з тренуваннями дають запасний (не більше одного): тиждень без тренувань забирає його, і серія не рветься.</div></li>
         <li style="display:block"><b>🔁 Повернення після пропуску</b><div class="small muted">Пропустили тренування за планом і повернулись — «З поверненням!», віха й слово тренера. Пропущене не надолужуємо: далі — за планом.</div></li>
-        <li style="display:block"><b>💪 Відновлення мʼязів</b><div class="small muted">На головній — які мʼязи ще відпочивають (до 48 год від тренування) і які готові; 3D — спереду й ззаду. Лише показ: план не змінюється.</div></li>
+        <li style="display:block"><b>💪 Відновлення мʼязів</b><div class="small muted">На головній — 3D спереду й ззаду: які мʼязи ще відпочивають (до 48 год від тренування) і які готові. Лише показ: план не змінюється.</div></li>
         <li style="display:block"><b>🌱 Новий старт</b><div class="small muted">На початку тижня й місяця та після пропуску — на головній і голосом тренера.</div></li>
         <li style="display:block"><b>☀️ Ранкове питання</b><div class="small muted">Як спали й почуваєтесь — одним дотиком; за місяць — у «Прогрес» → «Звіт». Тренеру не передається, план не змінює.</div></li>
         <li style="display:block"><b>📖 Урок дня</b><div class="small muted">Одна порада з «Порадника» вашої програми або термін зі словника, щодня інша.</div></li>
@@ -1555,9 +1563,9 @@ window.APP_START = () => {
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">`, `<div class="sp"><b>What the app can do</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
       <ul class="list">
+        <li style="display:block"><b>📏 Fitness tests</b><div class="small muted">“Body” → “Tests,” once a month (weeks 1, 4, 8, 12): your own set by age and health — push-ups, chair stands, side plank, balance from 51, sitting and rising from the floor from 46, a 2 km or 6-minute walk; each has a short line and a 3D guide. Resting pulse and waist-to-height — no test day needed; at the gym — strength from your log. With blood pressure or heart issues, there are no all-out tests.</div></li>
         <li style="display:block"><b>📅 5–6 days: upper / lower</b><div class="small muted">In the questionnaire and in “More” → “Workout days” you can pick 5 or 6 days: “Upper body” and “Lower body” workouts in turn, shorter, each muscle group 2–3 times a week, weekly volume no less than on 4 days. Same exercises. For 55+ and with blood pressure or heart issues — up to 4 days, as before.</div></li>
         <li style="display:block"><b>☀️ Workout readiness</b><div class="small muted">On a workout day, once you’ve answered the morning check-in — below your answer: how you feel and whether today’s workout muscles have rested. Feeling poorly or so-so — a tip about the short version and the cold rule. Display only: your plan doesn’t change.</div></li>
-        <li style="display:block"><b>💪 Push-up test</b><div class="small muted">Now in every program: once a month (weeks 1, 4, 8, 12) — “Body” → “Tests.” What matters is that the number goes up. With blood pressure or heart issues, there are no all-out tests.</div></li>
         <li style="display:block"><b>🔀 A new variation at the start of a phase</b><div class="small muted">In weeks 5 and 9, the coach may suggest a harder variation of an exercise you already do confidently — just a suggestion, the choice is yours.</div></li>
         <li style="display:block"><b>⏱ Short version ≈ 20 min</b><div class="small muted">Short on time — “Other” → “Short version”: one exercise for each major muscle group, 1–2 sets. A short workout beats skipping; the plan carries on.</div></li>
         <li style="display:block"><b>🛡 Streak with a spare week</b><div class="small muted">Every 4 weeks in a row with workouts earn a spare (one at most): a week without workouts uses it up, and the streak doesn’t break.</div></li>
@@ -2163,7 +2171,7 @@ window.APP_START = () => {
     const reds = p.sessions.slice(-3).filter((s) => s.ready === 'r').length;
     if (reds >= 2) out.push(LL('<div class="note b">Спина болить уже кілька тренувань поспіль. Варто показатися неврологу чи ортопеду — з МРТ.</div>', "<div class=\"note b\">Your back has hurt for several workouts in a row. It’s worth seeing a neurologist or an orthopedist — with an MRI.</div>"));
     const wk = ENGINE.planFor(prog, nextN()).week;
-    if (prog.tests && [1, 4, 8, 12].indexOf(wk) >= 0 && !(p.body.tests || []).some((t) => Date.now() - tms(t.d) < 21 * 864e5)) out.push(Array.isArray(prog.tests) && prog.tests.length === 1 && prog.tests[0] === 'push' ? LL('<div class="note w">Цього тижня — тест віджимань: «Тіло» → «Тести».</div>', "<div class=\"note w\">This week — the push-up test: “Body” → “Tests”.</div>") : LL('<div class="note w">Цього тижня — тести готовності до старіння: «Тіло» → «Тести».</div>', "<div class=\"note w\">This week — aging-readiness tests: “Body” → “Tests”.</div>"));
+    if (prog.tests && [1, 4, 8, 12].indexOf(wk) >= 0 && !(p.body.tests || []).some((t) => Date.now() - tms(t.d) < 21 * 864e5)) out.push(LL('<div class="note w">Цього тижня — тести форми: «Тіло» → «Тести».</div>', '<div class="note w">This week — fitness tests: “Body” → “Tests”.</div>'));  // з 3.27.3 тестів у кожного кілька (до того — «тест віджимань» / «тести готовності до старіння»)
     if (p.sessions.length >= 3 && (!DB.lastBackup || Date.now() - tms(DB.lastBackup) > 14 * 864e5)) out.push(LL('<div class="note w">Резервної копії не було понад 2 тижні — «Більше» → «Зберегти резервну копію».</div>', "<div class=\"note w\">No backup in over 2 weeks — “More” → “Save backup”.</div>"));
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     if (!standalone && !p.sessions.length) out.push(installNote(LL('Спершу встановіть', "Install it first")));
@@ -2209,7 +2217,7 @@ window.APP_START = () => {
         ${d ? '' : LL('<div class="hbtn"><button type="button" class="pri big" data-act="start">Почати</button><button type="button" class="ghost big" data-act="other">Інше</button></div>', "<div class=\"hbtn\"><button type=\"button\" class=\"pri big\" data-act=\"start\">Start</button><button type=\"button\" class=\"ghost big\" data-act=\"other\">Other</button></div>")}</div>
       ${kHomeCard()}${moodHome()}${dailyCard()}${lessonHome()}
       ${S().tour.tips ? '' : LL('<div class="card"><div class="sp"><div><b>💡 Підказка на кожній кнопці</b><div class="small muted">Затисніть будь-яку кнопку чи напис на 1 секунду — зʼявиться коротке пояснення.</div></div><button type="button" class="sm pri" data-act="tipsOk">Зрозуміло</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>💡 Tips on every button</b><div class=\"small muted\">Press and hold any button or label for 1 second to see a short explanation.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"tipsOk\">Got it</button></div></div>")}
-      ${!S().tour.v5 ? LL('<div class="card"><div class="sp"><div><b>Нове: серія, відновлення, урок дня</b><div class="small muted">Запасний тиждень для серії, мапа відновлення мʼязів (і 3D), урок дня, ранкове питання, виклик місяця, підсумок тижня й року.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: streaks, recovery, daily lesson</b><div class=\"small muted\">A spare week for your streak, a muscle recovery map (with 3D), a daily lesson, a morning check-in, a monthly challenge, weekly and yearly summaries.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>") : S().tour.v4 ? '' : LL('<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: ask the coach</b><div class=\"small muted\">Tap the mic button at the top to ask by voice, text, or photo — about your program, weights, and form.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>")}
+      ${!S().tour.v5 ? LL('<div class="card"><div class="sp"><div><b>Нове: серія, відновлення, урок дня</b><div class="small muted">Запасний тиждень для серії, відновлення мʼязів у 3D, урок дня, ранкове питання, виклик місяця, підсумок тижня й року.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: streaks, recovery, daily lesson</b><div class=\"small muted\">A spare week for your streak, muscle recovery in 3D, a daily lesson, a morning check-in, a monthly challenge, weekly and yearly summaries.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>") : S().tour.v4 ? '' : LL('<div class="card"><div class="sp"><div><b>Нове: запитайте тренера</b><div class="small muted">Кнопка з мікрофоном угорі: питання голосом, текстом чи з фото — про вашу програму, вагу й техніку.</div></div><button type="button" class="sm pri" data-act="whatsnew">Що нового</button></div></div>', "<div class=\"card\"><div class=\"sp\"><div><b>New: ask the coach</b><div class=\"small muted\">Tap the mic button at the top to ask by voice, text, or photo — about your program, weights, and form.</div></div><button type=\"button\" class=\"sm pri\" data-act=\"whatsnew\">What’s new</button></div></div>")}
       <div class="grid3"><div class="stat" style="display:flex;justify-content:center">${CHARTS.ring(thisWeek, prog.perWeek || 3, thisWeek + '/' + (prog.perWeek || 3), LL('тиждень', "week"), true)}</div>
         <div class="stat stk" data-tip="${esc(SPARE_TIP(si))}"><b>${streak}${si.spare ? '<small class="spare" aria-label="' + LL('є запасний тиждень', 'spare week saved') + '"> 🛡</small>' : ''}${LL(`</b><span>тижнів поспіль</span></div><div class="stat"><b>`, `</b><span>weeks in a row</span></div><div class="stat"><b>`)}${mprs}${LL(`</b><span>рекордів за місяць</span></div></div>
       `, `</b><span>PRs this month</span></div></div>
@@ -2366,9 +2374,66 @@ window.APP_START = () => {
   /* тести цієї програми (з 3.25.0): true — усі (жіноча база), масив — лише ці; поле — за початком ключа (bal → balL, balR) */
   const testOn = (k) => { const t = G().tests; return t === true || (Array.isArray(t) && t.some((x) => k.indexOf(x) === 0)); };
   /* віджимання за раз (пункт 19): Yang та ін., JAMA Network Open 2019 — 1 104 активні чоловіки, 10 років */
-  const pushNote = () => (testOn('push') ? LL(' Віджимання за раз — простий показник здоровʼя: у 10-річному дослідженні 1 104 активних чоловіків у тих, хто робив понад 40, серцевих подій було на 96 % менше, ніж у тих, хто менше 10 (звʼязок, не доказ причини).', ' Push-ups in one go are a simple health marker: in a 10-year study of 1,104 active men, those who did more than 40 had 96% fewer heart events than those who did fewer than 10 (an association, not proof of cause).') : '');
-  const TESTS = [['chair', LL('Вставання з крісла за 30 с', "30-second chair stand"), LL('разів', "reps")], ['balL', LL('Стійка на одній нозі — ліва', "Single-leg stand — left"), LL('с', "sec")], ['balR', LL('Стійка на одній нозі — права', "Single-leg stand — right"), LL('с', "sec")],
-    ['spL', LL('Бічна планка — ліворуч', "Side plank — left"), LL('с', "sec")], ['spR', LL('Бічна планка — праворуч', "Side plank — right"), LL('с', "sec")], ['push', LL('Віджимання', "Push-ups"), LL('разів', "reps")], ['carL', LL('Валізна прогулянка — ліва рука', "Suitcase carry — left hand"), LL('с', "sec")], ['carR', LL('Валізна прогулянка — права рука', "Suitcase carry — right hand"), LL('с', "sec")]];
+  /* тести форми (з 3.27.3 — набір за віком, здоровʼям і місцем: generator.js → tests; слово Alexа 26.10 «Так» на запропонований набір).
+     «Як виконувати тести»: кожен тест — назва й один короткий рядок (слово Alexа 25.10: «максимально короткий опис залишити як зараз для віджимання»), дотик — 3D
+     («потрібна 3Д модель для кожного тесту в тому місці де натискаєш „як виконувати тест“») і що означає число. Норми — лише там, де їх дає першоджерело, інакше — особистий ріст.
+     Варіант віджимань і бічної планки записується (pushV, spV): інакше числа різних місяців не порівняти */
+  const TV = () => {
+    if (ui.tv && ui.tv.p === DB.active) return ui.tv;
+    const last = (k) => { const t = (P().body.tests || []).filter((x) => x[k]).sort((a, b) => (a.d < b.d ? 1 : -1))[0]; return t ? t[k] : null; };
+    ui.tv = { p: DB.active, pushV: last('pushV') || (G().sex === 'f' ? 'k' : 't'), spV: last('spV') || 'f' }; return ui.tv;
+  };
+  /* 30 с вставань з крісла: менше за поріг — «нижче середнього» для віку й статі, частіше падіння (CDC STEADI за Rikli, Jones 1999; лише 60–94 роки) */
+  const CHAIR_CDC = [[60, 14, 12], [65, 12, 11], [70, 12, 10], [75, 11, 10], [80, 10, 9], [85, 8, 8], [90, 7, 4]];
+  const chairThr = (age, f) => { if (!(age >= 60 && age <= 94)) return null; const r = CHAIR_CDC.filter((x) => age >= x[0]).pop(); return { from: r[0], to: r[0] + 4, n: f ? r[2] : r[1] }; };
+  /* що означає число: віджимання — Yang 2019 (лише чоловіки); крісло — CDC; одна нога — Araújo 2022, BJSM (51–75 років); підлога — Brito 2014 (51–80 років);
+     ходьба — Kodama 2009, JAMA (витривалість); формули VO₂max (UKK) і норми 6 хв (Enright 1998) не показуємо — першоджерело формули UKK платне, а відкрита стаття
+     застосовує «жіночу» формулу до вибірки з 16 чоловіків; до норм 6 хв у 2020 вийшла поправка, зміст якої не вдалося звірити (CLAUDE.md §11) */
+  const testNorm = (k) => {
+    const age = Number((P().me || {}).age), f = G().sex === 'f';
+    if (k === 'push') return f ? LL('Для вас це особистий показник: дослідження звʼязку віджимань із серцем проводили лише на чоловіках.', 'This is your personal marker: the study linking push-ups to heart health included only men.')
+      : LL('Віджимання за раз — простий показник здоровʼя: у 10-річному дослідженні 1 104 активних чоловіків у тих, хто робив понад 40, серцевих подій було на 96 % менше, ніж у тих, хто менше 10 (звʼязок, не доказ причини).', 'Push-ups in one go are a simple health marker: in a 10-year study of 1,104 active men, those who did more than 40 had 96% fewer heart events than those who did fewer than 10 (an association, not proof of cause).');
+    if (k === 'chair') { const c = chairThr(age, f); return c ? LL(`Для ${f ? 'жінок' : 'чоловіків'} ${c.from}–${c.to} років менше ${c.n} разів — нижче середнього (CDC): частіше падіння.`, `For ${f ? 'women' : 'men'} aged ${c.from}–${c.to}, fewer than ${c.n} stands is below average (CDC): falls are more likely.`) : LL('Норми CDC — для 60–94 років; для вас це особистий показник.', 'CDC norms are for ages 60–94; for you it’s a personal marker.'); }
+    if (k === 'bal') return age >= 51 ? LL('Поріг — 10 с: серед 1 702 людей 51–75 років ті, хто не встояв 10 с, мали вищий ризик смерті (×1,84; звʼязок, не доказ причини).', 'The threshold is 10 sec: among 1,702 people aged 51–75, those who couldn’t stand 10 sec had a higher risk of death (×1.84; an association, not proof of cause).')
+      : LL('Для вас це особистий показник: поріг 10 с перевірено у 51–75 років.', 'For you it’s a personal marker: the 10-sec threshold was studied at ages 51–75.');
+    if (k === 'srt') return LL('Серед 2 002 людей 51–80 років кожен бал більше — на 21 % краща виживаність (звʼязок, не доказ причини).', 'Among 2,002 people aged 51–80, each extra point meant 21% better survival (an association, not proof of cause).');
+    if (k === 'walk' || k === 'w6') return LL('Витривалість — найсильніший показник здоровʼя: +1 MET — на 13 % нижча смертність (33 дослідження, ≈ 103 тис. людей). Тут — ваш ріст: ', 'Endurance is the strongest health marker: +1 MET means 13% lower mortality (33 studies, ≈ 103,000 people). Here you track your progress: ')
+      + (k === 'walk' ? LL('той самий маршрут швидше при тому самому чи нижчому пульсі.', 'the same route faster at the same or a lower pulse.') : LL('далі за ті самі 6 хв.', 'farther in the same 6 minutes.'));
+    return '';
+  };
+  /* [тест, назва, короткий рядок, 3D-анімація] — порядок екрана */
+  const TEST_HOW = () => { const tv = TV(); return [
+    ['push', LL('Віджимання', 'Push-ups'), LL('З колін або з носків, без провисання.', 'From the knees or the toes, no sagging.'), tv.pushV === 't' ? 'pushup:t' : 'pushup'],
+    ['chair', LL('Вставання з крісла за 30 с', '30-second chair stand'), LL('Руки схрещені на грудях; скільки разів повністю встали за 30 с.', 'Arms crossed on your chest; how many full stands in 30 sec.'), 't_chair'],
+    ['sp', LL('Бічна планка', 'Side plank'), LL('З колін або з ніг, доки тіло рівне; на кожен бік.', 'From the knees or the feet, while your body stays straight; each side.'), tv.spV === 'k' ? 'sideplank' : 'sideplank:f'],
+    ['bal', LL('Стійка на одній нозі', 'Single-leg stand'), LL('Руки на поясі, до 60 с на кожній нозі; поруч — стіна.', 'Hands on hips, up to 60 sec on each leg; a wall nearby.'), 't_bal'],
+    ['srt', LL('Сісти й встати з підлоги', 'Sit and rise from the floor'), LL('Поруч — людина. 10 балів: −1 за кожну опору (рука, коліно, лікоть чи бік ноги), −½ за хитання.', 'With someone nearby. 10 points: −1 for each support (hand, knee, forearm or side of the leg), −½ for wobbling.'), 't_srt'],
+    ['car', LL('Валізна прогулянка', 'Suitcase carry'), LL('Та сама вага щоразу, секунди на кожну руку.', 'Same weight every time, seconds for each hand.'), 'suitcase'],
+    ['walk', LL('2 км ходьби', '2 km walk'), LL('Стадіон — 5 кіл; якомога швидше, не біжучи. Одразу — пульс: удари за 15 с × 4.', 'A track — 5 laps; as fast as you can without running. Right after — your pulse: beats in 15 sec × 4.'), 't_walk'],
+    ['w6', LL('Ходьба 6 хв', '6-minute walk'), LL('У своєму темпі по відміряному колу; можна сповільнитись і зупинитись. З тиском чи серцем — з дозволу лікаря.', 'At your own pace on a measured loop; you may slow down and stop. With blood pressure or heart issues — with your doctor’s OK.'), 't_walk']]; };
+  /* поля запису (k — поле, l — підпис, u — одиниця); 2 км — хвилини й секунди, у записі — секунди (walkT) */
+  const TESTS = [['push', LL('Віджимання', "Push-ups"), LL('разів', "reps")], ['chair', LL('Вставання з крісла за 30 с', "30-second chair stand"), LL('разів', "reps")],
+    ['spL', LL('Бічна планка — ліворуч', "Side plank — left"), LL('с', "sec")], ['spR', LL('Бічна планка — праворуч', "Side plank — right"), LL('с', "sec")],
+    ['balL', LL('Стійка на одній нозі — ліва', "Single-leg stand — left"), LL('с', "sec")], ['balR', LL('Стійка на одній нозі — права', "Single-leg stand — right"), LL('с', "sec")],
+    ['srt', LL('Сісти й встати з підлоги', 'Sit and rise from the floor'), LL('балів з 10', 'points of 10')],
+    ['carL', LL('Валізна прогулянка — ліва рука', "Suitcase carry — left hand"), LL('с', "sec")], ['carR', LL('Валізна прогулянка — права рука', "Suitcase carry — right hand"), LL('с', "sec")],
+    ['walkM', LL('2 км ходьби — хвилини', '2 km walk — minutes'), LL('хв', 'min')], ['walkS', LL('2 км ходьби — секунди', '2 km walk — seconds'), LL('с', 'sec')],
+    ['walkHR', LL('Пульс одразу після 2 км', 'Pulse right after 2 km'), LL('уд/хв', 'bpm')], ['w6', LL('Ходьба 6 хв — відстань', '6-minute walk — distance'), LL('м', 'm')]];
+  /* підказки на затисканні нових полів (з 3.27.3; старі — у tips.js) */
+  const TEST_TIP = () => ({ srt: LL('Бали за тест «сісти й встати з підлоги»: 10 мінус 1 за кожну опору, мінус ½ за хитання.', 'Score for sitting and rising from the floor: 10 minus 1 for each support, minus ½ for wobbling.'),
+    walkM: LL('Скільки повних хвилин тривали 2 км.', 'How many full minutes the 2 km took.'), walkS: LL('І скільки секунд понад хвилини.', 'And how many seconds beyond the minutes.'),
+    walkHR: LL('Пульс одразу після фінішу: удари за 15 с × 4.', 'Pulse right after the finish: beats in 15 sec × 4.'), w6: LL('Скільки метрів пройшли за 6 хвилин.', 'How many meters you walked in 6 minutes.') });
+  const TEST_LIM = { push: [0, 300], chair: [0, 80], spL: [0, 900], spR: [0, 900], balL: [0, 300], balR: [0, 300], srt: [0, 10], carL: [0, 900], carR: [0, 900], walkM: [5, 90], walkS: [0, 59], walkHR: [40, 230], w6: [30, 1500] };
+  const mmss = (sec) => Math.floor(sec / 60) + ':' + String(Math.round(sec % 60)).padStart(2, '0');
+  /* 3D у «Як виконувати тести»: кожен тест — свій блок, відкритий — один (полотно одне на застосунок) */
+  function testViz() {
+    if (typeof VIZ === 'undefined') return;
+    const all = [...app.querySelectorAll('details.vzt')];
+    const o = { t: TR, esc, mus: (ids) => ids.map(mName).join(' · ').toLowerCase(), style: () => (S().vz3 === 'xray' ? 'xray' : 'clay'), setStyle: (v) => { S().vz3 = v; save(); },
+      L: { right: LL('правий бік', 'right side'), left: LL('лівий бік', 'left side'), work: LL('Працюють: ', 'Working: '), red: LL(' — червоним', ' — shown in red'),
+        wait: LL('Завантаження…', 'Loading…'), fail: LL('3D недоступне на цьому пристрої — опис вище.', '3D isn’t available on this device — see the description above.'), play: LL('Грати', 'Play'), pause: LL('Пауза', 'Pause') } };
+    all.forEach((det) => { VIZ.attach(det, o); det.addEventListener('toggle', () => { if (det.open) all.forEach((x) => { if (x !== det && x.open) x.open = false; }); }); });
+  }
   let photoUrls = [];
   /* ---------- Кухня (з 3.20.0, слово Alexа 23.10: «щоб це була моя кухня всередині додатку»; «не брехала та не заводила в оману») ----------
      Розрахунки — KITCHEN (app/kitchen.js), склад — лише база USDA (app/food_db.js, звірка tools/food_check.py) або етикетка людини.
@@ -3034,21 +3099,23 @@ window.APP_START = () => {
     const p = P(), prog = G(); if (!p.sessions.length) return '';
     const rec = ENGINE.recovery(prog, p.sessions, Date.now()), rest = Object.keys(rec).filter((m) => rec[m].rest).sort((a, b) => rec[b].left - rec[a].left);
     if (!Object.keys(rec).length) return '';
-    const v = {}, by = {}; rest.forEach((m) => { v[m] = rec[m].left; (by[rec[m].left] = by[rec[m].left] || []).push(mName(m).toLowerCase()); });
+    const by = {}; rest.forEach((m) => { (by[rec[m].left] = by[rec[m].left] || []).push(mName(m).toLowerCase()); });
     const txt = rest.length ? Object.keys(by).sort((a, b) => b - a).map((h) => LL('ще ≈ ', '≈ ') + h + LL(' год: ', ' h left: ') + by[h].join(', ')).join('; ') + LL('. Решта — готові.', '. The rest are ready.')
       : LL('Усі мʼязи відпочили — від тренувань минуло понад ' + ENGINE.REST_H + ' год.', 'All muscles have rested — over ' + ENGINE.REST_H + ' hours since your workouts.');
+    /* з 3.27.3 — лише 3D, завжди відкрите (слово Alexа 25.10: «на головній у блоці "Відновлення мязів" потрібно прибрати мінімалістичну картинку манекена, а 3Д модель
+       залишити і щоб була постійно розгорнута без згортання»; «Роби усе крім 2D - воно не потрібне як дубль, зараз у всіх телефони сучасні»): до 3.27.3 — 2D-мапа і 3D за «▾»;
+       3D недоступне — лишається список нижче (той самий зміст) */
     return `<div class="card rec"><div class="sp"><b data-tip="${esc(REC_TIP())}">${LL('💪 Відновлення мʼязів', '💪 Muscle recovery')}</b></div>
-      <div class="smus">${CHARTS.bodyMap(v, ENGINE.REST_H, G().sex)}</div><p class="small" style="margin:6px 0 0">${rest.length ? LL('Відпочивають ', 'Resting, ') : ''}${esc(txt)}</p>
-      ${typeof VIZ === 'undefined' ? '' : `<details class="vz3 vzr"${ui.rec3d ? ' open' : ''}><summary><b>${LL('3D — спереду й ззаду', '3D — front and back')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>
-        <div class="vzb"><div class="vzc"></div><p class="tiny muted" style="margin:6px 0 0">${LL('Охра — відпочивають (що яскравіше, то свіжіше тренування), решта — готові.', 'Ochre — resting (the brighter, the more recent the workout); the rest are ready.')}</p></div></details>`}
-      <p class="tiny muted" style="margin:6px 0 0">${LL('Що темніше — то менше часу минуло. Орієнтир ACSM — щонайменше 48 год між тренуваннями тих самих мʼязів. Лише показ: план не змінюється.', 'The darker, the less time has passed. ACSM guideline — at least 48 hours between workouts for the same muscles. Display only: your plan doesn’t change.')}</p></div>`;
+      ${typeof VIZ === 'undefined' ? '' : `<div class="vz3 vzr"><p class="tiny muted" style="margin:0 0 6px">${LL('Охра — відпочивають (що яскравіше, то свіжіше тренування), решта — готові. Пальцем можна повернути вигляд.', 'Ochre — resting (the brighter, the more recent the workout); the rest are ready. Drag to turn the view.')}</p><div class="vzc"></div></div>`}
+      <p class="small" style="margin:6px 0 0">${rest.length ? LL('Відпочивають ', 'Resting, ') : ''}${esc(txt)}</p>
+      <p class="tiny muted" style="margin:6px 0 0">${LL('Орієнтир ACSM — щонайменше 48 год між тренуваннями тих самих мʼязів. Лише показ: план не змінюється.', 'ACSM guideline — at least 48 hours between workouts for the same muscles. Display only: your plan doesn’t change.')}</p></div>`;
   }
   const REC_TIP = () => LL('Скільки годин минуло від останнього тренування кожного мʼяза (основний мʼяз вправи — повністю, допоміжний — наполовину). До 48 год — «відпочиває»: ACSM радить щонайменше 48 год між тренуваннями тих самих мʼязів. Це орієнтир, не діагноз: план від цього не змінюється.', 'How many hours have passed since each muscle’s last workout (an exercise’s main muscle fully, a secondary one by half). Under 48 hours — “resting”: ACSM recommends at least 48 hours between workouts for the same muscles. A guideline, not a diagnosis: your plan doesn’t change.');
   function recAttach() {
     if (typeof VIZ === 'undefined' || !VIZ.rec) return;
-    const det = app.querySelector('details.vzr'); if (!det) { VIZ.rec(null); return; }
-    VIZ.rec(det, { rec: ENGINE.recovery(G(), P().sessions, Date.now()), restH: ENGINE.REST_H, esc, onToggle: (open) => { ui.rec3d = open; },
-      L: { wait: LL('Завантаження…', 'Loading…'), fail: LL('3D недоступне на цьому пристрої — мапа вище показує те саме.', '3D isn’t available on this device — the map above shows the same.') } });
+    const el = app.querySelector('.vzr'); if (!el) { VIZ.rec(null); return; }
+    VIZ.rec(el, { rec: ENGINE.recovery(G(), P().sessions, Date.now()), restH: ENGINE.REST_H, esc,
+      L: { wait: LL('Завантаження…', 'Loading…'), fail: LL('3D недоступне на цьому пристрої — список нижче показує те саме.', '3D isn’t available on this device — the list below shows the same.') } });
   }
   /* підсумок минулого тижня (пункт 5): щопонеділка на головній — тренування з запланованих, рекорди, хвилини й ккал, дні з нормою води, серія;
      рахується в телефоні (ENGINE.weekSummary, вода — з «Кухні»). Минулого тижня не було ні тренувань, ні відміток води — картки немає */
@@ -3334,8 +3401,10 @@ window.APP_START = () => {
   }
   function rBody() {
     const p = P(), prog = G();
-    const tabs = [['m', LL('Заміри', "Measurements")], ['f', LL('Фото', "Photos")]].concat(prog.tests ? [['t', LL('Тести', "Tests")]] : []);  // харчування — у «Кухні» (з 3.20.0)
-    if (!tabs.some((t) => t[0] === ui.bodyTab)) ui.bodyTab = 'm';
+    /* «Тести» — першою вкладкою й відкриті за замовчуванням (з 3.27.3; слово Alexа 25.10: «вкладку тести перенеси першою, перед замірами, бо я пропускав декілька
+       разів а це важливий тест»); зважитись — і далі одним дотиком: «Заміри» на головній і в «Кухні» відкривають саме «Заміри» */
+    const tabs = (prog.tests ? [['t', LL('Тести', "Tests")]] : []).concat([['m', LL('Заміри', "Measurements")], ['f', LL('Фото', "Photos")]]);  // харчування — у «Кухні» (з 3.20.0)
+    if (!tabs.some((t) => t[0] === ui.bodyTab)) ui.bodyTab = tabs[0][0];
     let body = '';
     if (ui.bodyTab === 'm') {
       body = `<p class="tiny muted" style="margin:4px 0 8px">${LL('Вага — частіше, хоч щодня зранку: застосунок рахує середню за 7 днів. Обʼєми — раз на тиждень, в один день і час. Графіки — на «Прогресі» → «Тіло».', 'Weight — more often, even daily in the morning: the app uses the 7-day average. Measurements — once a week, on the same day and time. Charts are in Progress → Body.')}</p>` + MEAS.map(([k, l]) => {
@@ -3354,17 +3423,53 @@ window.APP_START = () => {
         <div id="cmpBox"></div><h2>All photos</h2><div class="ph" id="phGrid"><div class="empty" style="grid-column:1/-1">Loading…</div></div>
         <p class="tiny muted">Photos are stored only on this phone (compressed to 1080 px). Weeks 1, 4, 8, 12 — same lighting and same spot.</p>`)}`;
     } else {
-      const tl = (p.body.tests || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1));
-      body = `${LL(`<details class="card"><summary style="cursor:pointer;font-weight:650">Як виконувати тести</summary>`, `<details class="card"><summary style="cursor:pointer;font-weight:650">How to do the tests</summary>`)}${(prog.testsHow || []).filter((r, i) => i > 4 ? testOn('chair') : testOn(['chair', 'bal', 'sp', 'push', 'car'][i])).map((r) => `<p class="small" style="margin:8px 0"><b>${esc(r[0])}.</b> ${esc(r[1])}</p>`).join('')}${LL(`</details><div class="card"><p class="small muted">Тижні 1, 4, 8, 12. Головне — щоб числа росли.${pushNote()}</p><div class="grid2">`, `</details><div class="card"><p class="small muted">Weeks 1, 4, 8, 12. What matters is that the numbers go up.${pushNote()}</p><div class="grid2">`)}${TESTS.filter(([k]) => testOn(k)).map(([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="decimal" id="t_${k}"></div>`).join('')}${LL(`</div><p></p><button type="button" class="pri wide" data-act="saveTests">Зберегти тести</button></div>
-        `, `</div><p></p><button type="button" class="pri wide" data-act="saveTests">Save tests</button></div>
-        `)}${[['chair', ['chair'], LL('Вставання з крісла за 30 с', "30-second chair stand")], ['bal', ['balL', 'balR'], LL('Стійка на одній нозі, с', "Single-leg stand, sec")], ['sp', ['spL', 'spR'], LL('Бічна планка, с', "Side plank, sec")], ['push', ['push'], LL('Віджимання', "Push-ups")], ['car', ['carL', 'carR'], LL('Валізна прогулянка, с', "Suitcase carry, sec")]].filter(([id, keys]) => testOn(id) || tl.some((t) => keys.some((k) => t[k] !== null && t[k] !== undefined))).map(([id, keys, name]) => {
-          const ser = keys.map((key, i) => ({ pts: tl.filter((t) => t[key] !== null && t[key] !== undefined && t[key] !== '').map((t) => ({ t: tms(t.d), v: Number(t[key]) })), color: i ? 'var(--d)' : 'var(--accent)' }));
-          if (!ser.some((x) => x.pts.length)) return '';
-          return `<div class="card"><b class="small">${name}</b>${CHARTS.line(ser, { h: 120, label: name })}${keys.length > 1 ? LL('<div class="legend"><span><i></i>ліва</span><span><i style="background:var(--d)"></i>права</span></div>', "<div class=\"legend\"><span><i></i>left</span><span><i style=\"background:var(--d)\"></i>right</span></div>") : ''}</div>`;
-        }).join('')}`;
+      const tl = (p.body.tests || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1)), tv = TV();
+      const how = TEST_HOW().filter(([k]) => testOn(k)).map(([k, name, line, v3]) => { const nm = testNorm(k);
+        return typeof VIZ === 'undefined' || !VIZ.has(v3) ? `<p class="small" style="margin:8px 0"><b>${name}.</b> ${line}${nm ? `<br><span class="tiny muted">${nm}</span>` : ''}</p>`
+          : `<details class="vz3 vzt" data-k="${v3}"><summary data-tip="${esc(LL('Дотик — 3D: як виконувати тест і що означає число.', 'Tap for 3D: how to do the test and what the number means.'))}"><b>${name}</b><span class="small muted">${line}</span></summary>${vizInner()}${nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : ''}</details>`; }).join('')
+        + (testOn('bal') ? LL('<p class="small" style="margin:10px 0 4px"><b>Фото осанки збоку.</b> Вухо, плече, таз і кісточка — чи на одній лінії; однакове світло й місце («Тіло» → «Фото» → «Збоку»).</p>', '<p class="small" style="margin:10px 0 4px"><b>Side posture photo.</b> Ear, shoulder, hip and ankle — are they in one line; same light and spot (“Body” → “Photos” → “Side”).</p>') : '');
+      const seg = (k, opts) => `<div class="seg" style="grid-column:1/-1;margin:0 0 6px">${opts.map(([v, l]) => `<button type="button" class="${tv[k] === v ? 'on' : ''}" data-act="tVar" data-k="${k}" data-v="${v}" data-tip="${esc(LL('Як робили — так і запишеться: графік порівнює лише той самий варіант.', 'Mark how you did it: the chart compares only the same version.'))}">${l}</button>`).join('')}</div>`;
+      const ttip = TEST_TIP(), fields = TESTS.filter(([k]) => testOn(k)).map(([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="${k === 'srt' ? 'decimal' : 'numeric'}" id="t_${k}"${ttip[k] ? ` data-tip="${esc(ttip[k])}"` : ''}></div>`
+        + (k === 'push' ? seg('pushV', [['k', LL('з колін', 'from the knees')], ['t', LL('з носків', 'from the toes')]]) : k === 'spR' ? seg('spV', [['k', LL('з колін', 'from the knees')], ['f', LL('з ніг', 'from the feet')]]) : '')).join('');
+      /* графіки: віджимання — окремою лінією на кожен варіант; бічна планка — останній варіант (старі записи без позначки — «з ніг», як радив опис до 3.27.3) */
+      const pts = (key, f, sel) => tl.filter((t) => t[key] !== null && t[key] !== undefined && t[key] !== '' && (!sel || sel(t))).map((t) => ({ t: tms(t.d), v: f ? f(Number(t[key])) : Number(t[key]) }));
+      const chart = (name, ser, legend, sub) => (!ser.some((x) => x.pts.length) ? '' : `<div class="card"><div class="sp"><b class="small">${name}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</div>${CHARTS.line(ser, { h: 120, label: name })}${legend || ''}</div>`);
+      const LR = LL('<div class="legend"><span><i></i>ліва</span><span><i style="background:var(--d)"></i>права</span></div>', "<div class=\"legend\"><span><i></i>left</span><span><i style=\"background:var(--d)\"></i>right</span></div>");
+      const shown = (id, keys) => testOn(id) || tl.some((t) => keys.some((k) => t[k] !== null && t[k] !== undefined));
+      const PV = [['t', 'var(--accent)', LL('з носків', 'from the toes')], ['k', 'var(--d)', LL('з колін', 'from the knees')], ['', 'var(--muted)', LL('без позначки', 'not marked')]].filter(([v]) => tl.some((t) => t.push !== null && t.push !== undefined && (t.pushV || '') === v));
+      const spv = (tl.filter((t) => t.spV).pop() || {}).spV || 'f', lastW = tl.filter((t) => t.walkT).pop();
+      const charts = [
+        shown('push', ['push']) ? chart(LL('Віджимання', 'Push-ups'), PV.map(([v, c]) => ({ pts: pts('push', null, (t) => (t.pushV || '') === v), color: c })), PV.length > 1 ? `<div class="legend">${PV.map(([, c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>` : '', PV.length === 1 ? PV[0][2] : '') : '',
+        shown('chair', ['chair']) ? chart(LL('Вставання з крісла за 30 с', '30-second chair stand'), [{ pts: pts('chair'), color: 'var(--accent)' }]) : '',
+        shown('sp', ['spL', 'spR']) ? chart(LL('Бічна планка, с', 'Side plank, sec'), ['spL', 'spR'].map((k, i) => ({ pts: pts(k, null, (t) => (t.spV || 'f') === spv), color: i ? 'var(--d)' : 'var(--accent)' })), LR, spv === 'k' ? LL('з колін', 'from the knees') : LL('з ніг', 'from the feet')) : '',
+        shown('bal', ['balL', 'balR']) ? chart(LL('Стійка на одній нозі, с', 'Single-leg stand, sec'), ['balL', 'balR'].map((k, i) => ({ pts: pts(k), color: i ? 'var(--d)' : 'var(--accent)' })), LR) : '',
+        shown('srt', ['srt']) ? chart(LL('Сісти й встати з підлоги, балів', 'Sit and rise from the floor, points'), [{ pts: pts('srt'), color: 'var(--accent)' }]) : '',
+        shown('car', ['carL', 'carR']) ? chart(LL('Валізна прогулянка, с', 'Suitcase carry, sec'), ['carL', 'carR'].map((k, i) => ({ pts: pts(k), color: i ? 'var(--d)' : 'var(--accent)' })), LR) : '',
+        shown('walk', ['walkT']) ? chart(LL('2 км ходьби, хв', '2 km walk, min'), [{ pts: pts('walkT', (v) => Math.round(v / 6) / 10), color: 'var(--accent)' }], '', lastW ? mmss(lastW.walkT) + (lastW.walkHR ? LL(' · пульс ', ' · pulse ') + lastW.walkHR : '') : '') : '',
+        shown('w6', ['w6']) ? chart(LL('Ходьба 6 хв, м', '6-minute walk, m'), [{ pts: pts('w6'), color: 'var(--accent)' }]) : ''].join('');
+      /* без дня тестів: пульс у спокої (Zhang 2016, CMAJ: 46 досліджень, 1 246 203 людини — +10 ударів за хвилину, на 9 % вища смертність) і талія / зріст
+         (NICE NG246: 0,4–0,49 — здорово, 0,5–0,59 — підвищений ризик, від 0,6 — високий; для ІМТ до 35) — з «Замірів» і анкети, без нового заміру */
+      const srt = (a) => (a || []).slice().sort((x, y) => (x.d < y.d ? -1 : 1)), rh = srt(p.body.rhr), rl = rh[rh.length - 1], wa = srt(p.body.waist).pop(), wl = srt(p.body.weight).pop();
+      const hgt = Number((p.me || {}).height), wt = wa && hgt ? wa.v / hgt : null, kg = wl ? wl.v : Number(((DB.custom || {}).answers || {}).weight), bmi = hgt && kg ? kg / Math.pow(hgt / 100, 2) : null;
+      const whtr = wt === null ? LL('заміряйте талію в «Замірах» — застосунок поділить її на зріст', 'measure your waist in Measurements — the app divides it by your height')
+        : fmt(Math.round(wt * 100) / 100) + ' — ' + (bmi >= 35 ? LL('для ІМТ від 35 межі NICE не застосовують', 'NICE bands don’t apply at a BMI of 35+') : wt >= 0.6 ? LL('високий ризик', 'high risk') : wt >= 0.5 ? LL('підвищений ризик', 'increased risk') : wt >= 0.4 ? LL('здорово', 'healthy') : LL('NICE описує межі від 0,4', 'NICE bands start at 0.4'));
+      const passive = `<h2>${LL('Без дня тестів', 'No test day needed')}</h2><div class="card"><div class="sp"><div><b>${LL('Пульс у спокої', 'Resting pulse')}</b><div class="small muted">${rl ? rl.v + LL(' уд/хв · ', ' bpm · ') + dm(rl.d) : LL('ще немає', 'none yet')}</div></div><button type="button" class="sm" data-act="rhrAdd" data-tip="${esc(LL('Записати пульс у спокої за сьогодні.', 'Log today’s resting pulse.'))}">${LL('+ Додати', '+ Add')}</button></div>
+        ${rh.length >= 2 ? CHARTS.line([{ pts: rh.map((q) => ({ t: tms(q.d), v: q.v })), color: 'var(--accent)' }], { h: 100, label: LL('Пульс у спокої', 'Resting pulse') }) : ''}<p class="tiny muted" style="margin:6px 0 0">${LL('Раз на тиждень зранку, сидячи, до кави: удари за 30 с × 2. +10 ударів — на 9 % вища смертність (46 досліджень, ≈ 1,2 млн людей; звʼязок, не доказ причини).', 'Once a week in the morning, seated, before coffee: beats in 30 sec × 2. +10 beats means 9% higher mortality (46 studies, ≈ 1.2 million people; an association, not proof of cause).')}</p>
+        <div class="sp" style="margin-top:10px"><div><b>${LL('Талія / зріст', 'Waist-to-height')}</b><div class="small muted">${whtr}</div></div>${wt === null ? `<button type="button" class="sm" data-act="goMeas">${LL('Заміри', 'Measurements')}</button>` : ''}</div>
+        <p class="tiny muted" style="margin:6px 0 0">${LL('NICE: до 0,5 — здорово, 0,5–0,59 — підвищений ризик, від 0,6 — високий.', 'NICE: under 0.5 is healthy, 0.5–0.59 increased risk, 0.6 and above high.')}</p></div>`;
+      /* у залі — сила з журналу (без окремого тесту): розрахунковий максимум жиму від грудей і жиму ногами — той самий, що в «Прогрес» → «Вправи» */
+      const gym = ['g_chestpress', 'g_legpress'].filter((id) => prog.ex[id]).map((id) => {
+        const ex = prog.ex[id], hist = ENGINE.history(p, id, 'all'); if (!hist.length) return '';
+        const rec = ENGINE.records(ex, hist, p.handle), last = ENGINE.bestOf(ex, hist[hist.length - 1].sets, p.handle);
+        return `<li><span>${esc(ex.name)}<div class="tiny muted">${esc(ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg'))}: ${LL('останнє ', 'last ')}${fmt(Math.round(last * 10) / 10)} · ${LL('рекорд ', 'best ')}${fmt(rec.e1rm.v)}</div></span></li>`;
+      }).filter(Boolean);
+      body = `${LL(`<details class="card"><summary style="cursor:pointer;font-weight:650">Як виконувати тести</summary>`, `<details class="card"><summary style="cursor:pointer;font-weight:650">How to do the tests</summary>`)}${how}</details>
+        <div class="card"><p class="small muted">${LL('Тижні 1, 4, 8, 12 · ≈ 10 хв. Головне — щоб числа росли.', 'Weeks 1, 4, 8, 12 · ≈ 10 min. What matters is that the numbers go up.')}${testOn('walk') || testOn('w6') ? LL(' Ходьба — окремо, будь-якого дня тижня тестів.', ' The walk — separately, any day of the test week.') : ''}</p><div class="grid2">${fields}</div><p></p><button type="button" class="pri wide" data-act="saveTests">${LL('Зберегти тести', 'Save tests')}</button></div>
+        ${charts}${passive}${gym.length ? `<h2>${LL('Сила з журналу', 'Strength from your log')}</h2><div class="card"><p class="tiny muted" style="margin:0 0 6px">${LL('Окремий тест не потрібен: розрахунковий максимум — з ваги й повторень ваших підходів (графік — «Прогрес» → «Вправи»).', 'No separate test needed: the estimated max comes from the weight and reps of your sets (chart — Progress → Exercises).')}</p><ul class="list">${gym.join('')}</ul></div>` : ''}`;
     }
     app.innerHTML = `${LL(`<h1>Тіло</h1><div class="seg">`, `<h1>Body</h1><div class="seg">`)}${tabs.map(([k, l]) => `<button type="button" class="${ui.bodyTab === k ? 'on' : ''}" data-act="bodyTab" data-v="${k}">${l}</button>`).join('')}</div>${body}`;
     if (ui.bodyTab === 'f') loadPhotos();
+    if (ui.bodyTab === 't') testViz();
     tourMaybe('body');
   }
   function loadPhotos() {
@@ -3965,12 +4070,28 @@ window.APP_START = () => {
       openSheet(`<img src="${img ? img.src : ''}${LL(`" style="width:100%" alt="фото"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="`, `" style="width:100%" alt="photo"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="`)}${id}${LL(`">Видалити фото</button>`, `">Delete photo</button>`)}`); return;
     }
     if (act === 'photoDel') { if (!confirm(LL('Видалити фото?', "Delete photo?"))) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
+    if (act === 'tVar') { TV()[b.dataset.k] = b.dataset.v; b.parentNode.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); return; }  // без перемальовування — введене лишається
     if (act === 'saveTests') {
-      const rec = { d: today() }; let any = false;
-      TESTS.filter(([k]) => testOn(k)).forEach(([k]) => { const v = num(document.getElementById('t_' + k).value); rec[k] = v; if (v !== null) any = true; });
-      if (!any) { toast(LL('Заповніть хоча б один тест', "Fill in at least one test")); return; }
-      const idx = p.body.tests.findIndex((t) => t.d === rec.d); if (idx >= 0) p.body.tests[idx] = rec; else p.body.tests.push(rec);
+      const rec = { d: today() }; let bad = false;
+      TESTS.filter(([k]) => testOn(k)).forEach(([k]) => { const v = num(document.getElementById('t_' + k).value), lim = TEST_LIM[k]; if (v !== null && (v < lim[0] || v > lim[1] || (k === 'srt' && v * 2 !== Math.round(v * 2)))) bad = true; rec[k] = v; });
+      if (bad) { toast(LL('Перевірте числа', 'Check the numbers')); return; }
+      /* 2 км: хвилини й секунди → секунди (walkT); пульс — лише разом із часом */
+      if ('walkM' in rec) { rec.walkT = rec.walkM !== null ? Math.round(rec.walkM * 60 + (rec.walkS || 0)) : null; if (rec.walkT === null) rec.walkHR = null; delete rec.walkM; delete rec.walkS; }
+      const has = (k) => rec[k] !== null && rec[k] !== undefined;
+      if (has('push')) rec.pushV = TV().pushV;
+      if (has('spL') || has('spR')) rec.spV = TV().spV;
+      if (!Object.keys(rec).some((k) => k !== 'd' && k !== 'pushV' && k !== 'spV' && has(k))) { toast(LL('Заповніть хоча б один тест', "Fill in at least one test")); return; }
+      /* той самий день — доповнюємо (ходьба й тести можуть бути окремо): порожнє поле не стирає вже записане */
+      const all = p.body.tests = p.body.tests || [], o = all.find((t) => t.d === rec.d);
+      if (o) Object.keys(rec).forEach((k) => { if (has(k)) o[k] = rec[k]; }); else all.push(rec);
       save(); toast(LL('Тести збережено', "Tests saved")); return rBody();
+    }
+    /* пульс у спокої (з 3.27.3) — раз на тиждень зранку; один запис на день */
+    if (act === 'rhrAdd') { openSheet(`<h2>${LL('Пульс у спокої', 'Resting pulse')}</h2><p class="small muted">${LL('Зранку, сидячи, до кави: удари за 30 с × 2.', 'In the morning, seated, before coffee: beats in 30 sec × 2.')}</p><label class="f">${LL('Ударів за хвилину', 'Beats per minute')}</label><input inputmode="numeric" id="rhrIn" data-tip="${esc(LL('Ударів за хвилину: за 30 с × 2.', 'Beats per minute: in 30 sec × 2.'))}"><p></p><button type="button" class="pri wide" data-act="rhrSave" data-tip="${esc(LL('Зберегти пульс у спокої за сьогодні.', 'Save today’s resting pulse.'))}">${LL('Зберегти', 'Save')}</button>`); return; }
+    if (act === 'rhrSave') {
+      const v = num(document.getElementById('rhrIn').value); if (v === null || v < 30 || v > 150) { toast(LL('Перевірте число', 'Check the number')); return; }
+      const arr = p.body.rhr = p.body.rhr || [], t = today(), k = arr.findIndex((q) => q.d === t); if (k >= 0) arr[k].v = v; else arr.push({ d: t, v });
+      save(); closeSheet(); toast(LL('Пульс збережено', 'Pulse saved')); return rBody();
     }
     /* більше */
     if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
@@ -4025,6 +4146,31 @@ window.APP_START = () => {
      (бічні відступи під виріз екрана — safe-area-inset-left/right). Заслінку «Поверніть телефон» 3.16.0 прибрано в 3.16.1. */
   /* iOS «присипляє» звук після згортання — будь-який дотик його будить */
   document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
+  /* швидкий дотик по кнопці (з 3.27.3; слово Alexа 25.10: «Роби усе крім 2D»; дослідження — CLAUDE.md §11): після першого дотику застосунок перемальовує екран,
+     і Safari на iPhone другий швидкий дотик (140–270 мс) рахує подвійним і збільшує сторінку (×1,6), хоч у body є touch-action: manipulation (замір 25.10,
+     tests/browser/iosdt.js; не допомогли manipulation на кожній кнопці й maximum-scale=1). Короткий дотик одним пальцем по кнопці без зсуву —
+     touchend.preventDefault() (Safari тоді не робить ні свого click, ні збільшення) і click() самим: дія та сама й одна (заміряно: 3 дотики — 3 дії, масштаб 1,00).
+     Не чіпаємо: поля, списки, посилання, підписи (свої дії браузера), коли відкрито клавіатуру (зміна поля має зберегтись), затискання ≥ 0,6 с (підказка — 1 с),
+     дотик, яким зупиняють прокрутку (≤ 0,25 с після неї), зсув > 10 px, кілька пальців */
+  (function fastTap() {
+    let st = null, scrolled = 0;
+    const NATIVE = 'input, select, textarea, label, a[href], [contenteditable], summary';
+    const typing = () => { const a = document.activeElement; return !!(a && a.matches && a.matches('input, select, textarea, [contenteditable]')); };
+    document.addEventListener('scroll', () => { scrolled = performance.now(); }, { capture: true, passive: true });
+    document.addEventListener('touchstart', (e) => {
+      st = null; if (e.touches.length !== 1 || typing() || performance.now() - scrolled < 250) return;
+      const b = e.target.closest && e.target.closest('button'); if (!b || b.disabled || e.target.closest(NATIVE)) return;
+      st = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), b };
+    }, { capture: true, passive: true });
+    document.addEventListener('touchmove', (e) => { if (st && (e.touches.length !== 1 || Math.hypot(e.touches[0].clientX - st.x, e.touches[0].clientY - st.y) > 10)) st = null; }, { capture: true, passive: true });
+    document.addEventListener('touchcancel', () => { st = null; }, { capture: true, passive: true });
+    document.addEventListener('touchend', (e) => {
+      const s = st; st = null; if (!s || e.touches.length) return;
+      const t = e.changedTouches[0]; if (performance.now() - s.t > 600 || Math.hypot(t.clientX - s.x, t.clientY - s.y) > 10 || !s.b.isConnected) return;
+      const at = document.elementFromPoint(t.clientX, t.clientY); if (!at || at.closest('button') !== s.b) return;
+      e.preventDefault(); s.b.click();
+    }, { capture: true, passive: false });
+  })();
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
   themeApply(themeNow());
