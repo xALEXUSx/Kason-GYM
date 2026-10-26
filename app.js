@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.5';
+  const VERSION = '3.27.6';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -1472,7 +1472,7 @@ window.APP_START = () => {
       ['#cMore', LL('Тут — як робити, заміна вправи, пропуск, нотатка, «Болить суглоб».', "Here: how to do it, swap exercise, skip, add a note, “Joint pain.”")],
       ['#modeBtn', LL('Перемикач: усі вправи списком, як у класичному журналі. Повернутися — тією самою кнопкою.', "Toggle: all exercises in one list, like a classic workout log. Tap the same button to switch back.")]],
     kit: [['.ksum', LL('Скільки зʼїли сьогодні: калорії — у колі, білок — смужкою. Норма — за вашою метою з анкети.', "What you’ve eaten today: calories in the ring, protein in the bar. Targets come from the goal in your questionnaire.")],
-      ['[data-act="kAdd"]', LL('«+ Додати» — їжа в цей прийом: продукт з бази грамами, руками (долоня, кулак), цифрами з етикетки чи з «Моїх».', "“+ Add” logs food to this meal: a food from the database in grams, by hand (palm, fist), numbers from a label, or from “Mine.”")],
+      ['[data-act="kAdd"]', LL('«+ Додати» — їжа в цей прийом: з «Моїх», продукт з бази грамами, руками (долоня, кулак) чи цифрами з етикетки; можна кілька поспіль, далі — «Готово».', "“+ Add” logs food to this meal: from “Mine,” a food from the database in grams, by hand (palm, fist), or numbers from a label; add several in a row, then tap Done.")],
       ['.kwat .row', LL('Вода: торкніться «+» після кожної склянки. Застосунок розкладає воду на день і може нагадувати.', "Water: tap “+” after each glass. The app spreads your water over the day and can remind you.")],
       ['#app > .quick', LL('Ваші продукти й страви, налаштування кухні й як вона рахує.', "Your foods and dishes, kitchen settings, and how the kitchen counts.")]],
     plan: [['#app > .seg', LL('«12 тижнів» — уся програма; «Історія» — календар і всі тренування.', "“12 weeks” is your whole program; “History” is the calendar and all your workouts.")],
@@ -1493,7 +1493,7 @@ window.APP_START = () => {
       ['#sheet [data-act="addset"]', LL('«+ Підхід» і «− Останній підхід» — більше чи менше підходів сьогодні.', "“+ Set” and “− Last set” — more or fewer sets today.")],
       ['#sheet [data-act="pain"]', LL('«Болить суглоб» — полегшити чи зупинити вправу; наступного разу вага буде на крок нижча.', "“Joint pain” — make the exercise easier or stop it; next time the weight will be one step lower.")],
       ['#exNote', LL('Нотатка до вправи — видно щоразу: номер тренажера, висота сидіння, хват.', "A note for this exercise — shown every time: machine number, seat height, grip.")]],
-    kadd: [['#sheet .seg', LL('Продукт — з бази, грамами. Руками — долоня, кулак, жменя. Цифрами — з етикетки. Мої — ваші продукти, страви й збережені прийоми.', "Food: from the database, in grams. By hand: palm, fist, handful. Numbers: from a label. Mine: your foods, dishes, and saved meals.")],
+    kadd: [['#sheet .seg', LL('Мої — ваші продукти, страви й збережені прийоми. Продукт — з бази, грамами. Руками — долоня, кулак, жменя. Цифрами — з етикетки. Можна додати кілька поспіль — «Готово», коли все.', "Mine: your foods, dishes, and saved meals. Food: from the database, in grams. By hand: palm, fist, handful. Numbers: from a label. Add several in a row — tap Done when finished.")],
       ['#sheet [data-act="kPhoto"]', LL('Фото тарілки — застосунок підкаже продукти, а кількість вкажете ви.', "Photo of your plate — the app suggests the foods, and you enter the amounts.")],
       ['#kQ', LL('Пошук продукту: «курка», «гречка», «банан» — далі вкажіть грами.', "Search for a food: “chicken,” “rice,” “banana” — then enter the grams.")]],
     rest: [['.crest .cring', LL('Відпочинок: таймер іде сам, наприкінці — сигнал і голос. Телефон можна покласти.', "Rest: the timer runs on its own and ends with a beep and the coach’s voice. You can put your phone down.")],
@@ -2720,14 +2720,16 @@ window.APP_START = () => {
   }
 
   /* ---- додати запис: шторка з чотирма способами ---- */
+  /* з 3.27.6 — «Мої» перша (слово Alexа 26.10: «і вкладка "Мої" має бути першою»): відкривається на «Мої», коли там уже щось є (свої продукти, страви чи збережені прийоми), інакше — «Продукт» (пошук у базі) */
+  const kTab0 = () => { const k = kit(); return Object.keys(k.products).length || Object.keys(k.dishes).length || Object.keys(k.combos).length ? 'my' : 'food'; };
   function kAddOpen(m, edit) {
-    ui.kAdd = edit !== undefined ? Object.assign({ mode: 'edit', i: edit }, JSON.parse(JSON.stringify(kday(ui.kDate || today()).items[edit]))) : { mode: 'new', m: m === undefined ? kMealNow() : m, tab: 'food', q: '' };
+    ui.kAdd = edit !== undefined ? Object.assign({ mode: 'edit', i: edit }, JSON.parse(JSON.stringify(kday(ui.kDate || today()).items[edit]))) : { mode: 'new', m: m === undefined ? kMealNow() : m, tab: kTab0(), q: '' };
     if (ui.kAdd.mode === 'edit') ui.kAdd.tab = { food: 'food', my: 'my', dish: 'my', hand: 'hand', quick: 'num' }[ui.kAdd.t] || 'food';
     kAddDraw();
   }
   function kAddDraw() {
     const a = ui.kAdd, meals = kMeals(), k = kit();
-    const tabs = [['food', LL('Продукт', 'Food')], ['hand', LL('Руками', 'By hand')], ['num', LL('Цифрами', 'Numbers')], ['my', LL('Мої', 'Mine')]];
+    const tabs = [['my', LL('Мої', 'Mine')], ['food', LL('Продукт', 'Food')], ['hand', LL('Руками', 'By hand')], ['num', LL('Цифрами', 'Numbers')]];  // з 3.27.6 «Мої» — перша
     let body = '';
     if (a.tab === 'food' && !a.id) {
       body = `${kPhotoHtml()}<input id="kQ" data-kin="q" placeholder="${LL('Пошук: курка, гречка, банан…', 'Search: chicken, rice, banana…')}" value="${esc(a.q)}" autocomplete="off"><div id="kRes">${kResHtml()}</div>`;
@@ -2751,11 +2753,19 @@ window.APP_START = () => {
     }
     const pv = kPreview();
     openSheet(`<div class="sp"><b>${a.mode === 'edit' ? LL('Змінити запис', 'Edit entry') : LL('Додати', 'Add')}</b><select data-kin="m" aria-label="${LL('прийом їжі', 'meal')}">${meals.map((n, mi) => `<option value="${mi}"${Math.min(a.m || 0, meals.length - 1) === mi ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>
-      ${a.mode === 'edit' ? '' : `<div class="seg" style="margin:8px 0">${tabs.map(([t, l]) => `<button type="button" class="${a.tab === t ? 'on' : ''}" data-act="kTab" data-v="${t}">${l}</button>`).join('')}</div>`}
+      ${a.mode === 'edit' ? '' : `<div class="seg" style="margin:8px 0">${tabs.map(([t, l]) => `<button type="button" class="${a.tab === t ? 'on' : ''}" data-act="kTab" data-v="${t}">${l}</button>`).join('')}</div>`}${kAddedHtml(a)}
       <div id="kBody">${body}</div><div id="kPv">${pv}</div>
       ${(a.tab === 'food' && a.id) || ((a.tab === 'my') && (a.pid || a.did)) || a.tab === 'hand' || a.tab === 'num' ? `<div class="row" style="margin-top:10px">${a.mode === 'edit' ? `<button type="button" class="ghost" data-act="kDel">${LL('Видалити', 'Delete')}</button>` : `<button type="button" class="ghost" data-act="kBack">${LL('Назад', 'Back')}</button>`}<button type="button" class="pri" style="flex:1" data-act="kSave">${a.mode === 'edit' ? LL('Зберегти', 'Save') : LL('Додати', 'Add')}</button></div>` : ''}`);
     const q = document.getElementById('kQ'); if (q && a.tab === 'food' && !a.id && !(a.ph && a.ph.st) && S().tour.kadd) setTimeout(() => { try { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } catch (e) { /* немає */ } }, 60);
     if (ui.kAdd.mode === 'new') tourMaybe('kadd', true);  // перший раз — без клавіатури: спершу навчання
+  }
+  /* з 3.27.6 — прийом складається з кількох продуктів поспіль (слово Alexа 26.10: «продакти для страви складно додавати, бо коли натискаю сніданок то після того як додаю кожен продукт мене повертає назад в кухню замість того щоб продовжити складати кронструктор сніданку»): після «Додати» шторка
+     лишається відкритою на тій самій вкладці, угорі — що вже в цьому прийомі, і «Готово» */
+  function kAddedHtml(a) {
+    if (a.mode !== 'new' || !a.added) return '';
+    const mi = Math.min(Number(a.m) || 0, kMeals().length - 1), its = kday(ui.kDate || today()).items.filter((e) => (e.m || 0) === mi), nm = its.map((e) => kName(e));
+    return `<div class="row" style="gap:8px;align-items:center;margin:0 0 8px"><div class="small" style="flex:1;min-width:0">${LL('У «', 'In “')}${esc(kMeals()[mi])}${LL('»: ', '”: ')}${esc(nm.slice(-4).join(', '))}${nm.length > 4 ? ' ' + LL('і ще ', 'and ') + (nm.length - 4) : ''}</div>`
+      + `<button type="button" class="sm pri" data-act="kDone" data-tip="${esc(LL('Готово — закрити й повернутись на «Кухню». Додане вже записано.', 'Done — close and return to Kitchen. What you added is already saved.'))}">${LL('Готово', 'Done')}</button></div>`;
   }
   /* результати пошуку (оновлюються без перемальовування шторки — клавіатура на iPhone не злітає); калорії — на 100 г кожного стану */
   function kResHtml() {
@@ -2866,9 +2876,11 @@ window.APP_START = () => {
     if (a.mode === 'edit') day.items[a.i] = e; else day.items.push(e);
     if (e.t === 'food') { const k = kit(); k.recent = [{ t: 'food', id: e.id, s: e.s }].concat(k.recent.filter((r) => !(r.t === 'food' && r.id === e.id))).slice(0, 30); }
     save(); haptic(); rKitchen();
-    if (a.mode === 'new' && a.ph && a.ph.st === 'ok') {
-      if (a.phj !== undefined && a.ph.items[a.phj]) a.ph.items[a.phj].done = true;
-      if (a.ph.items.some((x) => !x.done)) { ui.kAdd = { mode: 'new', m: a.m, tab: 'food', q: '', ph: a.ph }; toast(LL('Додано', 'Added')); return kAddDraw(); }
+    if (a.mode === 'new') {  // з 3.27.6 — шторка лишається: наступний продукт у той самий прийом (фото тарілки — далі його продукти)
+      if (a.ph && a.ph.st === 'ok' && a.phj !== undefined && a.ph.items[a.phj]) a.ph.items[a.phj].done = true;
+      const left = a.ph && a.ph.st === 'ok' && a.ph.items.some((x) => !x.done);
+      ui.kAdd = { mode: 'new', m: a.m, tab: left ? 'food' : a.tab, q: '', ph: a.ph, added: (a.added || 0) + 1 };
+      toast(LL('Додано: ', 'Added: ') + kName(e)); return kAddDraw();
     }
     closeSheet();
   }
@@ -3039,7 +3051,8 @@ window.APP_START = () => {
     const k = kit(), c = k.combos[id]; if (!c || !ui.kAdd) return;
     const day = kdayW(ui.kDate || today()), m = Math.min(ui.kAdd.m || 0, kMeals().length - 1);
     c.items.forEach((e) => day.items.push(Object.assign(JSON.parse(JSON.stringify(e)), { m, at: Date.now() })));
-    save(); closeSheet(); toast(LL('Додано: ', 'Added: ') + c.name); return rKitchen();
+    save(); rKitchen(); toast(LL('Додано: ', 'Added: ') + c.name);  // з 3.27.6 — шторка лишається (можна додати ще)
+    const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: a.tab, q: '', ph: a.ph, added: (a.added || 0) + 1 }; return kAddDraw();
   }
   function kMine() {
     const k = kit(), P2 = Object.keys(k.products), D2 = Object.keys(k.dishes);
@@ -4019,14 +4032,15 @@ window.APP_START = () => {
     if (act === 'kDay') { const d = iso(new Date(tms(ui.kDate || today()) + Number(b.dataset.v) * 864e5)); if (d > today()) return; ui.kDate = d === today() ? null : d; return rKitchen(); }
     if (act === 'kAdd') return kAddOpen(Number(b.dataset.m));
     if (act === 'kEdit') return kAddOpen(undefined, Number(b.dataset.i));
-    if (act === 'kTab') { const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: b.dataset.v, q: '', ph: a.ph }; return kAddDraw(); }
+    if (act === 'kTab') { const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: b.dataset.v, q: '', ph: a.ph, added: a.added }; return kAddDraw(); }
+    if (act === 'kDone') { closeSheet(); return rKitchen(); }
     if (act === 'kPhoto') { const fi = document.getElementById('kPhIn'); if (fi) fi.click(); return; }
     if (act === 'kBar') { const fi = document.getElementById('kpBarIn'); if (fi) fi.click(); return; }  // з 3.21.6
     if (act === 'kPhPick') { const a = ui.kAdd, x = a.ph && a.ph.items && a.ph.items[Number(b.dataset.j)], it = x && KITCHEN.item(x.id); if (!it) return;
       Object.assign(a, { id: it.id, s: it.v.length === 1 ? it.v[0].s : undefined, how: 'g', g: null, mi: undefined, mq: 1, phj: Number(b.dataset.j) }); return kAddDraw(); }
     if (act === 'kPick') { const it = KITCHEN.item(b.dataset.id); if (!it) return; Object.assign(ui.kAdd, { id: it.id, s: it.v.length === 1 ? it.v[0].s : undefined, how: 'g', g: null, mi: undefined, mq: 1 }); return kAddDraw(); }
     if (act === 'kPickMy') { Object.assign(ui.kAdd, b.dataset.t === 'pid' ? { pid: b.dataset.id, did: null } : { did: b.dataset.id, pid: null }, { how: 'g', g: null }); return kAddDraw(); }
-    if (act === 'kBack') { const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: a.tab, q: a.q || '', ph: a.ph }; return kAddDraw(); }
+    if (act === 'kBack') { const a = ui.kAdd; ui.kAdd = { mode: 'new', m: a.m, tab: a.tab, q: a.q || '', ph: a.ph, added: a.added }; return kAddDraw(); }
     if (act === 'kState') { ui.kAdd.s = b.dataset.v; ui.kAdd.mi = undefined; return kAddDraw(); }
     if (act === 'kHow') { ui.kAdd.how = b.dataset.v; return kAddDraw(); }
     if (act === 'kMeas') { ui.kAdd.mi = Number(b.dataset.j); ui.kAdd.mq = ui.kAdd.mq || 1; return kAddDraw(); }

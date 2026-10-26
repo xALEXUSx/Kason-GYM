@@ -57,13 +57,17 @@ var VIZ = (function () {
     var w = Math.round(st.box.clientWidth) || 320, h = Math.round(w * 0.75);
     if (w !== st.w || h !== st.h) { st.w = w; st.h = h; st.R.setSize(w, h, false); }
   }
+  /* режим, який бачить людина (з 3.27.6; слово Alexа 26.10: «Так, прибери «Рух» в «Анатомії»: лишаються «Мʼязи» й «Помилка», у «Манекені» — як є»):
+     в «Анатомії» робочі мʼязи підсвічені завжди, тож «Рух» малював те саме, що «Мʼязи», лише без назв мʼязів (замір 26.10 — усі 64 моделі); там «Рух»
+     не показуємо, а вибраний «Рух» — це «Мʼязи»; на «Манекені» — знову «Рух» */
+  function mode(o) { return st.v === 'move' && o.style() === 'xray' ? 'mus' : st.v; }
   function draw() {
     var X = st.X, ex = st.ex, o = st.o; if (!X || !ex || !o || st.mode !== 'ex') return;
-    var f = X.draw(st.tp / 1000, st.v, o.style(), st.yaw);
+    var v = mode(o), f = X.draw(st.tp / 1000, v, o.style(), st.yaw);
     X.camera.aspect = st.w / st.h; X.camera.updateProjectionMatrix(); st.R.render(X.scene, X.camera);
     var ph = st.det.querySelector('.vzph'), n = st.det.querySelector('.vznote');
     if (ph) ph.innerHTML = '<b>' + o.esc(o.t(ex.loop || f.ph === 1 ? ex.c1 : ex.c2)) + '</b>' + (ex.sides ? ' · ' + o.esc(f.side ? o.L.left : o.L.right) : '');
-    if (n) { n.className = 'vznote' + (st.v === 'bad' ? ' bad' : ''); n.textContent = st.v === 'mus' ? o.L.work + o.mus(ex.work.p) : st.v === 'bad' ? o.t(ex.bad) + o.L.red : ''; }
+    if (n) { n.className = 'vznote' + (v === 'bad' ? ' bad' : ''); n.textContent = v === 'mus' ? o.L.work + o.mus(ex.work.p) : v === 'bad' ? o.t(ex.bad) + o.L.red : ''; }
   }
   function frame(now) {
     st.raf = requestAnimationFrame(frame);
@@ -73,7 +77,8 @@ var VIZ = (function () {
   }
   /* кнопки блоку (картка нова після кожного малювання — обробники ставимо щоразу) */
   function wire(det, o) {
-    det.querySelectorAll('[data-vzm]').forEach(function (b) { b.classList.toggle('on', b.dataset.vzm === st.v); b.onclick = function () { st.v = b.dataset.vzm; wire(det, o); if (st.X) draw(); }; });
+    var v = mode(o), xr = o.style() === 'xray';
+    det.querySelectorAll('[data-vzm]').forEach(function (b) { b.style.display = xr && b.dataset.vzm === 'move' ? 'none' : ''; b.classList.toggle('on', b.dataset.vzm === v); b.onclick = function () { st.v = b.dataset.vzm; wire(det, o); if (st.X) draw(); }; });
     det.querySelectorAll('[data-vzs]').forEach(function (b) { b.classList.toggle('on', b.dataset.vzs === o.style()); b.onclick = function () { o.setStyle(b.dataset.vzs); wire(det, o); if (st.X) draw(); }; });
     var pp = det.querySelector('[data-vz="pp"]');
     if (pp) { pp.textContent = st.play ? '⏸' : '▶'; pp.setAttribute('aria-label', st.play ? o.L.pause : o.L.play); pp.onclick = function () { st.play = !st.play; if (st.play) st.t0 = performance.now() - st.tp; wire(det, o); }; }

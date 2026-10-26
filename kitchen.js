@@ -415,29 +415,40 @@ var KITCHEN = (function () {
 
   /* пошук звичними словами (з 3.20.1; жива перевірка 23.10: «курка» з підказки поля не знаходила нічого — у базі «Куряче філе»):
      основа слова → продукти бази. Лише для запитів від 3 літер; спершу — назви, що починаються з запиту, далі ці слова, далі решта збігів. */
-  var FISH = ['salmon', 'cod', 'pollock', 'mackerel', 'herring', 'tuna_can'], MEAT = ['chicken_breast', 'chicken_thigh', 'turkey_breast', 'beef_lean', 'beef_mince_5', 'beef_mince_15', 'pork_tender', 'pork_loin'];
+  var FISH = ['salmon', 'cod', 'pollock', 'mackerel', 'herring', 'tuna_can', 'trout', 'carp', 'pike', 'flounder', 'sardine', 'tuna_oil'], MEAT = ['chicken_breast', 'chicken_thigh', 'turkey_breast', 'beef_lean', 'beef_mince_5', 'beef_mince_15', 'pork_tender', 'pork_loin', 'pork_mince', 'pork_neck', 'veal', 'rabbit', 'duck'];
+  /* з 3.27.6 (база 102 → 221 продукт; слово Alexа 26.10: «база продуктів занадто мала, навіть курячих сердець немає») — нові продукти й у звичних словах */
+  var COTTAGE = ['cottage_0', 'cottage_1', 'cottage_2', 'cottage_4'];
   var ALIAS = [
-    [['курк', 'курят', 'курин', 'куроч', 'chick'], ['chicken_breast', 'chicken_thigh', 'chicken_liver']],
+    [['курк', 'курят', 'курин', 'куроч', 'chick'], ['chicken_breast', 'chicken_thigh', 'chicken_drum', 'chicken_wing', 'chicken_liver', 'chicken_heart', 'chicken_gizzard']],
     [['яйц', 'яєч', 'egg'], ['egg', 'egg_white']],
     [['риб', 'fish'], FISH], [['мʼяс', "м'яс", 'мяс', 'meat'], MEAT],
-    [['свин', 'pork'], ['pork_tender', 'pork_loin', 'salo']], [['індич', 'індик', 'turkey'], ['turkey_breast']],
-    [['ялович', 'beef'], ['beef_lean', 'beef_mince_5', 'beef_mince_15']], [['фарш', 'mince', 'ground'], ['beef_mince_5', 'beef_mince_15']],
-    [['овес', 'вівс', 'геркулес', 'oatmeal', 'porridge'], ['oats']], [['сир', 'cheese'], ['gouda', 'mozzarella', 'feta', 'parmesan']],
-    [['каш', 'круп', 'grain'], ['buckwheat', 'rice_white', 'rice_brown', 'oats', 'bulgur', 'millet', 'barley', 'quinoa', 'couscous']],
-    [['картоп', 'potat'], ['potato', 'potato_baked']], [['томат', 'tomat'], ['tomato']], [['гриб', 'mushroom'], ['mushrooms']],
-    [['горіх', 'nut'], ['walnuts', 'almonds', 'peanuts']], [['ягід', 'ягод', 'berr'], ['strawberry', 'blueberry']],
-    [['масло', 'oil'], ['butter', 'oil_sunflower', 'oil_olive']], [['шоколад', 'chocol'], ['dark_choc']], [['сік', 'juice'], ['orange_juice']]
+    [['свин', 'pork'], ['pork_tender', 'pork_loin', 'pork_neck', 'pork_mince', 'pork_liver', 'salo']], [['індич', 'індик', 'turkey'], ['turkey_breast']],
+    [['ялович', 'beef'], ['beef_lean', 'beef_mince_5', 'beef_mince_15', 'beef_liver']], [['фарш', 'mince', 'ground'], ['beef_mince_5', 'beef_mince_15', 'pork_mince']],
+    [['овес', 'вівс', 'геркулес', 'oatmeal', 'porridge'], ['oats']], [['сир', 'cheese'], COTTAGE.concat(['gouda', 'mozzarella', 'mozzarella_whole', 'feta', 'parmesan', 'cheddar', 'swiss', 'cheese_processed', 'ricotta'])], [['творог', 'кисломол', 'cottage'], COTTAGE],
+    [['печінк', 'liver'], ['chicken_liver', 'beef_liver', 'pork_liver']], [['ніжк', 'гоміл', 'drumst'], ['chicken_drum']], [['серц', 'серде', 'heart'], ['chicken_heart']], [['шлун', 'пупк', 'gizzard'], ['chicken_gizzard']], [['крил', 'wing'], ['chicken_wing']], [['ковбас', 'sausag'], ['bologna', 'frankfurter']],
+    [['каш', 'круп', 'grain'], ['buckwheat', 'rice_white', 'rice_brown', 'oats', 'bulgur', 'millet', 'barley', 'quinoa', 'couscous', 'semolina', 'corn_grits']],
+    [['картоп', 'potat'], ['potato', 'potato_baked', 'mashed_potato', 'fries']], [['томат', 'tomat'], ['tomato']], [['гриб', 'mushroom'], ['mushrooms', 'oyster_mushrooms', 'chanterelles']],
+    [['горіх', 'nut'], ['walnuts', 'almonds', 'peanuts', 'hazelnuts', 'cashews', 'pistachios', 'pine_nuts']], [['ягід', 'ягод', 'berr'], ['strawberry', 'blueberry', 'raspberry', 'blackberry', 'currant_black', 'gooseberry', 'cherry', 'sweet_cherry']],
+    [['масло', 'oil'], ['butter', 'oil_sunflower', 'oil_olive', 'oil_flax']], [['шоколад', 'chocol'], ['dark_choc', 'milk_choc']], [['сік', 'juice'], ['orange_juice', 'apple_juice', 'tomato_juice']]
   ];
+  /* з 3.27.6 — слова в будь-якому порядку й інша форма слова («перепелине яйце» → «Яйце перепелине», «огірок» → «Огірки солоні»):
+     кожне слово запиту від 3 літер — початок якогось слова назви або та сама основа (без закінчення-голосної, англійського -s
+     і випадного «о / е»: «шлунок» — «шлунки»); спільний лише початок («горіхи» — «горілка», «чорниця» — «чорний») — не збіг; такі — після решти */
+  var norm = function (w) { w = w.replace(/s$/, '').replace(/[аеєиіїоуюяьйe]+$/, ''); return w.length >= 4 ? w.replace(/[ое]([^аеєиіїоуюяьй])$/, '$1') : w; };
+  function wordHit(w, n) { var x = norm(w); return n.indexOf(w) === 0 || (x.length >= 3 && x === norm(n)); }  // «чай» — не «чіа» (обидва — «ч»)
+  var words = function (t) { return t.split(/[^a-zа-яіїєґʼ]+/).filter(function (w) { return w.length >= 3; }); };
   /* пошук продуктів: назва українською чи англійською; спершу — ті, що починаються з запиту */
   function search(q, lang) {
     q = String(q || '').trim().toLowerCase().replace(/[’'`]/g, 'ʼ'); if (!q) return [];
-    var key = lang === 'en' ? 'en' : 'uk', a = [], al = [], b = [], seen = {};
+    var key = lang === 'en' ? 'en' : 'uk', a = [], al = [], b = [], c = [], seen = {}, qw = words(q);
     if (q.length >= 3) ALIAS.forEach(function (x) { if (x[0].some(function (st) { st = st.replace(/[’'`]/g, 'ʼ'); return q.indexOf(st) === 0 || (q.length >= 3 && st.indexOf(q) === 0); })) x[1].forEach(function (id) { if (BY[id] && al.indexOf(BY[id]) < 0) al.push(BY[id]); }); });
     DB.items.forEach(function (it) {
       var n = it[key].toLowerCase(), o = it[key === 'uk' ? 'en' : 'uk'].toLowerCase();
       if (n.indexOf(q) === 0) a.push(it); else if (n.indexOf(q) > 0 || o.indexOf(q) >= 0) b.push(it);
+      else if (qw.length) { var nw = words((n + ' ' + o).replace(/[’'`]/g, 'ʼ')); if (qw.every(function (w) { return nw.some(function (x) { return wordHit(w, x); }); })) c.push(it); }
     });
-    return a.concat(al, b).filter(function (it) { if (seen[it.id]) return false; seen[it.id] = 1; return true; });
+    /* кілька слів — збіг усіх слів раніше за звичне слово («яйця перепелині» — спершу перепелині) */
+    return (qw.length > 1 ? a.concat(b, c, al) : a.concat(al, b, c)).filter(function (it) { if (seen[it.id]) return false; seen[it.id] = 1; return true; });
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
