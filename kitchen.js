@@ -300,40 +300,66 @@ var KITCHEN = (function () {
      (випили більше — прийомів менше); випили менше — решта переходить у наступні, як за пропущеного. Без per — як до 3.22.1.
      З 3.22.2 — marks (часи відміток дня, 'HH:MM'; слово Alexа 25.10: «одна відмітка після пропущених прийомів має ставити лише одну ✓, а ранковий лишати «пропущено»»): прийом до останньої відмітки включно зроблено лише тоді,
      коли в його вікні є відмітка (за годину до його часу — і до вікна наступного); решта — пропущені, їхня вода — у наступних прийомах. Час і порції
-     від marks не залежать: сервер (у нього лише сума й остання відмітка) рахує ті самі нагадування. Без marks — як до 3.22.2. */
-  function waterDayPlan(times, target, glass, ml, at, now, per, marks) {
+     від marks не залежать: сервер (у нього лише сума й остання відмітка) рахує ті самі нагадування. Без marks — як до 3.22.2.
+     З 3.27.5 — вікно відмітки й зарахування — нижче (winStart, ownOf, waterMarkFor). */
+  /* до якого прийому належить відмітка (з 3.27.5; скриншот Alexа 26.10: «я випив вчасно склянку а пише що я пропустив та що прийом 3 з8»): вікно
+     прийому починається за годину до нього, але не раніше середини проміжку від попереднього прийому — склянка, випита після нагадування, належить
+     цьому прийому, доки ближчий не наступний. До 3.27.5 вікно було рівно година: з 1 склянкою за раз прийоми через ≈ 80 хв, і склянка через 20 хв
+     після нагадування йшла наступному прийому, а цей ставав «пропущено». Проміжки від 2 год — як і було. Лише з «за раз» (per): тоді прийоми після
+     відмітки зсуваються на годину й далі; без per (застосунок до 3.22.1) — рівно година, як і було: інакше наступний прийом лишився б ближче години */
+  var winStart = function (r, q, per) { return q && per ? r[q] - Math.min(WATER_GAP, (r[q] - r[q - 1]) / 2) : r[q] - WATER_GAP; };
+  /* fb — час прийому (у розкладі-основі), якому відмітку зараховано в мить відмітки (з 3.27.5, waterMarkFor): він і лишається, хоч би що змінилось
+     потім (нові відмітки зсувають прийоми; інші налаштування — тоді найближчий прийом нового розкладу). Без fb (давніші відмітки, сервер для
+     давнішого застосунку) — за вікном від часу відмітки */
+  var ownOf = function (r, a, fb, per) {
+    var q, o = -1;
+    if (fb !== null) { for (q = 0; q < r.length; q++) if (o < 0 || Math.abs(r[q] - fb) < Math.abs(r[o] - fb)) o = q; return o; }
+    if (a !== null) for (q = 0; q < r.length; q++) if (winStart(r, q, per) <= a) o = q;
+    return o;
+  };
+  /* відмітка — 'HH:MM' або { t: 'HH:MM', f: 'HH:MM', g: ['HH:MM'…] } (з 3.27.5; з 3.27.5 — g: прийоми, злиті до цієї відмітки (не вміщались з проміжком від години — їх не показували й про них не нагадували):
+       вони не повертаються «пропущено», коли пізніша відмітка їх обжене) */
+  var markOf = function (x) { return x && typeof x === 'object' ? { t: x.t || '', f: x.f || '', g: Array.isArray(x.g) ? x.g : [] } : { t: x || '', f: '', g: [] }; };
+  function core(times, target, glass, ml, at, now, per, marks) {
     var n = (times || []).length; ml = Number(ml) || 0;
     if (!n || !(target > 0) || !(glass > 0)) return null;
     var h = glass / 2, H = Math.ceil(target / h - 1e-9), cap = per ? Math.min(halvesCap(glass), Math.max(2 * per, Math.ceil(H / n))) : halvesCap(glass), base = spread(H, n);
     var f = hm(times[0].t), cross = times.some(function (x) { return hm(x.t) < f; });
     var rel = function (t) { var m = hm(t); return m === null ? null : cross ? (m - f + 1440) % 1440 : m - f; };
     var abs = function (m) { return fmtT(f + m); };
-    var r = times.map(function (x) { return rel(x.t); }), rn = rel(now), ra = rel(at), i, k, sum = 0;
+    var A = markOf(at), r = times.map(function (x) { return rel(x.t); }), rn = rel(now), ra = rel(A.t), i, k, sum = 0;
     if (rn === null) return null;
-    var own = -1; for (i = 0; i < n; i++) if (ra !== null && r[i] - WATER_GAP <= ra) own = i;
-    var mk = null; if (Array.isArray(marks)) { mk = {}; marks.forEach(function (t) { var a = rel(t), o = -1; if (a === null) return; for (var q = 0; q < n; q++) if (r[q] - WATER_GAP <= a) o = q; if (o >= 0) mk[o] = true; }); }
+    var own = ownOf(r, ra, ra !== null && A.f ? rel(A.f) : null, per);
+    var gone = {}; [A].concat(Array.isArray(marks) ? marks.map(markOf) : []).forEach(function (x) { x.g.forEach(function (t) { var a = rel(t); for (var q = 0; q < n; q++) if (a !== null && r[q] === a) gone[q] = true; }); });
+    var mk = null; if (Array.isArray(marks)) { mk = {}; marks.forEach(function (x) { x = markOf(x); var a = rel(x.t), o; if (a === null) return; o = ownOf(r, a, x.f ? rel(x.f) : null, per); if (o >= 0) mk[o] = true; }); }
     var cum = [], m = r.slice(), skip = [];
     for (i = 0; i < n; i++) { sum += base[i]; cum.push(sum); }
     var doneV = function (j) { return ml >= Math.min(target, cum[j] * h) - 1e-6; };
     if (per && ra !== null) {
-      var R = [], seg = [], prev = ra, out = {}, ok = true;
-      for (i = own + 1; i < n; i++) { if (!doneV(i)) R.push(i); else if (own < 0 && i === 0) m[0] = ra; else skip[i] = true; }  // випите до першого вікна — прийом о часі відмітки
+      var R = [], seg = [], prev = ra, out = {};
+      for (i = own + 1; i < n; i++) { if (gone[i]) continue; if (!doneV(i)) R.push(i); else if (own < 0 && i === 0) m[0] = ra; else skip[i] = true; }  // випите до першого вікна — прийом о часі відмітки
       for (k = 0; k < R.length; k++) {
-        var j = R[k];
-        if (k < R.length - 1 && times[j].k !== 'train') { seg.push(j); continue; }
+        var j = R[k], end = k === R.length - 1;
+        if (!end && times[j].k !== 'train') { seg.push(j); continue; }
+        /* з 3.27.5 — закріплений прийом (за 1,5 год до тренування чи останній) ближче години після відмітки: склянку зараховано попередньому,
+          а пити знову раніше ніж за годину застосунок не планує — він зливається з рештою (без «пропущено»); останній — разом з усім, що перед ним */
+        if (r[j] - ra < WATER_GAP) { skip[j] = true; if (end) seg.forEach(function (q) { skip[q] = true; }); continue; }
         var step = (r[j] - prev) / (seg.length + 1);
-        if (seg.length && step < WATER_GAP) ok = false;
+        /* з 3.27.5 — решта прийомів відрізка не вміщається з проміжком від години (людина щоразу пила пізніше нагадування, і день стиснувся):
+          зайві (пізніші) прийоми відрізка зливаються з ранішими — без «пропущено», вода — у прийоми, що лишились (до межі за раз; решту не надолужуємо). До 3.27.5
+          тоді весь розклад повертався до основи, і прийом, про який ще не нагадували, ставав «пропущено» */
+        if (seg.length && step < WATER_GAP) { var fit = Math.max(0, Math.floor((r[j] - prev) / WATER_GAP + 1e-9) - 1); seg.slice(fit).forEach(function (q) { skip[q] = true; }); seg = seg.slice(0, fit); step = (r[j] - prev) / (seg.length + 1); }
         seg.forEach(function (s, z) { var x = prev + step * (z + 1), v = Math.round((f + x) / 5) * 5 - f; out[s] = v - prev < WATER_GAP ? Math.ceil((f + x) / 5) * 5 - f : v; });
         prev = r[j]; seg = [];
       }
-      if (ok) Object.keys(out).forEach(function (s) { m[s] = out[s]; });
+      Object.keys(out).forEach(function (s) { m[s] = out[s]; });
     }
-    var c = -1; for (i = 0; i < n; i++) if (!skip[i] && m[i] <= rn) c = i;
+    var c = -1; for (i = 0; i < n; i++) if (!skip[i] && !gone[i] && m[i] <= rn) c = i;
     var items = [], pend = [];
     for (i = 0; i < n; i++) {
-      if (skip[i]) continue;
+      if (skip[i] || gone[i]) continue;
       var done = (mk && i <= own ? !!mk[i] : doneV(i)) || i === own, open = i > own && (i > c || (i === c && rn < m[i] + 30));  // прийом до відмітки — уже минув
-      var it = { m: m[i], t: m[i] === r[i] ? times[i].t : abs(m[i]), h: base[i], k: times[i].k || '', st: done ? 'done' : open ? 'plan' : 'missed', up: false };
+      var it = { m: m[i], t: m[i] === r[i] ? times[i].t : abs(m[i]), h: base[i], k: times[i].k || '', st: done ? 'done' : open ? 'plan' : 'missed', up: false, b: i };
       items.push(it); if (it.st === 'plan') pend.push(it);
     }
     var left = Math.max(0, Math.ceil((target - ml) / h - 1e-9)), short = 0;
@@ -350,7 +376,7 @@ var KITCHEN = (function () {
           if (p0 > 0) gaps.push([items[p0 - 1].m, pend[0].m]);
           for (k = 0; k < gaps.length && e > 0; k++) {
             var mid = Math.round((gaps[k][0] + gaps[k][1]) / 10) * 5;
-            if (mid + 30 > rn && mid - gaps[k][0] >= WATER_GAP && gaps[k][1] - mid >= WATER_GAP && (ra === null || mid - ra >= WATER_GAP)) { add = Math.min(e, cap); extra.push({ m: mid, t: abs(mid), h: add, k: 'extra', st: 'plan', up: true }); e -= add; }
+            if (mid + 30 > rn && mid - gaps[k][0] >= WATER_GAP && gaps[k][1] - mid >= WATER_GAP && (ra === null || mid - ra >= WATER_GAP)) { add = Math.min(e, cap); extra.push({ m: mid, t: abs(mid), h: add, k: 'extra', st: 'plan', up: true, b: -1 }); e -= add; }
           }
           items = items.concat(extra).sort(function (x, y) { return x.m - y.m; });
         }
@@ -365,7 +391,25 @@ var KITCHEN = (function () {
     items = items.filter(function (x) { return x.st !== 'plan' || x.h > 0; });
     var tu = null;
     for (i = 0; i < items.length; i++) if (items[i].st === 'plan') { var x = items[i]; tu = { i: i + 1, n: items.length, t: x.t, k: x.k, p: x.h / 2, ml: Math.round(x.h * h), up: x.up, capped: short > 0, now: x.m <= rn }; break; }
-    return { items: items.map(function (x) { return { t: x.t, h: x.h, k: x.k, st: x.st, up: x.up }; }), turn: tu, short: short };
+    return { items: items, turn: tu, short: short, own: own, rel: rel };
+  }
+  function waterDayPlan(times, target, glass, ml, at, now, per, marks) {
+    var p = core(times, target, glass, ml, at, now, per, marks);
+    return p && { items: p.items.map(function (x) { return { t: x.t, h: x.h, k: x.k, st: x.st, up: x.up }; }), turn: p.turn, short: p.short };
+  }
+  /* з 3.27.5 — до якого прийому належить відмітка, зроблена зараз (now; at, ml, marks — до неї): за планом, який людина бачить і про який їй нагадали
+     (після попередніх відміток прийоми зсуваються — розклад-основа тут не годиться), тим самим вікном; не раніше прийому попередньої відмітки.
+     → { f — час прийому в розкладі-основі (його зберігає відмітка — waterDayPlan бере саме його) або '' — раніше вікна першого прийому (тоді — як
+     до 3.27.5), g — прийоми між попередньою відміткою й цим, яких у плані не було (злиті), — їх теж зберігає відмітка } */
+  function waterMarkFor(times, target, glass, ml, at, now, per, marks) {
+    var p = core(times, target, glass, ml, at, now, per, marks), C, T, k, o = -1;
+    if (!p || !per) return { f: '', g: [] };  // без «за раз» — без збереженого прийому (як до 3.27.5)
+    T = p.rel(now); C = p.items.filter(function (x) { return x.b >= 0 && x.b >= p.own; });
+    for (k = 0; k < C.length; k++) if ((k ? C[k].m - Math.min(WATER_GAP, (C[k].m - C[k - 1].m) / 2) : C[0].m - WATER_GAP) <= T) o = k;
+    if (o < 0) return { f: '', g: [] };
+    var b = C[o].b, seen = {}, g = []; p.items.forEach(function (x) { seen[x.b] = true; });
+    for (k = Math.max(0, p.own + 1); k < b; k++) if (!seen[k]) g.push(times[k].t);
+    return { f: times[b].t, g: g };
   }
   function waterTurn(times, target, glass, ml, at, now, per, marks) { var p = waterDayPlan(times, target, glass, ml, at, now, per, marks); return p && p.turn; }
 
@@ -397,6 +441,6 @@ var KITCHEN = (function () {
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
-    plate: plate, recipe: recipe, proteinGap: proteinGap, MI_KEYS: MI_KEYS, microNorm: microNorm, microsOf: microsOf, dayMicros: dayMicros, BURN: BURN, realBurn: realBurn, offLabel: offLabel, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
+    plate: plate, recipe: recipe, proteinGap: proteinGap, MI_KEYS: MI_KEYS, microNorm: microNorm, microsOf: microsOf, dayMicros: dayMicros, BURN: BURN, realBurn: realBurn, offLabel: offLabel, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterMarkFor: waterMarkFor, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
 })();
 if (typeof module !== 'undefined') module.exports = KITCHEN;

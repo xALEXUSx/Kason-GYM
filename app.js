@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.3';
+  const VERSION = '3.27.5';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -64,7 +64,11 @@ window.APP_START = () => {
   /* підпис у списку «Хто тренується?» — назва програми (для старих журналів — одразу) */
   { const acc = STORE.account(STORE.current); if (acc && !acc.sub && DB.active && PROGRAMS[DB.active]) STORE.update(STORE.current, { sub: PROGRAMS[DB.active].title }); }
   function fixProfiles(db) { Object.keys(db.profiles || {}).forEach((id) => { const p = db.profiles[id]; if (p && !Array.isArray(p.days) && PROGRAMS[id]) p.days = PROGRAMS[id].days.slice(); }); return db; }
+  const VRATES = [1, 1.2, 1.5, 2];  // швидкість голосу тренера (з 3.27.4)
   VOICE.init(DB.settings.voice);
+  /* швидкість голосу (з 3.27.4): ×1 / ×1,2 / ×1,5 / ×2 — для записаного голосу, відповідей тренера й системного голосу (VOICE бере rate з того самого обʼєкта);
+     до 3.27.4 «Темп» (0,9 / 1 / 1,1) був лише для системного голосу: 0,9 → ×1, 1,1 → ×1,2 */
+  { const r = Number(DB.settings.voice.rate) || 1; DB.settings.voice.rate = VRATES.indexOf(r) >= 0 ? r : (r > 1 ? 1.2 : 1); VOICEPACK.setRate(DB.settings.voice.rate); }
   RADIO.setDuck(DB.settings.radio.duck);
   let view = DB.active ? 'home' : 'onboard';
   /* відкрили з нагадування про воду (з 3.27.1, sw.js → «./#kitchen»): одразу «Кухня» сьогодні; знак з адреси прибираємо, щоб оновлення сторінки не вертало сюди */
@@ -1542,7 +1546,8 @@ window.APP_START = () => {
   function whatsNew() {
     openSheet(`${LL(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
-        <li style="display:block"><b>📏 Тести форми</b><div class="small muted">«Тіло» → «Тести», раз на місяць (тижні 1, 4, 8, 12): свій набір за віком і здоровʼям — віджимання, вставання з крісла, бічна планка, від 51 — рівновага, від 46 — сісти й встати з підлоги, ходьба 2 км чи 6 хв; до кожного — короткий рядок і 3D. Пульс у спокої й талія / зріст — без дня тестів; у залі — сила з журналу. З тиском чи серцем тестів «до відмови» немає.</div></li>
+        <li style="display:block"><b>🗣 Швидкість голосу тренера</b><div class="small muted">«Більше» → «Голосовий тренер» → «Швидкість голосу»: ×1, ×1,2, ×1,5 або ×2 — і фрази тренування, і відповіді тренера; тон голосу не змінюється.</div></li>
+        <li style="display:block"><b>📏 Тести форми</b><div class="small muted">«Тіло» → «Тести», раз на місяць (тижні 1, 4, 8, 12): свій набір за віком і здоровʼям — віджимання, вставання з крісла, бічна планка, від 51 — рівновага, від 46 — сісти й встати з підлоги, ходьба 2 км чи 6 хв; кожен тест — окрема картка: короткий рядок, 3D, свої поля й кнопка «Зберегти» — робіть ті, що можете, коли зручно. Пульс у спокої й талія / зріст — без дня тестів; у залі — сила з журналу. З тиском чи серцем тестів «до відмови» немає.</div></li>
         <li style="display:block"><b>📅 5–6 днів: «верх / низ»</b><div class="small muted">В анкеті й у «Більше» → «Дні тренувань» можна обрати 5 або 6 днів: тренування «Верх тіла» і «Низ тіла» по черзі, коротші, кожна група мʼязів 2–3 рази на тиждень, тижневий обсяг — не менший, ніж на 4 дні. Вправи ті самі. Для 55+ і з тиском чи серцем — як і було, до 4 днів.</div></li>
         <li style="display:block"><b>☀️ Готовність до тренування</b><div class="small muted">У день тренування, коли відповіли на ранкове питання, — під відповіддю: самопочуття й чи відпочили мʼязи сьогоднішнього тренування. Погано чи так собі — порада «Коротка версія» й правило застуди. Лише показ: план не змінюється.</div></li>
         <li style="display:block"><b>🔀 Новий варіант на початку фази</b><div class="small muted">На тижнях 5 і 9 тренер може запропонувати складніший варіант вправи, яку ви вже впевнено робите, — лише порада, вибір ваш.</div></li>
@@ -1563,7 +1568,8 @@ window.APP_START = () => {
         <li style="display:block"><b>↩ Повернення після перерви</b><div class="small muted">Не тренувались 2 тижні й більше — застосунок сам зменшує вагу: перерва до місяця — перший тиждень на ≈ 20 % легше; довша (або від 60 років — від 2 тижнів) — перший тиждень третина колишньої ваги, далі щотижня більше, до колишньої — за половину часу перерви. Без відмови, міо й дропів.</div></li>
         <li style="display:block"><b>🔔 Нагадування</b><div class="small muted">`, `<div class="sp"><b>What the app can do</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>
       <ul class="list">
-        <li style="display:block"><b>📏 Fitness tests</b><div class="small muted">“Body” → “Tests,” once a month (weeks 1, 4, 8, 12): your own set by age and health — push-ups, chair stands, side plank, balance from 51, sitting and rising from the floor from 46, a 2 km or 6-minute walk; each has a short line and a 3D guide. Resting pulse and waist-to-height — no test day needed; at the gym — strength from your log. With blood pressure or heart issues, there are no all-out tests.</div></li>
+        <li style="display:block"><b>🗣 Coach voice speed</b><div class="small muted">“More” → “Voice coach” → “Voice speed”: ×1, ×1.2, ×1.5 or ×2 — both workout phrases and the coach’s answers; the pitch stays the same.</div></li>
+        <li style="display:block"><b>📏 Fitness tests</b><div class="small muted">“Body” → “Tests,” once a month (weeks 1, 4, 8, 12): your own set by age and health — push-ups, chair stands, side plank, balance from 51, sitting and rising from the floor from 46, a 2 km or 6-minute walk; each test is its own card with a short line, a 3D guide, its own fields and a Save button — do the ones you can, whenever it suits you. Resting pulse and waist-to-height — no test day needed; at the gym — strength from your log. With blood pressure or heart issues, there are no all-out tests.</div></li>
         <li style="display:block"><b>📅 5–6 days: upper / lower</b><div class="small muted">In the questionnaire and in “More” → “Workout days” you can pick 5 or 6 days: “Upper body” and “Lower body” workouts in turn, shorter, each muscle group 2–3 times a week, weekly volume no less than on 4 days. Same exercises. For 55+ and with blood pressure or heart issues — up to 4 days, as before.</div></li>
         <li style="display:block"><b>☀️ Workout readiness</b><div class="small muted">On a workout day, once you’ve answered the morning check-in — below your answer: how you feel and whether today’s workout muscles have rested. Feeling poorly or so-so — a tip about the short version and the cold rule. Display only: your plan doesn’t change.</div></li>
         <li style="display:block"><b>🔀 A new variation at the start of a phase</b><div class="small muted">In weeks 5 and 9, the coach may suggest a harder variation of an exercise you already do confidently — just a suggestion, the choice is yours.</div></li>
@@ -1919,22 +1925,30 @@ window.APP_START = () => {
           audio(b64) {
             t.pcm.push(b64);
             if (!got) { got = true; clearTimeout(wait); if (g === ASK.gen) { ASK.st = 'talk'; ASK.i = k(); askDraw(); } fin(true); }
-            if (g === ASK.gen && livePlay(b64)) t.heard = true;
+            if (g === ASK.gen && livePlay(b64, t)) t.heard = true;
           },
           text(s) { t.a += s; if (g === ASK.gen) askDraw(); },
-          done() { clearTimeout(wait); LIVE.turn = null; t.a = String(t.a).replace(/\s+/g, ' ').trim(); t.done = true; askDraw(); if (got) liveEnded(k(), g); else fin(false); },
-          fail() { clearTimeout(wait); LIVE.turn = null; t.done = !!t.a; askDraw(); if (got) liveEnded(k(), g); else fin(false); }
+          done() { clearTimeout(wait); LIVE.turn = null; if (g === ASK.gen) liveFlush(t); t.a = String(t.a).replace(/\s+/g, ' ').trim(); t.done = true; askDraw(); if (got) liveEnded(k(), g); else fin(false); },
+          fail() { clearTimeout(wait); LIVE.turn = null; if (g === ASK.gen) liveFlush(t); t.done = !!t.a; askDraw(); if (got) liveEnded(k(), g); else fin(false); }
         };
         try { ws.send(JSON.stringify({ clientContent: { turns, turnComplete: true } })); } catch (e) { LIVE.turn.fail(); }
       }, () => { clearTimeout(wait); fin(false); });
     });
   }
   /* потоковий звук: шматки PCM 24 кГц стають у чергу Web Audio один за одним; true — шматок поставлено */
-  function livePlay(b64) {
+  /* швидкість (з 3.27.4): t.st — потоковий WSOLA цієї відповіді (VOICEPACK.Stretch), без зміни тону; наприкінці відповіді — liveFlush */
+  function livePlay(b64, t) {
     if (!S().voice.on || !audio || audio.state !== 'running') return false;
     const bin = atob(b64), n = bin.length >> 1; if (!n) return false;
-    const buf = audio.createBuffer(1, n, 24000), d = buf.getChannelData(0);
+    let d = new Float32Array(n);
     for (let k = 0; k < n; k++) { const v = bin.charCodeAt(2 * k) | (bin.charCodeAt(2 * k + 1) << 8); d[k] = (v > 32767 ? v - 65536 : v) / 32768; }
+    if (t && VOICEPACK.rate !== 1) { if (!t.st || t.st.r !== VOICEPACK.rate) t.st = Object.assign(VOICEPACK.Stretch(24000, VOICEPACK.rate), { r: VOICEPACK.rate }); d = t.st.push(d); }
+    liveQueue(d); return true;
+  }
+  function liveFlush(t) { if (t && t.st && S().voice.on && audio && audio.state === 'running') liveQueue(t.st.flush()); if (t) t.st = null; }
+  function liveQueue(d) {
+    if (!d.length) return;
+    const buf = audio.createBuffer(1, d.length, 24000); buf.getChannelData(0).set(d);
     const s = audio.createBufferSource(); s.buffer = buf; s.connect(audio.destination);
     const now = audio.currentTime; if (PLAY.t < now + 0.03) PLAY.t = now + 0.06;
     s.start(PLAY.t); PLAY.t += buf.duration; PLAY.srcs.push(s);
@@ -2019,9 +2033,9 @@ window.APP_START = () => {
       body.on = !!r.on;
       /* вода (з 3.20.0): розклад на день тренування й на звичайний, склянка, випите сьогодні — сервер пропускає склянки, які вже відмічено */
       const sx = ksex(), wr = kWRec(), mk = (tr) => KITCHEN.waterPlan(kw.first, kw.last, KITCHEN.waterTarget(sx, tr, kw.vol, wr), kw.glass, tr && r.on ? (r.time || '18:00') : null, kw.per);
-      const wl = kday(kWaterDay()).wl || [];  // з 3.21.1 — норма на день і час останньої відмітки: сервер рахує склянку на черзі так само (push.js waterTurn)
+      const wl = kday(kWaterDay()).wl || [], lw = wl[wl.length - 1];  // з 3.21.1 — норма на день і час останньої відмітки: сервер рахує склянку на черзі так само (push.js waterTurn)
       body.water = kw.water ? { on: true, glass: kw.glass, per: kw.per, rest: mk(false), train: mk(true), tr: { rest: KITCHEN.waterTarget(sx, false, kw.vol, wr), train: KITCHEN.waterTarget(sx, true, kw.vol, wr) },
-        done: { date: kWaterDay(), ml: kday(kWaterDay()).water || 0, at: wl.length ? wl[wl.length - 1].t : '' }, wake: kw.first, cross: kWaterCross() } : { on: false };  // день води — від підйому (нічна зміна)
+        done: { date: kWaterDay(), ml: kday(kWaterDay()).water || 0, at: lw ? lw.t : '', f: (lw && lw.f) || '', g: [].concat.apply([], wl.map((x) => x.g || [])) }, wake: kw.first, cross: kWaterCross() } : { on: false };  // день води — від підйому (нічна зміна)
       const res = await fetch(COACH_URL + '/push/sub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       return res.ok;
     } catch (e) { return false; }
@@ -2171,7 +2185,8 @@ window.APP_START = () => {
     const reds = p.sessions.slice(-3).filter((s) => s.ready === 'r').length;
     if (reds >= 2) out.push(LL('<div class="note b">Спина болить уже кілька тренувань поспіль. Варто показатися неврологу чи ортопеду — з МРТ.</div>', "<div class=\"note b\">Your back has hurt for several workouts in a row. It’s worth seeing a neurologist or an orthopedist — with an MRI.</div>"));
     const wk = ENGINE.planFor(prog, nextN()).week;
-    if (prog.tests && [1, 4, 8, 12].indexOf(wk) >= 0 && !(p.body.tests || []).some((t) => Date.now() - tms(t.d) < 21 * 864e5)) out.push(LL('<div class="note w">Цього тижня — тести форми: «Тіло» → «Тести».</div>', '<div class="note w">This week — fitness tests: “Body” → “Tests”.</div>'));  // з 3.27.3 тестів у кожного кілька (до того — «тест віджимань» / «тести готовності до старіння»)
+    if (prog.tests && [1, 4, 8, 12].indexOf(wk) >= 0) { const tl = p.body.tests || [], ks = TEST_HOW().filter(([k]) => testOn(k)).map(([k]) => k), dn = ks.filter((k) => testDone(k, tl)).length;  // з 3.27.4 тести — окремо: нагадка рахує зроблені й зникає, коли зроблено всі
+      if (dn < ks.length) out.push(dn ? LL(`<div class="note w">Цього тижня — тести форми: зроблено ${dn} з ${ks.length}. «Тіло» → «Тести».</div>`, `<div class="note w">This week — fitness tests: ${dn} of ${ks.length} done. “Body” → “Tests”.</div>`) : LL('<div class="note w">Цього тижня — тести форми: «Тіло» → «Тести».</div>', '<div class="note w">This week — fitness tests: “Body” → “Tests”.</div>')); }  // з 3.27.3 тестів у кожного кілька (до того — «тест віджимань» / «тести готовності до старіння»)
     if (p.sessions.length >= 3 && (!DB.lastBackup || Date.now() - tms(DB.lastBackup) > 14 * 864e5)) out.push(LL('<div class="note w">Резервної копії не було понад 2 тижні — «Більше» → «Зберегти резервну копію».</div>', "<div class=\"note w\">No backup in over 2 weeks — “More” → “Save backup”.</div>"));
     const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
     if (!standalone && !p.sessions.length) out.push(installNote(LL('Спершу встановіть', "Install it first")));
@@ -2206,7 +2221,8 @@ window.APP_START = () => {
     const nd = nextDayText(p.days);
     /* порядок головної (з 3.27.1; слово Alexа 25.10: «Так, роби в 3.27.1 як радиш: порядок Тренування → Кухня → Як ви сьогодні → Завдання дня → Щодня → Урок дня,
        вода першим рядком у картці кухні…»; «Завдання дня» прибрано — «Прибери картку «Завдання дня» з головної в 3.27.1»: усі її пункти вже мають свої картки поруч): найчастіше застосунок відкривають відмітити воду — «+ склянка» на першому екрані (замір 390 × 844: було 2 047 px, стало ≈ 570) */
-    app.innerHTML = `<div class="brand">${MARK}${WORD}${themeBtn()}${LL(`</div><p class="muted small" style="margin-top:4px">`, `</div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
+    /* логотип на головній — кнопка «Що вміє застосунок» (з 3.27.4; слово Alexа 26.10: «коли натискаю на логотип має вискакувати вікно що вміє додаток») */
+    app.innerHTML = `<div class="brand"><button type="button" class="logo" data-act="whatsnew" aria-label="${esc(LL('FORTES — що вміє застосунок', 'FORTES — what the app can do'))}" data-tip="${esc(LL('Дотик — що вміє застосунок.', 'Tap to see what the app can do.'))}">${MARK}${WORD}</button>${themeBtn()}${LL(`</div><p class="muted small" style="margin-top:4px">`, `</div><p class="muted small" style="margin-top:4px">`)}${new Date().toLocaleDateString(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' })}</p><div class="sp"><h1>${greet}${LL(`!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `!</h1><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button><button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" data-act="radio" aria-label="радіо">`, `" data-act="radio" aria-label="radio">`)}${ICON.radio}</button></div></div>
       ${alerts()}
       ${d ? `${LL(`<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">`, `<div class="card"><div class="sp"><div><b>Workout in progress</b><div class="small muted">`)}${esc(wTitle(d))} · ${draftStats(d).done}/${draftStats(d).total}${LL(` підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>`, ` sets</div></div><button type="button" class="pri" data-act="resume">Resume</button></div></div>`)}` : ''}${LL(`
       <div class="card hero"><div class="row"><span class="chip">Тиждень `, `
@@ -2423,6 +2439,12 @@ window.APP_START = () => {
   const TEST_TIP = () => ({ srt: LL('Бали за тест «сісти й встати з підлоги»: 10 мінус 1 за кожну опору, мінус ½ за хитання.', 'Score for sitting and rising from the floor: 10 minus 1 for each support, minus ½ for wobbling.'),
     walkM: LL('Скільки повних хвилин тривали 2 км.', 'How many full minutes the 2 km took.'), walkS: LL('І скільки секунд понад хвилини.', 'And how many seconds beyond the minutes.'),
     walkHR: LL('Пульс одразу після фінішу: удари за 15 с × 4.', 'Pulse right after the finish: beats in 15 sec × 4.'), w6: LL('Скільки метрів пройшли за 6 хвилин.', 'How many meters you walked in 6 minutes.') });
+  /* з 3.27.4 кожен тест зберігається окремо: поля картки тесту (TEST_IN) і ключі запису (TEST_KEYS; 2 км — хвилини й секунди → walkT) */
+  const TEST_IN = { push: ['push'], chair: ['chair'], sp: ['spL', 'spR'], bal: ['balL', 'balR'], srt: ['srt'], car: ['carL', 'carR'], walk: ['walkM', 'walkS', 'walkHR'], w6: ['w6'] };
+  const TEST_KEYS = { push: ['push'], chair: ['chair'], sp: ['spL', 'spR'], bal: ['balL', 'balR'], srt: ['srt'], car: ['carL', 'carR'], walk: ['walkT'], w6: ['w6'] };
+  const TEST_U = () => ({ push: LL('разів', 'reps'), chair: LL('разів', 'reps'), sp: LL('с', 'sec'), bal: LL('с', 'sec'), srt: LL('балів', 'points'), car: LL('с', 'sec'), w6: LL('м', 'm') });
+  /* «цього разу зроблено» — запис за 21 день, як нагадка на головній (тижні тестів 1, 4, 8, 12) */
+  const testDone = (k, tl) => tl.some((t) => Date.now() - tms(t.d) < 21 * 864e5 && TEST_KEYS[k].some((f) => t[f] !== null && t[f] !== undefined && t[f] !== ''));
   const TEST_LIM = { push: [0, 300], chair: [0, 80], spL: [0, 900], spR: [0, 900], balL: [0, 300], balR: [0, 300], srt: [0, 10], carL: [0, 900], carR: [0, 900], walkM: [5, 90], walkS: [0, 59], walkHR: [40, 230], w6: [30, 1500] };
   const mmss = (sec) => Math.floor(sec / 60) + ':' + String(Math.round(sec % 60)).padStart(2, '0');
   /* 3D у «Як виконувати тести»: кожен тест — свій блок, відкритий — один (полотно одне на застосунок) */
@@ -2667,9 +2689,12 @@ window.APP_START = () => {
     return (short ? LL('на черзі ', 'next ') : LL('На черзі ', 'Next ')) + (tu.now ? LL('зараз', 'now') : LL('о ', 'at ') + tu.t) + ' (' + (tu.k === 'extra' ? LL('додатковий, ', 'extra, ') : '') + LL('прийом ', 'drink ') + tu.i + LL(' з ', ' of ') + tu.n + '): ' + kGlW(tu.p) + (short ? '' : why);
   }
   /* план води на сьогодні з урахуванням відміченого (з 3.21.1): «08:00 ✓ · 12:20 пропущено · 16:40 — 3 склянки · 18:50 — 1 склянка (додатковий)» */
+  /* відмітки дня для плану (з 3.27.5 — з прийомом, якому кожну зараховано, і злитими перед нею: { t, f, g }; давніші — лише час) і остання з них */
+  const kWMarks = (day) => (day.wl || []).filter((x) => x.t).map((x) => (x.f ? { t: x.t, f: x.f, g: x.g || [] } : x.t));
+  const kWAt = (day) => { const x = (day.wl || []).slice(-1)[0]; return x ? (x.f ? { t: x.t, f: x.f } : x.t) : ''; };
   function kDayPlan() {
-    const wd = kWaterDay(), day = kday(wd), wl = day.wl || [];
-    return KITCHEN.waterDayPlan(kWaterTimes(wd), kWTarget(wd), kit().set.glass, day.water || 0, wl.length ? wl[wl.length - 1].t : '', kNowHM(), kit().set.per, wl.map((x) => x.t).filter(Boolean));  // з 3.22.2 — ✓ лише прийомам з відміткою
+    const wd = kWaterDay(), day = kday(wd);
+    return KITCHEN.waterDayPlan(kWaterTimes(wd), kWTarget(wd), kit().set.glass, day.water || 0, kWAt(day), kNowHM(), kit().set.per, kWMarks(day));  // з 3.22.2 — ✓ лише прийомам з відміткою
   }
   const kPlanTxt = (items) => items.map((x) => x.t + (x.st === 'done' ? ' ✓' : x.st === 'missed' ? LL(' пропущено', ' missed') : ' — ' + kGlW(x.h / 2) + (x.k === 'extra' ? LL(' (додатковий)', ' (extra)') : ''))).join(' · ');
   /* прийомів на день і порції — для налаштувань: «4 прийоми по 2 склянки» (у день тренування — свої) */
@@ -2683,8 +2708,13 @@ window.APP_START = () => {
   }
   /* відмітка води: скільки й коли (з 3.21.1 — журнал дня: «−» прибирає саме останню відмітку, час — для склянки на черзі) */
   function kWaterLog(d, ml) {
-    const day = kdayW(d), was = day.water || 0; day.water = was + ml;
-    (day.wl = day.wl || []).push({ ml, t: d === kWaterDay() ? kNowHM() : '' }); if (day.wl.length > 60) day.wl.shift();
+    const day = kdayW(d), was = day.water || 0, now = d === kWaterDay() ? kNowHM() : '';
+    /* з 3.27.5 — якому прийому належить відмітка, вирішуємо зараз, за планом, який людина бачить і про який їй нагадали, і зберігаємо (f): пізніші
+       перерахунки (нові відмітки зсувають прийоми, зміна «за раз» чи часу — інший розклад) зараховане не переписують (скриншот Alexа 26.10: «я випив
+       вчасно склянку а пише що я пропустив … можливо через те що я змінив в налаштуваннях з 2 склянок на 1 за раз») */
+    const fg = now ? KITCHEN.waterMarkFor(kWaterTimes(d), kWTarget(d), kit().set.glass, was, kWAt(day), now, kit().set.per, kWMarks(day)) : { f: '', g: [] };
+    day.water = was + ml;
+    (day.wl = day.wl || []).push(fg.f ? Object.assign({ ml, t: now, f: fg.f }, fg.g.length ? { g: fg.g } : {}) : { ml, t: now }); if (day.wl.length > 60) day.wl.shift();
     /* охра — досягнення (з 3.27.2; слово Alexа 25.10: «роби пункти 1–4 … охра як досягнення»): норму на сьогодні щойно виконано — одне золоте повідомлення, як рекорд */
     const T = kWTarget(d); if (d === kWaterDay() && was < T && day.water >= T) toast(LL('💧 Норму води на сьогодні виконано', '💧 Today’s water goal is done'), true);
   }
@@ -3424,29 +3454,37 @@ window.APP_START = () => {
         <p class="tiny muted">Photos are stored only on this phone (compressed to 1080 px). Weeks 1, 4, 8, 12 — same lighting and same spot.</p>`)}`;
     } else {
       const tl = (p.body.tests || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1)), tv = TV();
-      const how = TEST_HOW().filter(([k]) => testOn(k)).map(([k, name, line, v3]) => { const nm = testNorm(k);
-        return typeof VIZ === 'undefined' || !VIZ.has(v3) ? `<p class="small" style="margin:8px 0"><b>${name}.</b> ${line}${nm ? `<br><span class="tiny muted">${nm}</span>` : ''}</p>`
-          : `<details class="vz3 vzt" data-k="${v3}"><summary data-tip="${esc(LL('Дотик — 3D: як виконувати тест і що означає число.', 'Tap for 3D: how to do the test and what the number means.'))}"><b>${name}</b><span class="small muted">${line}</span></summary>${vizInner()}${nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : ''}</details>`; }).join('')
-        + (testOn('bal') ? LL('<p class="small" style="margin:10px 0 4px"><b>Фото осанки збоку.</b> Вухо, плече, таз і кісточка — чи на одній лінії; однакове світло й місце («Тіло» → «Фото» → «Збоку»).</p>', '<p class="small" style="margin:10px 0 4px"><b>Side posture photo.</b> Ear, shoulder, hip and ankle — are they in one line; same light and spot (“Body” → “Photos” → “Side”).</p>') : '');
+      /* з 3.27.4 кожен тест — окрема картка (слово Alexа 26.10: «кожен тест + 3Д має бути окремо, бо не усі тести я кожен раз зможу проходити»): назва й останній результат,
+         короткий рядок, 3D і що означає число, свої поля й своя кнопка «Зберегти», графік саме цього тесту; до 3.27.4 — «Як виконувати тести» окремо, одна форма на всі й графіки нижче */
       const seg = (k, opts) => `<div class="seg" style="grid-column:1/-1;margin:0 0 6px">${opts.map(([v, l]) => `<button type="button" class="${tv[k] === v ? 'on' : ''}" data-act="tVar" data-k="${k}" data-v="${v}" data-tip="${esc(LL('Як робили — так і запишеться: графік порівнює лише той самий варіант.', 'Mark how you did it: the chart compares only the same version.'))}">${l}</button>`).join('')}</div>`;
-      const ttip = TEST_TIP(), fields = TESTS.filter(([k]) => testOn(k)).map(([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="${k === 'srt' ? 'decimal' : 'numeric'}" id="t_${k}"${ttip[k] ? ` data-tip="${esc(ttip[k])}"` : ''}></div>`
-        + (k === 'push' ? seg('pushV', [['k', LL('з колін', 'from the knees')], ['t', LL('з носків', 'from the toes')]]) : k === 'spR' ? seg('spV', [['k', LL('з колін', 'from the knees')], ['f', LL('з ніг', 'from the feet')]]) : '')).join('');
+      const ttip = TEST_TIP(), tu = TEST_U(), field = ([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="${k === 'srt' ? 'decimal' : 'numeric'}" id="t_${k}"${ttip[k] ? ` data-tip="${esc(ttip[k])}"` : ''}></div>`;
       /* графіки: віджимання — окремою лінією на кожен варіант; бічна планка — останній варіант (старі записи без позначки — «з ніг», як радив опис до 3.27.3) */
       const pts = (key, f, sel) => tl.filter((t) => t[key] !== null && t[key] !== undefined && t[key] !== '' && (!sel || sel(t))).map((t) => ({ t: tms(t.d), v: f ? f(Number(t[key])) : Number(t[key]) }));
-      const chart = (name, ser, legend, sub) => (!ser.some((x) => x.pts.length) ? '' : `<div class="card"><div class="sp"><b class="small">${name}</b>${sub ? `<span class="small muted">${sub}</span>` : ''}</div>${CHARTS.line(ser, { h: 120, label: name })}${legend || ''}</div>`);
       const LR = LL('<div class="legend"><span><i></i>ліва</span><span><i style="background:var(--d)"></i>права</span></div>', "<div class=\"legend\"><span><i></i>left</span><span><i style=\"background:var(--d)\"></i>right</span></div>");
-      const shown = (id, keys) => testOn(id) || tl.some((t) => keys.some((k) => t[k] !== null && t[k] !== undefined));
       const PV = [['t', 'var(--accent)', LL('з носків', 'from the toes')], ['k', 'var(--d)', LL('з колін', 'from the knees')], ['', 'var(--muted)', LL('без позначки', 'not marked')]].filter(([v]) => tl.some((t) => t.push !== null && t.push !== undefined && (t.pushV || '') === v));
       const spv = (tl.filter((t) => t.spV).pop() || {}).spV || 'f', lastW = tl.filter((t) => t.walkT).pop();
-      const charts = [
-        shown('push', ['push']) ? chart(LL('Віджимання', 'Push-ups'), PV.map(([v, c]) => ({ pts: pts('push', null, (t) => (t.pushV || '') === v), color: c })), PV.length > 1 ? `<div class="legend">${PV.map(([, c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>` : '', PV.length === 1 ? PV[0][2] : '') : '',
-        shown('chair', ['chair']) ? chart(LL('Вставання з крісла за 30 с', '30-second chair stand'), [{ pts: pts('chair'), color: 'var(--accent)' }]) : '',
-        shown('sp', ['spL', 'spR']) ? chart(LL('Бічна планка, с', 'Side plank, sec'), ['spL', 'spR'].map((k, i) => ({ pts: pts(k, null, (t) => (t.spV || 'f') === spv), color: i ? 'var(--d)' : 'var(--accent)' })), LR, spv === 'k' ? LL('з колін', 'from the knees') : LL('з ніг', 'from the feet')) : '',
-        shown('bal', ['balL', 'balR']) ? chart(LL('Стійка на одній нозі, с', 'Single-leg stand, sec'), ['balL', 'balR'].map((k, i) => ({ pts: pts(k), color: i ? 'var(--d)' : 'var(--accent)' })), LR) : '',
-        shown('srt', ['srt']) ? chart(LL('Сісти й встати з підлоги, балів', 'Sit and rise from the floor, points'), [{ pts: pts('srt'), color: 'var(--accent)' }]) : '',
-        shown('car', ['carL', 'carR']) ? chart(LL('Валізна прогулянка, с', 'Suitcase carry, sec'), ['carL', 'carR'].map((k, i) => ({ pts: pts(k), color: i ? 'var(--d)' : 'var(--accent)' })), LR) : '',
-        shown('walk', ['walkT']) ? chart(LL('2 км ходьби, хв', '2 km walk, min'), [{ pts: pts('walkT', (v) => Math.round(v / 6) / 10), color: 'var(--accent)' }], '', lastW ? mmss(lastW.walkT) + (lastW.walkHR ? LL(' · пульс ', ' · pulse ') + lastW.walkHR : '') : '') : '',
-        shown('w6', ['w6']) ? chart(LL('Ходьба 6 хв, м', '6-minute walk, m'), [{ pts: pts('w6'), color: 'var(--accent)' }]) : ''].join('');
+      const plot = (name, ser, legend) => (!ser.some((x) => x.pts.length) ? '' : `<div style="margin-top:10px">${CHARTS.line(ser, { h: 110, label: name })}${legend || ''}</div>`);
+      const lastOf = (k) => tl.filter((t) => TEST_KEYS[k].some((f) => t[f] !== null && t[f] !== undefined && t[f] !== '')).pop();
+      const lastTxt = (k, r) => {
+        if (!r) return LL('ще не робили', 'not done yet');
+        const v = k === 'walk' ? mmss(r.walkT) + (r.walkHR ? LL(' · пульс ', ' · pulse ') + r.walkHR : '') : TEST_KEYS[k].map((f) => r[f]).filter((x) => x !== null && x !== undefined && x !== '').map(fmt).join(' / ') + ' ' + tu[k]
+          + (k === 'push' && r.pushV ? ' · ' + (r.pushV === 'k' ? LL('з колін', 'from the knees') : LL('з носків', 'from the toes')) : '') + (k === 'sp' && r.spV === 'k' ? ' · ' + LL('з колін', 'from the knees') : '');
+        return (testDone(k, tl) ? '✓ ' : '') + v + ' · ' + dm(r.d);
+      };
+      const chartOf = (k, name) => (k === 'push' ? plot(name, PV.map(([v, c]) => ({ pts: pts('push', null, (t) => (t.pushV || '') === v), color: c })), PV.length > 1 ? `<div class="legend">${PV.map(([, c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>` : '')
+        : k === 'sp' ? plot(name, ['spL', 'spR'].map((f, i) => ({ pts: pts(f, null, (t) => (t.spV || 'f') === spv), color: i ? 'var(--d)' : 'var(--accent)' })), LR)
+        : k === 'bal' || k === 'car' ? plot(name, TEST_KEYS[k].map((f, i) => ({ pts: pts(f), color: i ? 'var(--d)' : 'var(--accent)' })), LR)
+        : k === 'walk' ? plot(name, [{ pts: pts('walkT', (v) => Math.round(v / 6) / 10), color: 'var(--accent)' }], `<p class="tiny muted" style="margin:4px 0 0">${LL('Графік — хвилини на 2 км.', 'Chart — minutes for 2 km.')}</p>`)
+        : plot(name, [{ pts: pts(TEST_KEYS[k][0]), color: 'var(--accent)' }]));
+      const cards = TEST_HOW().filter(([k]) => testOn(k) || lastOf(k)).map(([k, name, line, v3]) => {
+        const nm = testNorm(k), on = testOn(k);
+        const viz = typeof VIZ === 'undefined' || !VIZ.has(v3) ? (nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : '')
+          : `<details class="vz3 vzt" data-k="${v3}"><summary data-tip="${esc(LL('Дотик — 3D: як виконувати тест і що означає число.', 'Tap for 3D: how to do the test and what the number means.'))}"><b>${LL('Як виконувати — 3D', 'How to do it — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>${vizInner()}${nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : ''}</details>`;
+        const form = !on ? `<p class="tiny muted" style="margin:8px 0 0">${LL('Цього тесту вже немає у вашій програмі — лишилась історія.', 'This test is no longer in your program — your history stays.')}</p>`
+          : `<div class="grid2" style="margin-top:10px">${TESTS.filter(([f]) => TEST_IN[k].indexOf(f) >= 0).map(field).join('')}${k === 'push' ? seg('pushV', [['k', LL('з колін', 'from the knees')], ['t', LL('з носків', 'from the toes')]]) : k === 'sp' ? seg('spV', [['k', LL('з колін', 'from the knees')], ['f', LL('з ніг', 'from the feet')]]) : ''}</div>`
+          + `<button type="button" class="pri wide" data-act="saveTest" data-t="${k}" data-tip="${esc(LL('Зберегти результат лише цього тесту за сьогодні; інші — коли зробите.', 'Save the result of this test only for today; the others whenever you do them.'))}">${LL('Зберегти', 'Save')}</button>`;
+        return `<div class="card tcard" data-t="${k}"><div class="sp"><b>${name}</b><span class="small muted">${lastTxt(k, lastOf(k))}</span></div><p class="small muted" style="margin:4px 0 0">${line}</p>${viz}${form}${chartOf(k, name)}</div>`;
+      }).join('') + (testOn('bal') ? `<div class="card"><b>${LL('Фото осанки збоку', 'Side posture photo')}</b><p class="small muted" style="margin:4px 0 0">${LL('Вухо, плече, таз і кісточка — чи на одній лінії; однакове світло й місце («Тіло» → «Фото» → «Збоку»).', 'Ear, shoulder, hip and ankle — are they in one line; same light and spot (“Body” → “Photos” → “Side”).')}</p></div>` : '');
       /* без дня тестів: пульс у спокої (Zhang 2016, CMAJ: 46 досліджень, 1 246 203 людини — +10 ударів за хвилину, на 9 % вища смертність) і талія / зріст
          (NICE NG246: 0,4–0,49 — здорово, 0,5–0,59 — підвищений ризик, від 0,6 — високий; для ІМТ до 35) — з «Замірів» і анкети, без нового заміру */
       const srt = (a) => (a || []).slice().sort((x, y) => (x.d < y.d ? -1 : 1)), rh = srt(p.body.rhr), rl = rh[rh.length - 1], wa = srt(p.body.waist).pop(), wl = srt(p.body.weight).pop();
@@ -3463,9 +3501,9 @@ window.APP_START = () => {
         const rec = ENGINE.records(ex, hist, p.handle), last = ENGINE.bestOf(ex, hist[hist.length - 1].sets, p.handle);
         return `<li><span>${esc(ex.name)}<div class="tiny muted">${esc(ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg'))}: ${LL('останнє ', 'last ')}${fmt(Math.round(last * 10) / 10)} · ${LL('рекорд ', 'best ')}${fmt(rec.e1rm.v)}</div></span></li>`;
       }).filter(Boolean);
-      body = `${LL(`<details class="card"><summary style="cursor:pointer;font-weight:650">Як виконувати тести</summary>`, `<details class="card"><summary style="cursor:pointer;font-weight:650">How to do the tests</summary>`)}${how}</details>
-        <div class="card"><p class="small muted">${LL('Тижні 1, 4, 8, 12 · ≈ 10 хв. Головне — щоб числа росли.', 'Weeks 1, 4, 8, 12 · ≈ 10 min. What matters is that the numbers go up.')}${testOn('walk') || testOn('w6') ? LL(' Ходьба — окремо, будь-якого дня тижня тестів.', ' The walk — separately, any day of the test week.') : ''}</p><div class="grid2">${fields}</div><p></p><button type="button" class="pri wide" data-act="saveTests">${LL('Зберегти тести', 'Save tests')}</button></div>
-        ${charts}${passive}${gym.length ? `<h2>${LL('Сила з журналу', 'Strength from your log')}</h2><div class="card"><p class="tiny muted" style="margin:0 0 6px">${LL('Окремий тест не потрібен: розрахунковий максимум — з ваги й повторень ваших підходів (графік — «Прогрес» → «Вправи»).', 'No separate test needed: the estimated max comes from the weight and reps of your sets (chart — Progress → Exercises).')}</p><ul class="list">${gym.join('')}</ul></div>` : ''}`;
+      const total = TEST_HOW().filter(([k]) => testOn(k)).length, done = TEST_HOW().filter(([k]) => testOn(k) && testDone(k, tl)).length;
+      body = `<p class="small muted" style="margin:4px 0 8px">${LL('Тижні 1, 4, 8, 12. Кожен тест — окремо, коли зручно: зберігайте той, що зробили. Головне — щоб числа росли.', 'Weeks 1, 4, 8, 12. Each test on its own, whenever it suits you: save the one you did. What matters is that the numbers go up.')}${done ? LL(' Цього разу зроблено: ', ' Done this time: ') + done + LL(' з ', ' of ') + total + '.' : ''}</p>${cards}
+        ${passive}${gym.length ? `<h2>${LL('Сила з журналу', 'Strength from your log')}</h2><div class="card"><p class="tiny muted" style="margin:0 0 6px">${LL('Окремий тест не потрібен: розрахунковий максимум — з ваги й повторень ваших підходів (графік — «Прогрес» → «Вправи»).', 'No separate test needed: the estimated max comes from the weight and reps of your sets (chart — Progress → Exercises).')}</p><ul class="list">${gym.join('')}</ul></div>` : ''}`;
     }
     app.innerHTML = `${LL(`<h1>Тіло</h1><div class="seg">`, `<h1>Body</h1><div class="seg">`)}${tabs.map(([k, l]) => `<button type="button" class="${ui.bodyTab === k ? 'on' : ''}" data-act="bodyTab" data-v="${k}">${l}</button>`).join('')}</div>${body}`;
     if (ui.bodyTab === 'f') loadPhotos();
@@ -3555,7 +3593,7 @@ window.APP_START = () => {
     /* після 12 тижнів — цикли з тижнів 5–12 (як у «Плані»): вибір тижня — у поточному циклі */
     const cp = ENGINE.planFor(prog, nextN()), curWeek = cp.week, wks = cp.cycle === 1 ? Array.from({ length: 12 }, (_, k) => k + 1) : Array.from({ length: 8 }, (_, k) => k + 5);
     const sw = (k, l, d) => `<label class="sw"><span>${l}<div class="tiny muted">${d}</div></span><input type="checkbox" data-set="${k}"${S()[k] ? ' checked' : ''}></label>`;
-    const seg = (key, opts, cur) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
+    const seg = (key, opts, cur, tip) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}"${tip ? ` data-tip="${esc(tip)}"` : ''}>${l}</button>`).join('')}</div>`;
     const vl = VOICE.list();
     const voiceBox = !VOICE.supported ? LL('<div class="note w small">Цей браузер не вміє озвучувати текст. ', "<div class=\"note w small\">This browser can’t read text aloud. ") + TX(LL('На iPhone голос працює в Safari й у встановленому застосунку.', "On iPhone, the voice works in Safari and in the installed app."), LL('На Android голос працює в Chrome й у встановленому застосунку.', "On Android, the voice works in Chrome and in the installed app.")) + '</div>'
       : !vl.length ? LL('<div class="note w small"><b>Українського голосу не знайдено.</b> ', "<div class=\"note w small\"><b>No English voice found.</b> ") + TX(LL('На iPhone: Параметри → Доступність → розділ про озвучення вмісту (англ. Spoken Content) → Голоси → Українська — завантажте голос і перезапустіть застосунок.', "On iPhone: Settings → Accessibility → Spoken Content → Voices → English — download a voice and restart the app."), LL('На Android: «Налаштування» → «Спеціальні можливості» → «Синтез мовлення» (або «Перетворення тексту в мовлення») → система Google → встановіть українську й перезапустіть застосунок. Назви пунктів у різних телефонів трохи різні.', "On Android: “Settings” → “Accessibility” → “Text-to-speech output” (or “Text-to-speech”) → Google engine → install English and restart the app. Menu names vary slightly from phone to phone.")) + '</div>'
@@ -3575,7 +3613,7 @@ window.APP_START = () => {
         <label class="f">Coach personality</label>`)}${seg('tone', [['hard', LL('Жорсткий з гумором', "Tough, with humor")], ['calm', LL('Спокійний', "Calm")]], V.tone || 'hard')}${LL(`
         <label class="f">Скільки говорити</label>`, `
         <label class="f">How much to talk</label>`)}${seg('level', [['full', LL('Детально', "Detailed")], ['short', LL('Коротко', "Brief")]], V.level)}
-        ${packId() ? '' : `${LL(`<label class="f">Темп</label>`, `<label class="f">Speed</label>`)}${seg('rate', [[0.9, LL('Повільніше', "Slower")], [1, LL('Звичайно', "Normal")], [1.1, LL('Швидше', "Faster")]], V.rate)}`}${LL(`
+        ${LL('<label class="f">Швидкість голосу</label>', '<label class="f">Voice speed</label>')}${seg('rate', [[1, '×1'], [1.2, LL('×1,2', '×1.2')], [1.5, LL('×1,5', '×1.5')], [2, '×2']], V.rate || 1, LL('Як швидко говорить тренер: фрази тренування й відповіді. Тон голосу не змінюється.', 'How fast the coach speaks: workout phrases and answers. The pitch stays the same.'))}${LL(`
         <button type="button" class="wide" data-act="say" data-what="test">🔊 Перевірити голос</button>
         <p class="tiny muted">Голос звучить, коли застосунок відкритий і екран увімкнений («Не гасити екран» нижче). Не чути — перевірте гучність і перемикач беззвучного режиму.</p></div>
       <h2>Музика</h2><div class="card"><div class="sp"><div><b>Радіо для тренувань</b><div class="small muted">`, `
@@ -3665,7 +3703,7 @@ window.APP_START = () => {
         ui.q = null;
         DB = fixProfiles(ENGINE.migrate(o.db)); if (DB.custom && DB.custom.answers) PROGRAMS.me = buildMe(DB.custom.answers);  // вибулі вправи — з відновленої історії
         if (!DB.active || !DB.profiles[DB.active] || !PROGRAMS[DB.active]) DB.active = Object.keys(DB.profiles).filter((k) => PROGRAMS[k])[0] || null;
-        VOICE.init(DB.settings.voice); RADIO.setDuck(DB.settings.radio.duck); syncLegacy();
+        VOICE.init(DB.settings.voice); VOICEPACK.setRate(DB.settings.voice.rate); RADIO.setDuck(DB.settings.radio.duck); syncLegacy();
         if (o.photos && o.photos.length) { for (const x of o.photos) { try { await STORE.putPhoto({ id: x.id, profile: x.profile, date: x.date, pose: x.pose, blob: STORE.dataToBlob(x.data) }); } catch (e) { /* пропуск */ } } }
         save(); toast(LL('Дані відновлено', "Data restored")); view = DB.active ? 'home' : 'onboard'; render(); initPacks();
       } catch (e) { toast(LL('Це не схоже на резервну копію журналу', "This doesn’t look like a workout log backup")); }
@@ -4071,20 +4109,21 @@ window.APP_START = () => {
     }
     if (act === 'photoDel') { if (!confirm(LL('Видалити фото?', "Delete photo?"))) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
     if (act === 'tVar') { TV()[b.dataset.k] = b.dataset.v; b.parentNode.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); return; }  // без перемальовування — введене лишається
-    if (act === 'saveTests') {
-      const rec = { d: today() }; let bad = false;
-      TESTS.filter(([k]) => testOn(k)).forEach(([k]) => { const v = num(document.getElementById('t_' + k).value), lim = TEST_LIM[k]; if (v !== null && (v < lim[0] || v > lim[1] || (k === 'srt' && v * 2 !== Math.round(v * 2)))) bad = true; rec[k] = v; });
+    if (act === 'saveTest') {
+      /* один тест — своя кнопка (з 3.27.4): читаємо лише поля цього тесту; той самий день — доповнюємо (інші тести можуть бути окремо): порожнє поле не стирає вже записане */
+      const tk = b.dataset.t, rec = { d: today() }; let bad = false; if (!TEST_IN[tk]) return;
+      TEST_IN[tk].forEach((k) => { const el = document.getElementById('t_' + k), v = el ? num(el.value) : null, lim = TEST_LIM[k]; if (v !== null && (v < lim[0] || v > lim[1] || (k === 'srt' && v * 2 !== Math.round(v * 2)))) bad = true; rec[k] = v; });
       if (bad) { toast(LL('Перевірте числа', 'Check the numbers')); return; }
       /* 2 км: хвилини й секунди → секунди (walkT); пульс — лише разом із часом */
       if ('walkM' in rec) { rec.walkT = rec.walkM !== null ? Math.round(rec.walkM * 60 + (rec.walkS || 0)) : null; if (rec.walkT === null) rec.walkHR = null; delete rec.walkM; delete rec.walkS; }
       const has = (k) => rec[k] !== null && rec[k] !== undefined;
       if (has('push')) rec.pushV = TV().pushV;
       if (has('spL') || has('spR')) rec.spV = TV().spV;
-      if (!Object.keys(rec).some((k) => k !== 'd' && k !== 'pushV' && k !== 'spV' && has(k))) { toast(LL('Заповніть хоча б один тест', "Fill in at least one test")); return; }
-      /* той самий день — доповнюємо (ходьба й тести можуть бути окремо): порожнє поле не стирає вже записане */
+      if (!Object.keys(rec).some((k) => k !== 'd' && k !== 'pushV' && k !== 'spV' && has(k))) { toast(LL('Впишіть результат', 'Enter the result')); return; }
       const all = p.body.tests = p.body.tests || [], o = all.find((t) => t.d === rec.d);
       if (o) Object.keys(rec).forEach((k) => { if (has(k)) o[k] = rec[k]; }); else all.push(rec);
-      save(); toast(LL('Тести збережено', "Tests saved")); return rBody();
+      const nm = (TEST_HOW().find((x) => x[0] === tk) || [])[1] || '';
+      save(); toast(LL('Збережено: ', 'Saved: ') + nm); return rBody();
     }
     /* пульс у спокої (з 3.27.3) — раз на тиждень зранку; один запис на день */
     if (act === 'rhrAdd') { openSheet(`<h2>${LL('Пульс у спокої', 'Resting pulse')}</h2><p class="small muted">${LL('Зранку, сидячи, до кави: удари за 30 с × 2.', 'In the morning, seated, before coffee: beats in 30 sec × 2.')}</p><label class="f">${LL('Ударів за хвилину', 'Beats per minute')}</label><input inputmode="numeric" id="rhrIn" data-tip="${esc(LL('Ударів за хвилину: за 30 с × 2.', 'Beats per minute: in 30 sec × 2.'))}"><p></p><button type="button" class="pri wide" data-act="rhrSave" data-tip="${esc(LL('Зберегти пульс у спокої за сьогодні.', 'Save today’s resting pulse.'))}">${LL('Зберегти', 'Save')}</button>`); return; }
@@ -4094,7 +4133,7 @@ window.APP_START = () => {
       save(); closeSheet(); toast(LL('Пульс збережено', 'Pulse saved')); return rBody();
     }
     /* більше */
-    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
+    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
     if (act === 'vpack') { ensureAudio(); S().voice.packs[DB.active] = b.dataset.id; S().voice.packsManual = S().voice.packsManual || {}; S().voice.packsManual[DB.active] = true; save(); const id = b.dataset.id;
       if (id) VOICEPACK.load(id).then(() => { rMore(); talk(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout."), true); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast(LL('Не вдалося завантажити голос — перевірте інтернет', "Couldn’t download the voice — check your internet")));
       else { rMore(); talk(LL('Так звучить системний голос.', "This is the system voice."), true); }

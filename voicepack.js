@@ -5,6 +5,47 @@ var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L :
    поки звучить голос, радіо притишується. Файл голосу зберігається в кеші телефону — працює без інтернету. */
 var VOICEPACK = (function () {
   var lastError = '', packs = {}, bins = {}, loading = {}, ctx = null, gen = 0, playing = false, sources = [], onSpeak = null, buffers = {};
+  /* швидкість голосу (з 3.27.4; слово Alexа 26.10: «потрібно в налаштуваннях у блок з Голосовий тренер додати зміну швидкості говоріння тренера х1.2, х1.5, х2»):
+     Web Audio прискорює запис лише разом із тоном (playbackRate — «мультяшний» голос), тож запис стискаємо в часі без зміни тону — WSOLA:
+     вікна Ганна ≈ 25 мс з кроком виходу в пів вікна, кожне наступне вікно входу береться там, де воно найсхожіше на природне продовження попереднього
+     (пошук ±6 мс: спершу грубо на сітці ≈ 8 кГц, потім точно поруч). <audio> (запасний шлях) — playbackRate, тон браузер зберігає сам (preservesPitch) */
+  var rate = 1, stretched = {};
+  function Stretch(sr, r) {
+    var N = 2 * Math.round(sr * 0.0125), H = N / 2, tol = Math.round(sr * 0.006), q = Math.max(1, Math.round(sr / 8000)), w = new Float32Array(N), i;
+    for (i = 0; i < N; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);  // періодичне вікно Ганна: два сусідні з кроком H дають у сумі 1
+    var x = new Float32Array(Math.max(N, sr)), xl = 0, y = new Float32Array(Math.max(N, sr)), k = 0, prev = -1, out = 0;
+    function need(a, n) { if (a.length >= n) return a; var b = new Float32Array(Math.max(n, 2 * a.length)); b.set(a); return b; }
+    function corr(tp, st, n) { var c = 0; for (var j = 0; j < n; j += q) c += x[tp + j] * x[st + j]; return c; }
+    function step(fin) {
+      var nom = Math.round(k * H * r), st = nom, j;
+      if (nom >= xl) return false;  // вхід скінчився (fin) або ще не прийшов
+      if (prev >= 0) {
+        var tp = prev + H, lo = Math.max(0, nom - tol), hi = nom + tol;
+        if (!fin && (hi + N > xl || tp + N > xl)) return false;  // чекаємо ще вхід
+        var best = -Infinity, s0 = nom, n = Math.min(N, xl - tp), lim;
+        for (var s = lo; s <= hi; s += q) { lim = Math.min(n, xl - s); if (lim <= 0) break; var c = corr(tp, s, lim); if (c > best) { best = c; s0 = s; } }
+        st = s0; for (s = Math.max(lo, s0 - q + 1); s <= Math.min(hi, s0 + q - 1); s++) { lim = Math.min(n, xl - s); if (lim <= 0) break; c = corr(tp, s, lim); if (c > best) { best = c; st = s; } }
+      } else if (!fin && nom + N > xl) return false;
+      y = need(y, k * H + N);
+      for (j = 0; j < N; j++) y[k * H + j] += w[j] * (st + j < xl ? x[st + j] : 0);
+      prev = st; k++; return true;
+    }
+    /* push — шматок входу, повертає готовий вихід (усе, що вже не зміниться); flush — решта наприкінці */
+    return {
+      push: function (d) { x = need(x, xl + d.length); x.set(d, xl); xl += d.length; while (step(false)); var end = k * H, o = y.slice(out, end); out = end; return o; },
+      flush: function () { while (step(true)); var end = k ? (k - 1) * H + N : 0, o = y.slice(out, Math.max(out, end)); out = Math.max(out, end); return o; }
+    };
+  }
+  /* AudioBuffer → стиснутий AudioBuffer (кожен канал окремо; фрази й відповіді — моно) */
+  function stretchBuf(b) {
+    if (rate === 1 || !ctx) return b;
+    var chans = [], len = 0;
+    for (var c = 0; c < b.numberOfChannels; c++) { var st = Stretch(b.sampleRate, rate), a = st.push(b.getChannelData(c)), z = st.flush(), o = new Float32Array(a.length + z.length); o.set(a); o.set(z, a.length); chans.push(o); len = Math.max(len, o.length); }
+    var nb = ctx.createBuffer(b.numberOfChannels, Math.max(1, len), b.sampleRate);
+    chans.forEach(function (o, c) { nb.getChannelData(c).set(o); });
+    return nb;
+  }
+  function setRate(r) { r = Number(r) || 1; if (r !== rate) { rate = r; stretched = {}; } }
   var CACHE = 'trening-voices';
   function split(text) { return VOICE.split(text); }
   function setPlaying(v) { if (v === playing) return; playing = v; if (onSpeak) try { onSpeak(v); } catch (e) { /* немає */ } }
@@ -95,9 +136,9 @@ var VOICEPACK = (function () {
         var at = packs[id].clips[segs[i]], all = await bin(id, at[2] || 0);
         var url = URL.createObjectURL(new Blob([all.slice(at[0], at[0] + at[1])], { type: 'audio/mp4' }));
         var done = new Promise(function (ok) { m.onended = ok; m.onerror = ok; });
-        m.src = url; await m.play(); await done; m.onended = m.onerror = null;
+        m.src = url; m.playbackRate = rate; m.preservesPitch = true; await m.play(); await done; m.onended = m.onerror = null;
         URL.revokeObjectURL(url);
-        if (i < segs.length - 1) await new Promise(function (ok) { setTimeout(ok, 120); });
+        if (i < segs.length - 1) await new Promise(function (ok) { setTimeout(ok, 120 / rate); });
       }
       if (my === gen) setPlaying(false);
       return true;
@@ -114,12 +155,13 @@ var VOICEPACK = (function () {
     setPlaying(true);
     try {
       var bufs = [];
-      for (var i = 0; i < segs.length; i++) bufs.push(await buffer(id, segs[i]));
+      for (var i = 0; i < segs.length; i++) { var key = id + '|' + segs[i] + '|' + rate, b0 = stretched[key] || (stretched[key] = stretchBuf(await buffer(id, segs[i]))); bufs.push(b0); }
+      if (Object.keys(stretched).length > 300) stretched = {};
       if (my !== gen) return true;
       var t = ctx.currentTime + 0.05;
       bufs.forEach(function (b, k) {
         var src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(t); sources.push(src);
-        t += b.duration + 0.12;
+        t += b.duration + 0.12 / rate;
         if (k === bufs.length - 1) src.onended = function () { if (my === gen) { sources = []; setPlaying(false); } };
       });
       return true;
@@ -136,14 +178,14 @@ var VOICEPACK = (function () {
       try {
         var url = URL.createObjectURL(new Blob([bytes], { type: type || 'audio/wav' }));
         var done = new Promise(function (ok) { m.onended = ok; m.onerror = ok; });
-        m.src = url; await m.play(); await done; m.onended = m.onerror = null; URL.revokeObjectURL(url);
+        m.src = url; m.playbackRate = rate; m.preservesPitch = true; await m.play(); await done; m.onended = m.onerror = null; URL.revokeObjectURL(url);
         if (my === gen) setPlaying(false);
         return true;
       } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
     }
     setPlaying(true);
     try {
-      var b = await ctx.decodeAudioData(bytes.slice(0));
+      var b = stretchBuf(await ctx.decodeAudioData(bytes.slice(0)));
       if (my !== gen) return true;
       var src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(ctx.currentTime + 0.05); sources.push(src);
       src.onended = function () { if (my === gen) { sources = []; setPlaying(false); } };
@@ -168,7 +210,7 @@ var VOICEPACK = (function () {
       return true;
     } catch (e) { return false; }
   }
-  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, playData: playData, stop: stop, download: download, cached: cached, forget: forget,
+  return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, playData: playData, stop: stop, download: download, cached: cached, forget: forget, setRate: setRate, Stretch: Stretch, get rate() { return rate; },
     get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
 })();
 if (typeof module !== 'undefined') module.exports = VOICEPACK;
