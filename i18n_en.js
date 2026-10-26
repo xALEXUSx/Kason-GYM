@@ -686,7 +686,7 @@ I18N.add({
   "Поставити радіо на паузу.": "Pause the radio.",
   "Посуньте, щоб порівняти перше й останнє фото.": "Slide to compare your first and latest photos.",
   "Потрібні: кілька джгутів різного опору, 2 ручки й кріплення для дверей.": "You’ll need: several bands of different resistance, 2 handles, and a door anchor.",
-  "Почати наступне тренування за планом. Спершу — коротке питання про спину.": "Start the next workout in your plan. First, a quick question about your back.",
+  "Почати наступне тренування за планом. Перед стартом — що підготувати вдома, а якщо в анкеті позначено спину, — питання, як вона.": "Start the next workout in your plan. Before you start: what to get ready at home and, if you marked your back in the questionnaire, how it feels today.",
   "Почати розмову заново: тренер забуде попередні питання.": "Start a new conversation: the coach will forget earlier questions.",
   "Почати саме це тренування. Спершу — питання про спину.": "Start this exact workout. First, a question about your back.",
   "Прес": "Abs",

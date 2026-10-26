@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.6';
+  const VERSION = '3.27.7';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -249,7 +249,11 @@ window.APP_START = () => {
     timerEl.className = 'on'; clearInterval(T.id); T.id = setInterval(tickTimer, 250); tickTimer();
   }
   function stopTimer() { clearInterval(T.id); T.id = null; T.view = ''; timerEl.className = ''; }
-  const coachOn = () => view === 'workout' && S().mode !== 'list' && P() && P().draft;
+  /* режим екрана тренування (з 3.27.7; слово Alexа 26.10: «Чому під час тренування, коли я перемикаюсь між режимами "крок за кроком" та "список" потім вони змінюються в налаштуваннях Більше?
+     Більше для того й існує щоб виставити налаштування які мають бути завжди»): «Більше» → «Екран тренування» — S().mode (завжди); кнопки «☰ Усі вправи» / «Тренер»
+     під час тренування — лише це тренування (draft.mode), наступне — знову за налаштуванням. До 3.27.7 перемикач переписував S().mode */
+  const wMode = () => { const d = P() && P().draft; return (d && d.mode) || S().mode; };
+  const coachOn = () => view === 'workout' && wMode() !== 'list' && P() && P().draft;
   function tickTimer() {
     if (!T.id) return;
     const left = Math.ceil((T.end - Date.now()) / 1000);
@@ -306,7 +310,7 @@ window.APP_START = () => {
     const nav = document.getElementById('tabs');
     nav.style.display = (view === 'onboard' || view === 'workout' || view === 'summary') ? 'none' : '';
     document.body.classList.toggle('wkv', view === 'workout');
-    document.body.classList.toggle('coachv', view === 'workout' && S().mode !== 'list');
+    document.body.classList.toggle('coachv', view === 'workout' && wMode() !== 'list');
     app.classList.toggle('wv', view === 'workout');
     nav.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tab === view));
     clearInterval(elapsedT);
@@ -332,18 +336,24 @@ window.APP_START = () => {
     return `<h2>${LL('Одиниці', 'Units')}</h2><div class="card"><div class="seg"><button type="button" class="${isLb() ? '' : 'on'}" data-act="unitsSet" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${isLb() ? 'on' : ''}" data-act="unitsSet" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>
       <p class="tiny muted" style="margin-top:8px">${LL('Вага тренувань і набір дисків переводяться й округлюються до ваших дисків; вага тіла й заміри — лише показ.', 'Workout weights and your plate set are converted and rounded to your plates; body weight and measurements just display differently.')}</p></div>`;
   }
-  function unitsSet(v) {
-    const p = P(); if (!p || v === (p.units || 'kg') || (v !== 'kg' && v !== 'lb')) return;
-    if (p.draft) { toast(LL('Спершу завершіть тренування', 'Finish your workout first')); return; }
-    if (!confirm(LL('Перевести ваги журналу? Вага округлиться до дисків нового набору.', 'Convert the weights in your log? They will be rounded to the plates of the new set.'))) return;
-    const toLb = v === 'lb', f = toLb ? ENGINE.LB : 1 / ENGINE.LB, from = PLATES(!toLb), to = PLATES(toLb), prog = PROGRAMS[DB.active];
-    const inv = {}; to.forEach((k, i) => { inv[k] = (p.inv || {})[from[i]] || 0; });
-    const step = ENGINE.stepFor(inv), snap = (x, st) => Math.max(0, Math.round(Math.round(x / st) * st * 100) / 100);
+  /* вага журналу в інших одиницях: гантелі — з округленням до кроку дисків нового набору (inv — уже в нових одиницях), тренажери — до кроку тренажера;
+     еспандер (рівень) і вага тіла — без перерахунку. Одна функція для «Більше» → «Одиниці» і для зміни одиниць у «Змінити відповіді» (з 3.27.7:
+     до того анкета міняла лише одиниці, диски й гриф, а числа журналу лишались старими — 27,5 кг ставали «27,5 lb»; знайдено оглядом 26.10) */
+  function logToUnits(p, prog, toLb, inv) {
+    const f = toLb ? ENGINE.LB : 1 / ENGINE.LB, step = ENGINE.stepFor(inv), snap = (x, st) => Math.max(0, Math.round(Math.round(x / st) * st * 100) / 100);
     (p.sessions || []).forEach((s) => (s.sets || []).forEach((x) => {
       const ex = prog && prog.ex[x.ex]; if (!ex || x.load === null || x.load === undefined || x.load === '' || !(Number(x.load) >= 0)) return;
       if (ex.type === 'mach') x.load = snap(Number(x.load) * f, (ex.step || 5) * (toLb ? 2 : 1));
       else if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) x.load = snap(Number(x.load) * f, step);
     }));
+  }
+  function unitsSet(v) {
+    const p = P(); if (!p || v === (p.units || 'kg') || (v !== 'kg' && v !== 'lb')) return;
+    if (p.draft) { toast(LL('Спершу завершіть тренування', 'Finish your workout first')); return; }
+    if (!confirm(LL('Перевести ваги журналу? Вага округлиться до дисків нового набору.', 'Convert the weights in your log? They will be rounded to the plates of the new set.'))) return;
+    const toLb = v === 'lb', from = PLATES(!toLb), to = PLATES(toLb);
+    const inv = {}; to.forEach((k, i) => { inv[k] = (p.inv || {})[from[i]] || 0; });
+    logToUnits(p, PROGRAMS[DB.active], toLb, inv);
     p.inv = inv; p.handle = gripTo(p.handle, toLb); p.units = v;
     if (DB.active === 'me' && DB.custom && DB.custom.answers) { DB.custom.answers.units = v; DB.custom.answers.inv = Object.assign({}, inv); DB.custom.answers.handle = p.handle; }
     save(); location.reload();
@@ -358,6 +368,12 @@ window.APP_START = () => {
   /* лише зал — без кроку «Що є вдома» */
   const qSteps = (a) => QALL.filter((x) => x !== 'equip' || a.place !== 'gym');
   const QFIELDS = { who: ['name', 'sex'], body: ['age', 'height', 'weight'], goal: ['goal'], level: ['level'], place: ['place'], equip: ['equip'], limits: ['limits'], days: ['days'], agree: ['agree'] };
+  /* з 3.27.7: зміна одиниць у відповідях перераховує журнал (qFinish → logToUnits) — людина бачить це до «Оновити програму» */
+  function unitsLogNote(a) {
+    const p = DB.profiles && DB.profiles.me; if (!p || !(p.sessions || []).length || (p.units === 'lb') === (a.units === 'lb')) return '';
+    return `<p class="tiny muted" style="margin:-4px 0 10px">${a.units === 'lb' ? LL('Вага в журналі тренувань перерахується у фунти з округленням до ваших дисків.', 'Weights in your workout log will be converted to pounds, rounded to your plates.')
+      : LL('Вага в журналі тренувань перерахується в кілограми з округленням до ваших дисків.', 'Weights in your workout log will be converted to kilograms, rounded to your plates.')}</p>`;
+  }
   function qState() {
     if (!ui.q) {
       const acc = STORE.account(STORE.current) || {}, old = DB.custom && DB.custom.answers;
@@ -409,7 +425,7 @@ window.APP_START = () => {
       <h2>Sex</h2><div class="grid2">`)}${opt('qSex', 'm', LL('Чоловік', "Male"), '', a.sex === 'm')}${opt('qSex', 'f', LL('Жінка', "Female"), '', a.sex === 'f')}</div>${err('sex')}`;
     else if (step === 'body') body = `${LL(`<h1>Про вас</h1><p class="muted small">Потрібно, щоб розрахувати навантаження й харчування.</p>
       `, `<h1>About you</h1><p class="muted small">We need this to calculate your training load and nutrition.</p>
-      `)}<div class="seg" style="margin:4px 0 10px"><button type="button" class="${a.units !== 'lb' ? 'on' : ''}" data-act="qUnits" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${a.units === 'lb' ? 'on' : ''}" data-act="qUnits" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>${numIn('qage', LL('Вік, років', "Age, years"), a.age)}${err('age')}${numIn('qheight', a.units === 'lb' ? LL('Зріст, дюймів', 'Height, in') : LL('Зріст, см', "Height, cm"), HD(a.height, a.units === 'lb'), undefined, a.units === 'lb' ? LL('Зріст у дюймах — для норми калорій.', 'Height in inches — for your calorie target.') : '')}${err('height')}${numIn('qweight', a.units === 'lb' ? LL('Вага, lb', 'Weight, lb') : LL('Вага, кг', "Weight, kg"), BW(a.weight, a.units === 'lb'), 'decimal', a.units === 'lb' ? LL('Вага у фунтах — для навантаження й норми білка.', 'Weight in pounds — for your training load and protein target.') : '')}${err('weight')}`;
+      `)}<div class="seg" style="margin:4px 0 10px"><button type="button" class="${a.units !== 'lb' ? 'on' : ''}" data-act="qUnits" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${a.units === 'lb' ? 'on' : ''}" data-act="qUnits" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>${unitsLogNote(a)}${numIn('qage', LL('Вік, років', "Age, years"), a.age)}${err('age')}${numIn('qheight', a.units === 'lb' ? LL('Зріст, дюймів', 'Height, in') : LL('Зріст, см', "Height, cm"), HD(a.height, a.units === 'lb'), undefined, a.units === 'lb' ? LL('Зріст у дюймах — для норми калорій.', 'Height in inches — for your calorie target.') : '')}${err('height')}${numIn('qweight', a.units === 'lb' ? LL('Вага, lb', 'Weight, lb') : LL('Вага, кг', "Weight, kg"), BW(a.weight, a.units === 'lb'), 'decimal', a.units === 'lb' ? LL('Вага у фунтах — для навантаження й норми білка.', 'Weight in pounds — for your training load and protein target.') : '')}${err('weight')}`;
     else if (step === 'goal') { const gs = GEN.goalsOf(a), why = (v) => (gs.indexOf(v) >= 0 || !GEN.GOAL_CLASH[v].some((x) => gs.indexOf(x) >= 0) ? '' : v === 'health' ? LL('не поєднується зі схудненням і набором мʼязів', "can’t be combined with losing weight or building muscle") : LL('не поєднується з «Сила й здоровʼя»', "can’t be combined with “Strength and health”"));
       body = `${LL(`<h1>Ваша мета</h1><p class="muted small">Можна кілька. «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів; «Сильна спина й осанка» — з будь-якою.</p><div class="pick">`, `<h1>Your goals</h1><p class="muted small">You can pick more than one. “Lose weight” and “Build muscle” together means less fat and more muscle; “Strong back and posture” goes with any goal.</p><div class="pick">`)}${[['loss', LL('Схуднути', "Lose weight"), LL('менше жиру, більше сил', "less fat, more energy")], ['muscle', LL('Набрати мʼязи', "Build muscle"), LL('більше обʼєму й сили', "more size and strength")], ['health', LL('Сила й здоровʼя', "Strength and health"), LL('міцне тіло без крайнощів', "a strong body, no extremes")], ['posture', LL('Сильна спина й осанка', "Strong back and posture"), LL('рівна спина, менше болю від сидіння', "a straight back, less pain from sitting")]].map(([v, l, d]) => opt('qGoal', v, l, d, gs.indexOf(v) >= 0, why(v))).join('')}</div>${err('goal')}`; }
     else if (step === 'level') body = `${LL(`<h1>Досвід тренувань</h1><div class="pick">`, `<h1>Training experience</h1><div class="pick">`)}${opt('qLevel', 'new', LL('Новачок', "Beginner"), LL('або перерва понад пів року', "or a break of more than six months"), a.level === 'new')}${opt('qLevel', 'exp', LL('Тренуюсь регулярно', "I train regularly"), LL('пів року й більше без перерв', "six months or more without a break"), a.level === 'exp')}</div>${err('level')}`;
@@ -478,8 +494,9 @@ window.APP_START = () => {
     PROGRAMS.me = buildMe(DB.custom.answers);
     const fresh = !DB.profiles.me;
     if (fresh) DB.profiles.me = newProfile('me');
-    const p = DB.profiles.me;
+    const p = DB.profiles.me, was = p.units === 'lb' ? 'lb' : 'kg';
     p.days = a.days.slice().sort(); p.handle = a.handle; p.units = a.units === 'lb' ? 'lb' : 'kg'; p.inv = {}; PLATES(p.units === 'lb').forEach((k) => { p.inv[k] = a.inv[k] || 0; });
+    if (!fresh && was !== p.units) logToUnits(p, PROGRAMS.me, p.units === 'lb', p.inv);  // з 3.27.7 — як «Більше» → «Одиниці» (гриф і диски вже в нових одиницях)
     p.me = Object.assign({}, p.me || {}, { height: a.height, age: a.age });
     if (!fresh) keepWeek(p, oldPw, PROGRAMS.me);
     if (p.draft) p.draft = null;
@@ -729,8 +746,14 @@ window.APP_START = () => {
   function beginWorkout(wid, place) {
     const prog = G();
     if (prog.gymWorkouts && !place) return placeSheet(wid);
-    if (prog.custom && !prog.askReady) return startWorkout(wid, 'g', place);
+    if (prog.custom && !prog.askReady) return prepCard(wid, place) ? prepSheet(wid, place) : startWorkout(wid, 'g', place);
     return readySheet(wid, place);
+  }
+  /* «Що підготувати» перед стартом — удома всім (з 3.27.7; слово Alexа 26.10: «показуй «Що підготувати» вдома всім перед стартом»):
+     кого питають про спину — блок у «Як спина сьогодні?»; решті — це вікно з «Почати»; без гантелей, еспандера й тренажерів — одразу старт */
+  function prepSheet(wid, place) {
+    openSheet(`<b>${LL('Що підготувати', 'What to get ready')}</b><p class="small muted">${LL('Підготуйте до старту — і почнемо.', 'Get these ready, then we’ll start.')}</p>${prepCard(wid, place)}
+      <button type="button" class="pri wide" data-act="go" data-r="g" data-w="${wid || ''}" data-p="${place || ''}" data-tip="${esc(LL('Почати тренування.', 'Start the workout.'))}">${LL('Почати', 'Start')}</button>`);
   }
   function placeSheet(wid) {
     /* удома — саме те обладнання, що вказане в анкеті */
@@ -768,7 +791,7 @@ window.APP_START = () => {
     const d = P().draft, prog = G(), mins = ENGINE.estimateMins(prog, d.items), nEx = d.items.filter((x) => !x.skipped).length;
     const fs = freshSay(ENGINE.freshStart(P().sessions, trainDays(), d.date));  // з 3.24.0 (пункт 3)
     talk(fs + (d.short ? recOnly(LL('Коротка версія.', 'Short version.')) : '') + recOnly(woTitle(d.workout) + '.') + nEx + ' ' + VOICE.plural(nEx, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises")) + LL('. Приблизно ', ". About ") + mins + ' ' + VOICE.plural(mins, LL('хвилина', "minute"), LL('хвилини', "minutes"), LL('хвилин', "minutes")) + '.'
-      + (ready === 'r' ? LL(' Сьогодні без вправ на поперек. ', " No lower back exercises today. ") + L('r', 0) : ready === 'y' ? LL(' Вправи на поперек сьогодні легші. ', " Lower back exercises are lighter today. ") + L('y', 0) : ' ') + (hard() ? L('start', d.n) : LL('Починаємо.', "Let’s get started.")) + (g1 ? COACH.guide('gym', G().sex).say + ' ' : '') + (S().mode === 'list' ? '' : LL(' Спершу розминка.', " Warm-up first.")) + gs);
+      + (ready === 'r' ? LL(' Сьогодні без вправ на поперек. ', " No lower back exercises today. ") + L('r', 0) : ready === 'y' ? LL(' Вправи на поперек сьогодні легші. ', " Lower back exercises are lighter today. ") + L('y', 0) : ' ') + (hard() ? L('start', d.n) : LL('Починаємо.', "Let’s get started.")) + (g1 ? COACH.guide('gym', G().sex).say + ' ' : '') + (wMode() === 'list' ? '' : LL(' Спершу розминка.', " Warm-up first.")) + gs);
     if (S().radio.only && S().radio.id && RADIO.state !== 'playing' && RADIO.state !== 'loading') RADIO.play(S().radio.id, audio);  // з 3.24.0 — радіо лише на тренуванні (пункт 16)
   }
   function draftStats(d) {
@@ -798,7 +821,7 @@ window.APP_START = () => {
      тренер каже, що натиснути, а кнопка світиться (підказка — і текстом, для тих, хто без голосу). Лише режим «Тренер»; перші 3 тренування
      або 3 після «Показати навчання знову» чи вмикання в «Більше» → «Тренування». Момент — коли тренер і так говорить: start (розминка),
      card (картка підходу), rest (почався відпочинок), cool (усі підходи); за раз — не більше однієї підказки. Фрази — COACH.GUIDE. */
-  const guideOn = () => !!S().guide && S().mode !== 'list' && !!P() && P().sessions.length - (S().guideFrom || 0) < 3;
+  const guideOn = () => !!S().guide && wMode() !== 'list' && !!P() && P().sessions.length - (S().guideFrom || 0) < 3;
   const backAsk = () => !(G().custom && !G().askReady);  // перед тренуванням питає про спину (beginWorkout)
   const G_AT = { start: ['start'], card: ['set', 'rir'], rest: ['rest', 'edit', 'more', 'ask'], cool: ['finish'] };
   const G_EL = { start: '.coach [data-act="cwarm"]:not([data-skip])', set: '.cdone', rest: '.crest .grid3 [data-act="tskip"]', rir: '.crir', edit: '.crest [data-act="kp"]', more: '#cMore', ask: '.wbar [data-act="ask"]', finish: '.coach [data-act="finish"]' };
@@ -964,7 +987,7 @@ window.APP_START = () => {
   }
 
   /* ---------- екран тренування ---------- */
-  function rWorkout() { if (!P() || !P().draft) { view = 'home'; return render(); } document.body.classList.toggle('coachv', S().mode !== 'list'); return S().mode === 'list' ? rList() : rCoach(); }
+  function rWorkout() { if (!P() || !P().draft) { view = 'home'; return render(); } document.body.classList.toggle('coachv', wMode() !== 'list'); return wMode() === 'list' ? rList() : rCoach(); }
   const ICON = {
     themeAuto: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" style="fill:currentColor"/></svg>',
     themeLight: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -980,7 +1003,7 @@ window.APP_START = () => {
   /* голос тренера на це тренування (з 3.21.8) */
   const vBtn = () => { const on = vAuto() !== 'off'; return `<button type="button" class="ic" id="vBtn" data-act="vmute" aria-label="${on ? LL('вимкнути голос тренера', 'turn off the coach voice') : LL('увімкнути голос тренера', 'turn on the coach voice')}">${on ? ICON.spk : ICON.spkOff}</button>`; };
   function wbar(d, prog, st) {
-    const list = S().mode === 'list';
+    const list = wMode() === 'list';
     return `${LL(`<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
       <div class="t"><b>`, `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="minimize">⌄</button>
       <div class="t"><b>`)}${esc(wTitle(d))}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}${LL(`</span></div>
@@ -1458,7 +1481,7 @@ window.APP_START = () => {
   const TOURS = {
     /* «Перший погляд» (з 3.21.7; слово Alexа 24.10: «потрібні підсказки для усього що вперше я відкриваю в додатку»): кожен екран і головні шторки — при першому відкритті.
        Вади до 3.21.7: «Кухні» в переліку вкладок не було, а «харчування» — у «Тілі» (з 3.20.0 це окрема вкладка); «спитає про спину» — і тим, кого не питає. */
-    home: [['.hero .pri', () => (backAsk() ? LL('Почніть тут. Застосунок спитає, як спина, підставить вагу', 'Start here. The app will ask about your back, fill in your weights') : LL('Почніть тут. Застосунок підставить вагу', 'Start here. The app will fill in your weights'))
+    home: [['.hero .pri', () => (backAsk() ? LL('Почніть тут. Застосунок спитає, як спина, покаже, що підготувати вдома, підставить вагу', 'Start here. The app will ask about your back, show what to get ready at home, fill in your weights') : (G().place || 'home') !== 'gym' ? LL('Почніть тут. Застосунок покаже, що підготувати вдома, підставить вагу', 'Start here. The app will show what to get ready at home, fill in your weights') : LL('Почніть тут. Застосунок підставить вагу', 'Start here. The app will fill in your weights'))
         + LL(' й поведе тренування голосом — крок за кроком.', ' and guide your workout by voice — step by step.') + (guideOn() ? LL(' Поки ви освоюєтесь, тренування — за руку: тренер скаже й підсвітить, що натиснути.', ' While you’re getting started, workouts are hands-on: the coach tells you what to tap and highlights it.') : '')],
       ['#app > .sp [data-act="ask"]', LL('Запитати тренера — голосом, текстом чи з фото: про вашу програму, техніку, вагу й харчування.', "Ask the coach — by voice, text, or photo: about your program, form, weights, and nutrition.")],
       ['.dly', LL('Щоденні звички: відмічайте галочкою. «Як робити» — коротка інструкція.', "Daily habits: check them off. “How to do it” is a short guide.")],
@@ -1561,7 +1584,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🎯 Виклик місяця</b><div class="small muted">На одне тренування більше, ніж минулого місяця (не більше днів за планом); зроблені цього місяця вже зараховані.</div></li>
         <li style="display:block"><b>📊 Підсумок тижня й 🎁 року</b><div class="small muted">Тиждень — щопонеділка на головній; рік — у грудні на головній і завжди в «Прогрес» → «Звіт», можна поділитися картинкою.</div></li>
         <li style="display:block"><b>🎧 Радіо лише на тренуванні</b><div class="small muted">За бажанням (радіо → «Лише на тренуванні»): обрана станція заграє сама, щойно почнете тренування, і вимкнеться, коли завершите.</div></li>
-        <li style="display:block"><b>🍴 Кухня</b><div class="small muted">Нова вкладка: норма калорій і білка за вашою метою; їжа — точно (грами, база USDA), швидко (штука, ложка, чашка) чи руками (долоня, кулак); свої продукти з етикетки й страви за рецептом; «Зберегти прийом» — одним дотиком наступного разу; фото тарілки підказує продукти, а кількість вказуєте ви; «Чим добрати білок» — спершу з того, що ви вже їсте; вода з нагадуваннями.</div></li>
+        <li style="display:block"><b>🍴 Кухня</b><div class="small muted">Нова вкладка: норма калорій і білка за вашою метою; їжа — точно (грами, бази USDA і BLS), швидко (штука, ложка, чашка) чи руками (долоня, кулак); свої продукти з етикетки й страви за рецептом; «Зберегти прийом» — одним дотиком наступного разу; фото тарілки підказує продукти, а кількість вказуєте ви; «Чим добрати білок» — спершу з того, що ви вже їсте; вода з нагадуваннями.</div></li>
         <li style="display:block"><b>🌓 Тема</b><div class="small muted">Кнопка вгорі праворуч на головній: як у телефоні → світла → темна.</div></li>
         <li style="display:block"><b>🎯 Кілька цілей</b><div class="small muted">В анкеті можна позначити кілька: «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів (невеликий дефіцит, більше білка); «Сильна спина й осанка» — з будь-якою. «Сила й здоровʼя» — окремо від схуднення й набору мʼязів: несумісна мета стає неактивною. Обмеження здоровʼя діють завжди, хоч які цілі обрано.</div></li>
         <li style="display:block"><b>⚖️ Кілограми або фунти</b><div class="small muted">В анкеті й у «Більше» → «Одиниці»: кг і см або фунти й дюйми. Набір дисків у фунтах — 10 · 5 · 2,5 lb. Перемкнули — вага тренувань переводиться й округлюється до ваших дисків; вага тіла й заміри просто показуються в нових одиницях.</div></li>
@@ -1583,7 +1606,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🎯 Monthly challenge</b><div class="small muted">One workout more than last month (no more than your planned days); workouts already done this month count.</div></li>
         <li style="display:block"><b>📊 Weekly and 🎁 yearly summary</b><div class="small muted">The week — every Monday on Home; the year — on Home in December and always in “Progress” → “Report,” and you can share it as an image.</div></li>
         <li style="display:block"><b>🎧 Radio only during workouts</b><div class="small muted">Optional (radio → “Only during workouts”): your station starts by itself when you start a workout and stops when you finish.</div></li>
-        <li style="display:block"><b>🍴 Kitchen</b><div class="small muted">A new tab: calorie and protein targets for your goal; log food exactly (grams, USDA database), quickly (piece, spoon, cup), or by hand (palm, fist); your own foods from labels and recipes; “Save meal” — one tap next time; a photo of your plate suggests the foods, and you enter the amounts; “How to reach your protein” starts with what you already eat; water with reminders.</div></li>
+        <li style="display:block"><b>🍴 Kitchen</b><div class="small muted">A new tab: calorie and protein targets for your goal; log food exactly (grams, USDA and BLS databases), quickly (piece, spoon, cup), or by hand (palm, fist); your own foods from labels and recipes; “Save meal” — one tap next time; a photo of your plate suggests the foods, and you enter the amounts; “How to reach your protein” starts with what you already eat; water with reminders.</div></li>
         <li style="display:block"><b>🌓 Theme</b><div class="small muted">The button at the top right of Home: same as your phone → light → dark.</div></li>
         <li style="display:block"><b>🎯 Several goals</b><div class="small muted">In the questionnaire you can check more than one: “Lose weight” and “Build muscle” together means less fat and more muscle (a small deficit, more protein); “Strong back and posture” goes with any goal. “Strength and health” stays separate from losing weight and building muscle: a goal that clashes is grayed out. Health limits always apply, whatever goals you choose.</div></li>
         <li style="display:block"><b>⚖️ Kilograms or pounds</b><div class="small muted">In the questionnaire and in “More” → “Units”: kg and cm, or pounds and inches. Plates in pounds — 10 · 5 · 2.5 lb. When you switch, workout weights are converted and rounded to your plates; body weight and measurements simply display in the new units.</div></li>
@@ -1627,20 +1650,58 @@ window.APP_START = () => {
   }
   function readySheet(wid, place) {
     const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl && G().ex.rdl;
-    openSheet(`<b>${her ? LL('Як спина й суглоби сьогодні?', "How are your back and joints today?") : LL('Як спина сьогодні?', "How’s your back today?")}</b> ${q('ready')}${LL(`
-      <p class="small muted">Від відповіді залежать вправи на поперек.</p>
-      <div class="pick rd">
-        <button type="button" data-act="go" data-r="g" data-w="`, `
-      <p class="small muted">Your answer decides the lower back exercises.</p>
-      <div class="pick rd">
-        <button type="button" data-act="go" data-r="g" data-w="`)}${wid || ''}" data-p="${place || ''}${LL(`"><b>🟢 Добре</b><span class="small muted">тренування за планом</span></button>
-        <button type="button" data-act="go" data-r="y" data-w="`, `"><b>🟢 Good</b><span class="small muted">workout as planned</span></button>
-        <button type="button" data-act="go" data-r="y" data-w="`)}${wid || ''}" data-p="${place || ''}${LL(`"><b>🟡 Ниє, але терпимо</b><span class="small muted">`, `"><b>🟡 Achy, but manageable</b><span class="small muted">`)}${sw ? LL('румунська тяга → міст, решта вправ на поперек — на крок легше', "Romanian deadlift → glute bridge, other lower back exercises one step lighter") : LL('вправи на поперек — на крок легше, запас 3', "lower back exercises one step lighter, 3 RIR")}</span></button>
+    /* з 3.27.7 (слово Alexа 26.10: «кнопки відповіді зменшити … 2 верхні (Підпиши "Добре" та "Терпимо") горизонтально кнопками в ряд. Третю не міняй і підпис до неї залиш»):
+       що робить відповідь — у підказці на затисканні (data-tip), як і в решті застосунку */
+    const pc = prepCard(wid, place);
+    const yTip = sw ? LL('Ниє, але терпимо: румунська тяга → міст, решта вправ на поперек — на крок легше.', 'Achy, but manageable: Romanian deadlift → glute bridge, other lower back exercises one step lighter.')
+      : LL('Ниє, але терпимо: вправи на поперек — на крок легше, запас 3.', 'Achy, but manageable: lower back exercises one step lighter, 3 RIR.');
+    openSheet(`<b>${her ? LL('Як спина й суглоби сьогодні?', "How are your back and joints today?") : LL('Як спина сьогодні?', "How’s your back today?")}</b> ${q('ready')}
+      <p class="small muted">${LL('Від відповіді залежать вправи на поперек.', 'Your answer decides the lower back exercises.')}</p>
+      <div class="pick rd"><div class="rd2">
+        <button type="button" data-act="go" data-r="g" data-w="${wid || ''}" data-p="${place || ''}" data-tip="${esc(LL('Спина в порядку — тренування за планом.', 'Back is fine — workout as planned.'))}"><b>🟢 ${LL('Добре', 'Good')}</b></button>
+        <button type="button" data-act="go" data-r="y" data-w="${wid || ''}" data-p="${place || ''}" data-tip="${esc(yTip)}"><b>🟡 ${LL('Терпимо', 'Manageable')}</b></button></div>
         <button type="button" data-act="go" data-r="r" data-w="${wid || ''}" data-p="${place || ''}${LL(`"><b>🔴 Болить або віддає в ногу</b><span class="small muted">сьогодні без вправ на поперек</span></button>
       </div>
       <div class="note b small"><b>Негайно до лікаря:</b> оніміння в паху чи між ногами, порушення сечовипускання чи стільця, слабкість у нозі, що наростає.</div>`, `"><b>🔴 Hurts or radiates down my leg</b><span class="small muted">no lower back exercises today</span></button>
       </div>
-      <div class="note b small"><b>See a doctor right away if you have:</b> numbness in the groin or between the legs, bladder or bowel problems, or leg weakness that’s getting worse.</div>`)}`);
+      <div class="note b small"><b>See a doctor right away if you have:</b> numbness in the groin or between the legs, bladder or bowel problems, or leg weakness that’s getting worse.</div>`)}${pc ? `<h3 style="margin:14px 0 4px">${LL('Що підготувати', 'What to get ready')}</h3>${pc}<p class="tiny muted" style="margin:6px 0 0">${LL('«Терпимо» — вправи на поперек на крок легше, «Болить» — без них.', '“Manageable” — lower back exercises one step lighter, “Hurts” — none today.')}</p>` : ''}`);
+  }
+  /* «Що підготувати» (з 3.27.7; слово Alexа 26.10: «для режиму "вдома" нижче блоком додай що підготувати для тренування. Які тренажери, які на них мають бути ваги
+     (якщо це гантелі то одразу кажи що потрібно на приклад 3 пари гантель по 10, 15 та 20 кг на кожній) щоб завчасно підготуватись до інтенсивних тренувань»):
+     лише вдома; те саме тренування, що почнеться (buildDraft, відповідь «Добре»; «Коротка версія» — теж): гантелі — вага однієї (гриф + диски), скільки штук,
+     диски на кожен бік і вправи; розминкова вага позначена; еспандер — рівні; тренажери вдома — вага. Порожньо ('') — у залі чи без обладнання */
+  function prepCard(wid, place) {
+    const prog = G(), p = P();
+    if ((place || prog.place || 'home') !== 'home') return '';
+    let d = null; try { d = buildDraft(wid, 'g', place, ui.shortNext); } catch (e) { return ''; }
+    const h = Number(p.handle) || 0, dbs = {}, bands = [], machs = [];
+    d.items.forEach((it) => {
+      const ex = prog.ex[it.ex]; if (!ex) return;
+      it.sets.forEach((st) => {
+        if (st.load === null || st.load === undefined || st.load === '' || st.type === 'D') return;
+        if (hasKg(ex)) {
+          const k = String(Number(st.load)), o = dbs[k] = dbs[k] || { load: Number(st.load), n: 0, ex: [], warm: true };
+          o.n = Math.max(o.n, ENGINE.dbCountOf(ex, it.variant)); if (o.ex.indexOf(ex.name) < 0) o.ex.push(ex.name); if (st.type !== 'W') o.warm = false;
+        } else if (ex.type === 'band' || isMach(ex)) {
+          const a = ex.type === 'band' ? bands : machs, f = a.find((x) => x.name === ex.name) || (a.push({ name: ex.name, v: [] }), a[a.length - 1]);
+          if (f.v.indexOf(Number(st.load)) < 0) f.v.push(Number(st.load));
+        }
+      });
+    });
+    const list = Object.keys(dbs).map((k) => dbs[k]).sort((a, b) => a.load - b.load);
+    if (!list.length && !bands.length && !machs.length) return '';
+    const kg = KG(LL(' кг', ' kg')), w = (x) => fmt(Math.round((h + x.load) * 100) / 100);
+    const rows = list.map((x) => {
+      const pl = ENGINE.plates(x.load, p.inv, x.n, prog.cap, isLb() ? 'lb' : 'kg');
+      return `<li style="display:block"><div class="sp"><b>${w(x)}${kg} × ${x.n}</b><span class="small muted">${pl.ok ? (pl.side.length ? LL('на бік: ', 'per side: ') + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', 'handle only')) : '⚠ ' + esc(pl.text)}</span></div>`
+        + `<div class="tiny muted">${esc(x.ex.join(' · '))}${x.warm ? LL(' — розминка', ' — warm-up') : ''}</div></li>`;
+    }).join('');
+    const ws = list.map(w), sum = ws.length > 1 ? ws.slice(0, -1).join(', ') + LL(' і ', ' and ') + ws[ws.length - 1] : ws[0];
+    const ln = (a, unit) => a.map((x) => `<li style="display:block"><div class="sp"><span class="small">${esc(x.name)}</span><b>${x.v.sort((m, n) => m - n).map(fmt).join(' / ')}${unit}</b></div></li>`).join('');
+    return `<div class="card prep">`
+      + (list.length ? `<p class="small" style="margin:0 0 4px">${LL('Гантелі', 'Dumbbells')}: ${sum}${kg}${LL(' — вага однієї гантелі (гриф і диски); × — скільки штук.', ' — weight of one dumbbell (handle and plates); × — how many.')}</p><ul class="list">${rows}</ul>` : '')
+      + (bands.length ? `<p class="small" style="margin:8px 0 4px">${LL('Еспандер — рівень (сума номерів джгутів)', 'Band — level (sum of band numbers)')}</p><ul class="list">${ln(bands, '')}</ul>` : '')
+      + (machs.length ? `<p class="small" style="margin:8px 0 4px">${LL('Тренажери', 'Machines')}</p><ul class="list">${ln(machs, kg)}</ul>` : '') + '</div>';
   }
 
   /* ---------- радіо ---------- */
@@ -2410,13 +2471,55 @@ window.APP_START = () => {
     if (k === 'push') return f ? LL('Для вас це особистий показник: дослідження звʼязку віджимань із серцем проводили лише на чоловіках.', 'This is your personal marker: the study linking push-ups to heart health included only men.')
       : LL('Віджимання за раз — простий показник здоровʼя: у 10-річному дослідженні 1 104 активних чоловіків у тих, хто робив понад 40, серцевих подій було на 96 % менше, ніж у тих, хто менше 10 (звʼязок, не доказ причини).', 'Push-ups in one go are a simple health marker: in a 10-year study of 1,104 active men, those who did more than 40 had 96% fewer heart events than those who did fewer than 10 (an association, not proof of cause).');
     if (k === 'chair') { const c = chairThr(age, f); return c ? LL(`Для ${f ? 'жінок' : 'чоловіків'} ${c.from}–${c.to} років менше ${c.n} разів — нижче середнього (CDC): частіше падіння.`, `For ${f ? 'women' : 'men'} aged ${c.from}–${c.to}, fewer than ${c.n} stands is below average (CDC): falls are more likely.`) : LL('Норми CDC — для 60–94 років; для вас це особистий показник.', 'CDC norms are for ages 60–94; for you it’s a personal marker.'); }
-    if (k === 'bal') return age >= 51 ? LL('Поріг — 10 с: серед 1 702 людей 51–75 років ті, хто не встояв 10 с, мали вищий ризик смерті (×1,84; звʼязок, не доказ причини).', 'The threshold is 10 sec: among 1,702 people aged 51–75, those who couldn’t stand 10 sec had a higher risk of death (×1.84; an association, not proof of cause).')
+    if (k === 'bal') return age >= 51 && age <= 75 ? LL('Поріг — 10 с: серед 1 702 людей 51–75 років ті, хто не встояв 10 с, мали вищий ризик смерті (×1,84; звʼязок, не доказ причини).', 'The threshold is 10 sec: among 1,702 people aged 51–75, those who couldn’t stand 10 sec had a higher risk of death (×1.84; an association, not proof of cause).')
       : LL('Для вас це особистий показник: поріг 10 с перевірено у 51–75 років.', 'For you it’s a personal marker: the 10-sec threshold was studied at ages 51–75.');
     if (k === 'srt') return LL('Серед 2 002 людей 51–80 років кожен бал більше — на 21 % краща виживаність (звʼязок, не доказ причини).', 'Among 2,002 people aged 51–80, each extra point meant 21% better survival (an association, not proof of cause).');
     if (k === 'walk' || k === 'w6') return LL('Витривалість — найсильніший показник здоровʼя: +1 MET — на 13 % нижча смертність (33 дослідження, ≈ 103 тис. людей). Тут — ваш ріст: ', 'Endurance is the strongest health marker: +1 MET means 13% lower mortality (33 studies, ≈ 103,000 people). Here you track your progress: ')
       + (k === 'walk' ? LL('той самий маршрут швидше при тому самому чи нижчому пульсі.', 'the same route faster at the same or a lower pulse.') : LL('далі за ті самі 6 хв.', 'farther in the same 6 minutes.'));
     return '';
   };
+  /* плашка праворуч від поля (з 3.27.7; слово Alexа 26.10: «чому в тестах не завжди відображається скільки норма (адаптована під мої данні) маленьким блочком по типу кнопки справа від поля»):
+     норма — лише там, де її дає першоджерело для вашого віку й статі (межі ті самі, що в testNorm: віджимання з носків — чоловіки, Yang 2019; крісло — 60–94 роки, CDC STEADI;
+     одна нога — 51–75, Araújo 2022; підлога — 51–80, Brito 2014: найнижчий ризик — 8–10 балів, ESC 2012), інакше — ваш рекорд того самого варіанта й боку, інакше — «без норми»;
+     дотик — пояснення. Таблиць норм віджимань за віком (канадський тест 1986) у першоджерелі знайти не вдалося, а вторинні джерела дають різні числа — їх не беремо */
+  const testChip = (f) => {
+    const age = Number((P().me || {}).age), fem = G().sex === 'f', tv = TV(), tl = P().body.tests || [], sec = LL(' с', ' sec');
+    const best = (key, sel, low) => { const v = tl.filter((t) => t[key] !== null && t[key] !== undefined && t[key] !== '' && (!sel || sel(t))).map((t) => Number(t[key])); return v.length ? (low ? Math.min : Math.max)(...v) : null; };
+    const rec = (v, txt, why, more) => (v === null
+      ? { k: 'z', t: LL('без норми', 'no norm'), tip: why + LL(' Після першого запису тут буде ваш рекорд — головне, щоб число росло.', ' After your first result, your best will show here — what matters is that the number goes up.') }
+      : { k: 'r', t: LL('рекорд ', 'best ') + txt, tip: why + LL(' Тут — ваш найкращий результат', ' Here is your best result') + (more || '') + LL(': головне, щоб число росло.', ': what matters is that the number goes up.') });
+    if (f === 'push') {
+      const pv = tv.pushV;
+      if (!fem && pv === 't') return { k: 'n', t: LL('ціль > 40', 'goal > 40'), tip: LL('Понад 40 віджимань з носків за раз: у 10-річному дослідженні 1 104 активних чоловіків (середній вік — 40 років) у тих, хто робив понад 40, серцевих подій було на 96 % менше, ніж у тих, хто менше 10 (звʼязок, не доказ причини).', 'More than 40 push-ups from the toes in one go: in a 10-year study of 1,104 active men (average age 40), those who did more than 40 had 96% fewer heart events than those who did fewer than 10 (an association, not proof of cause).') };
+      const v = best('push', (t) => (t.pushV || '') === pv);
+      return rec(v, fmt(v), fem ? LL('Дослідження звʼязку віджимань із серцем проводили лише на чоловіках.', 'The study linking push-ups to heart health included only men.') : LL('Ціль «понад 40» — для віджимань з носків, як у дослідженні.', 'The “more than 40” goal is for push-ups from the toes, as in the study.'),
+        pv === 'k' ? LL(' з колін', ' from the knees') : LL(' з носків', ' from the toes'));
+    }
+    if (f === 'chair') {
+      const c = chairThr(age, fem);
+      if (c) return { k: 'n', t: LL('норма ≥ ', 'norm ≥ ') + c.n, tip: testNorm('chair') + LL(` ${c.n} і більше — середній рівень і вище.`, ` ${c.n} or more is average or above.`) };
+      const v = best('chair'); return rec(v, fmt(v), LL('Норми CDC — для 60–94 років.', 'CDC norms are for ages 60–94.'));
+    }
+    if (f === 'balL' || f === 'balR') {
+      if (age >= 51 && age <= 75) return { k: 'n', t: LL('норма ≥ 10 с', 'norm ≥ 10 sec'), tip: testNorm('bal') };
+      const v = best(f); return rec(v, fmt(v) + sec, LL('Поріг 10 с перевірено у 51–75 років.', 'The 10-sec threshold was studied at ages 51–75.'));
+    }
+    if (f === 'srt') {
+      if (age >= 51 && age <= 80) return { k: 'n', t: LL('ціль 8–10', 'goal 8–10'), tip: LL('Серед 2 002 людей 51–80 років найнижчий ризик смерті був у тих, хто набрав 8–10 балів: у 0–3 бали — у 5–6 разів вищий; кожен бал більше — на 21 % краща виживаність (звʼязок, не доказ причини).', 'Among 2,002 people aged 51–80, the lowest risk of death was in those who scored 8–10 points: at 0–3 points it was 5–6 times higher; each extra point meant 21% better survival (an association, not proof of cause).') };
+      const v = best('srt'); return rec(v, fmt(v), LL('Межі перевірено у 51–80 років.', 'The bands were studied at ages 51–80.'));
+    }
+    if (f === 'spL' || f === 'spR') { const v = best(f, (t) => (t.spV || 'f') === tv.spV); return rec(v, fmt(v) + sec, LL('Перевіреної норми бічної планки немає.', 'There’s no verified side-plank norm.'), tv.spV === 'k' ? LL(' з колін', ' from the knees') : LL(' з ніг', ' from the feet')); }
+    if (f === 'carL' || f === 'carR') { const v = best(f); return rec(v, fmt(v) + sec, LL('Перевіреної норми немає: вага в кожного своя.', 'There’s no verified norm: everyone uses their own weight.')); }
+    if (f === 'walkM') { const v = best('walkT', null, true); return rec(v, v === null ? '' : mmss(v), LL('Норму часу не показуємо: формулу оцінки не вдалося звірити з першоджерелом.', 'We don’t show a time norm: the estimation formula couldn’t be checked against its original source.')); }
+    if (f === 'walkHR') {
+      const l = tl.filter((t) => t.walkT && t.walkHR).sort((a, b) => (a.d < b.d ? -1 : 1)).pop();
+      const why = LL('Норми пульсу після ходьби немає: порівнюйте з собою — той самий маршрут швидше при тому самому чи нижчому пульсі.', 'There’s no norm for pulse after walking: compare with yourself — the same route faster at the same or a lower pulse.');
+      return l ? { k: 'r', t: LL('було ', 'last ') + l.walkHR, tip: why + LL(' Тут — пульс минулого разу.', ' Here is last time’s pulse.') } : { k: 'z', t: LL('без норми', 'no norm'), tip: why };
+    }
+    if (f === 'w6') { const v = best('w6'); return rec(v, fmt(v) + LL(' м', ' m'), LL('Норму 6 хв не показуємо: до неї вийшла поправка, яку не вдалося звірити.', 'We don’t show a 6-minute norm: a correction to it was published that couldn’t be checked.')); }
+    return null;
+  };
+  const tChip = (f) => { const c = testChip(f); return c ? `<button type="button" class="tch ${c.k}" id="tc_${f}" data-act="tNorm" data-f="${f}" data-tip="${esc(c.tip)}">${esc(c.t)}</button>` : ''; };
   /* [тест, назва, короткий рядок, 3D-анімація] — порядок екрана */
   const TEST_HOW = () => { const tv = TV(); return [
     ['push', LL('Віджимання', 'Push-ups'), LL('З колін або з носків, без провисання.', 'From the knees or the toes, no sagging.'), tv.pushV === 't' ? 'pushup:t' : 'pushup'],
@@ -2427,14 +2530,15 @@ window.APP_START = () => {
     ['car', LL('Валізна прогулянка', 'Suitcase carry'), LL('Та сама вага щоразу, секунди на кожну руку.', 'Same weight every time, seconds for each hand.'), 'suitcase'],
     ['walk', LL('2 км ходьби', '2 km walk'), LL('Стадіон — 5 кіл; якомога швидше, не біжучи. Одразу — пульс: удари за 15 с × 4.', 'A track — 5 laps; as fast as you can without running. Right after — your pulse: beats in 15 sec × 4.'), 't_walk'],
     ['w6', LL('Ходьба 6 хв', '6-minute walk'), LL('У своєму темпі по відміряному колу; можна сповільнитись і зупинитись. З тиском чи серцем — з дозволу лікаря.', 'At your own pace on a measured loop; you may slow down and stop. With blood pressure or heart issues — with your doctor’s OK.'), 't_walk']]; };
-  /* поля запису (k — поле, l — підпис, u — одиниця); 2 км — хвилини й секунди, у записі — секунди (walkT) */
-  const TESTS = [['push', LL('Віджимання', "Push-ups"), LL('разів', "reps")], ['chair', LL('Вставання з крісла за 30 с', "30-second chair stand"), LL('разів', "reps")],
-    ['spL', LL('Бічна планка — ліворуч', "Side plank — left"), LL('с', "sec")], ['spR', LL('Бічна планка — праворуч', "Side plank — right"), LL('с', "sec")],
-    ['balL', LL('Стійка на одній нозі — ліва', "Single-leg stand — left"), LL('с', "sec")], ['balR', LL('Стійка на одній нозі — права', "Single-leg stand — right"), LL('с', "sec")],
-    ['srt', LL('Сісти й встати з підлоги', 'Sit and rise from the floor'), LL('балів з 10', 'points of 10')],
-    ['carL', LL('Валізна прогулянка — ліва рука', "Suitcase carry — left hand"), LL('с', "sec")], ['carR', LL('Валізна прогулянка — права рука', "Suitcase carry — right hand"), LL('с', "sec")],
-    ['walkM', LL('2 км ходьби — хвилини', '2 km walk — minutes'), LL('хв', 'min')], ['walkS', LL('2 км ходьби — секунди', '2 km walk — seconds'), LL('с', 'sec')],
-    ['walkHR', LL('Пульс одразу після 2 км', 'Pulse right after 2 km'), LL('уд/хв', 'bpm')], ['w6', LL('Ходьба 6 хв — відстань', '6-minute walk — distance'), LL('м', 'm')]];
+  /* поля запису (k — поле, l — підпис з одиницею, u — підказка в полі); назва тесту — у заголовку картки, тож у підписі лише що вписати (з 3.27.7; до того — «Бічна планка — ліворуч, с»…);
+     2 км — хвилини й секунди одним рядком, у записі — секунди (walkT) */
+  const TESTS = [['push', LL('Скільки разів', 'How many'), LL('разів', 'reps')], ['chair', LL('Скільки разів за 30 с', 'How many in 30 sec'), LL('разів', 'stands')],
+    ['spL', LL('Лівий бік, с', 'Left side, sec'), LL('с', 'sec')], ['spR', LL('Правий бік, с', 'Right side, sec'), LL('с', 'sec')],
+    ['balL', LL('Ліва нога, с', 'Left leg, sec'), LL('с', 'sec')], ['balR', LL('Права нога, с', 'Right leg, sec'), LL('с', 'sec')],
+    ['srt', LL('Балів з 10', 'Points out of 10'), LL('балів', 'points')],
+    ['carL', LL('Ліва рука, с', 'Left hand, sec'), LL('с', 'sec')], ['carR', LL('Права рука, с', 'Right hand, sec'), LL('с', 'sec')],
+    ['walkM', LL('Час: хвилини й секунди', 'Time: minutes and seconds'), LL('хв', 'min')], ['walkS', LL('Секунди', 'Seconds'), LL('с', 'sec')],
+    ['walkHR', LL('Пульс одразу після, уд/хв', 'Pulse right after, bpm'), LL('уд/хв', 'bpm')], ['w6', LL('Відстань, м', 'Distance, m'), LL('м', 'm')]];
   /* підказки на затисканні нових полів (з 3.27.3; старі — у tips.js) */
   const TEST_TIP = () => ({ srt: LL('Бали за тест «сісти й встати з підлоги»: 10 мінус 1 за кожну опору, мінус ½ за хитання.', 'Score for sitting and rising from the floor: 10 minus 1 for each support, minus ½ for wobbling.'),
     walkM: LL('Скільки повних хвилин тривали 2 км.', 'How many full minutes the 2 km took.'), walkS: LL('І скільки секунд понад хвилини.', 'And how many seconds beyond the minutes.'),
@@ -2458,7 +2562,7 @@ window.APP_START = () => {
   }
   let photoUrls = [];
   /* ---------- Кухня (з 3.20.0, слово Alexа 23.10: «щоб це була моя кухня всередині додатку»; «не брехала та не заводила в оману») ----------
-     Розрахунки — KITCHEN (app/kitchen.js), склад — лише база USDA (app/food_db.js, звірка tools/food_check.py) або етикетка людини.
+     Розрахунки — KITCHEN (app/kitchen.js), склад — лише бази USDA і, з 3.27.7, BLS 4.0 (app/food_db.js, звірка tools/food_check.py) або етикетка людини.
      Три способи запису: точно (грами), швидко (мірка USDA), руками (Precision Nutrition — орієнтир); біля кожного запису — точність.
      Дані — у профілі: p.kitchen = { days: { дата: { items: [запис + m (прийом) + at (час)], water: мл } }, products, dishes, recent, set }. */
   const KQ = () => ({ exact: LL('зважено', 'weighed'), label: LL('етикетка', 'label'), measure: LL('мірка', 'measure'), hand: LL('орієнтир', 'estimate') });
@@ -2576,7 +2680,7 @@ window.APP_START = () => {
     const gap = nu && isToday && day.items.length ? KITCHEN.proteinGap(tot, nu.pLo, kctx(), 3) : null;
     const gapCard = gap && gap.need > 0 ? `<div class="card"><b>${LL('Чим добрати білок', 'How to reach your protein')}</b><p class="small muted">${LL('Бракує ', 'You need ')}${gap.need}${LL(' г до норми. Одне з:', ' g more. One of:')}</p>
       ${gap.list.map((x, j) => `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(kName(x.e))}</div><div class="tiny muted">${x.mine ? `<span class="kq exact">${LL('з ваших', 'yours')}</span> · ` : ''}${fmt(x.e.g)}${LL(' г · ', ' g · ')}${x.kcal}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(x.p)}${LL(' г', ' g')}</div></div>
-        <button type="button" class="sm" data-act="kGapAdd" data-j="${j}">+</button></div>`).join('')}<p class="tiny muted">${LL('Спершу — те, що ви вже їсте. Склад — з бази USDA чи ваших етикеток.', 'What you already eat comes first. Composition comes from the USDA database or your own labels.')}</p></div>` : '';
+        <button type="button" class="sm" data-act="kGapAdd" data-j="${j}">+</button></div>`).join('')}<p class="tiny muted">${LL('Спершу — те, що ви вже їсте. Склад — з баз USDA і BLS чи ваших етикеток.', 'What you already eat comes first. Composition comes from the USDA and BLS databases or your own labels.')}</p></div>` : '';
     /* вода одним числом (огляд 24.10, слово Alexа: «вода одним числом»): кількість — лише в заголовку (рядок «Випито … · залишилось …» її повторював — тепер лише «Норму виконано ✓»),
        правила прийомів — у підказці на затискання заголовка (до огляду — постійний абзац ≈ 60 слів) */
     const wPlan = `${LL('Ваш план: ', 'Your plan: ')}${fmt(KITCHEN.waterTarget(sx, false, k.set.vol, kWRec()) / 1000)}${LL(' л на день', ' L a day')}${k.set.vol ? LL(' (своє', ' (your own') + (kWRec() ? LL('; рекомендовано ', '; recommended ') + fmt(kWRec() / 1000) + LL(' л', ' L') : '') + ')' : kWRec() ? LL(' (рекомендовано за вагою, статтю й віком)', ' (recommended for your weight, sex and age)') : LL(' (норма програми)', ' (program target)')}${LL(', у день тренування — +0,5 л', ', +0.5 L on training days')}${wTrain ? LL(' (сьогодні)', ' (today)') : ''}; ${kIntakesTxt(glass, wTrain, k.set.per).txt} ${LL('(склянка — ', '(a glass is ')}${glass}${LL(' мл), з ', ' ml), from ')}${k.set.first}${LL(' до ', ' to ')}${k.set.last}. ${LL('Випили раніше чи пізніше — час наступних прийомів рахується від вашої відмітки; більше — прийомів менше; менше чи пропустили — наступні більші, до обраного за раз; не вміщається — додатковий прийом; останній перед сном — не більший за попередній, а що не вміщається, не надолужуємо. Змінити — «Налаштування кухні».', 'Drank earlier or later — the next drinks are timed from when you logged it; drank more — fewer drinks left; drank less or missed one — the next ones get bigger, up to what you chose at a time; if it doesn’t fit, an extra drink is added; the last one before bed is never bigger than the one before it, and whatever doesn’t fit isn’t made up. Change it in “Kitchen settings.”')}`;
@@ -2618,7 +2722,7 @@ window.APP_START = () => {
     const rows = KITCHEN.MI_KEYS.map((k) => { const v = m[k], t = nm[k];
       return `<div class="sp small"><span>${NM[k][0]}${part.indexOf(k) >= 0 ? '*' : ''}</span><span class="muted">${fmt(v)}${LL(' з ', ' of ')}${t}${NM[k][1]}</span></div><div class="kbar"><i style="width:${Math.round(Math.min(1, v / t) * 100)}%"${v >= t ? ' class="ok"' : ''}></i></div>`; }).join('');
     const notes = [m.none ? LL('Без даних — ', 'No data — ') + plural(m.none, LL('запис', 'entry'), LL('записи', 'entries'), LL('записів', 'entries')) + LL(': свої продукти з етикетки, порції «руками» й швидкі записи (складу вітамінів для них немає).', ': your own foods from labels, hand portions and quick entries (there’s no vitamin data for them).') : '',
-      part.length ? '* ' + LL('Для частини продуктів у базі USDA цього числа немає — фактично більше.', 'For some foods the USDA database has no number for this — the real amount is higher.') : '',
+      part.length ? '* ' + LL('Для частини продуктів у базі (USDA чи BLS) цього числа немає — фактично більше.', 'For some foods the database (USDA or BLS) has no number for this — the real amount is higher.') : '',
       LL('Вітамін D: у їжі його мало, шкіра робить його на сонці; рівень — аналізом у лікаря.', 'Vitamin D: few foods contain it, your skin makes it in the sun; check your level with a blood test at the doctor’s.'),
       LL('Норма — NIH (США) для вашої статі й віку.', 'Targets — NIH (US) for your sex and age.')].filter(Boolean);
     return `<div class="card"><div class="sp"><b>${LL('Вітаміни й мінерали', 'Vitamins and minerals')}</b><span class="tiny muted">${LL('з записаного', 'from what you logged')}</span></div>${rows}<p class="tiny muted" style="margin:6px 0 0">${notes.join(' ')}</p></div>`;
@@ -3083,7 +3187,7 @@ window.APP_START = () => {
     openSheet(`<b>${LL('Як рахує кухня', 'How the kitchen counts')}</b>
       ${N.nu ? `<p class="small">${LL('<b>Ваша норма.</b> ', '<b>Your targets.</b> ')}${esc(kCalcTxt(N).replace(/^./, (c) => c.toUpperCase()))}</p>` : ''}
       <p class="small">${LL('<b>Норма.</b> Калорії — формула Міффліна — Сан Жеора × 1,45 і мета програми. Білок — від цільової ваги, якщо її вказано, інакше від поточної (за ожиріння — не вище ваги для ІМТ 30).', '<b>Targets.</b> Calories — Mifflin–St Jeor × 1.45 and your program goal. Protein — from your target weight if you set one, otherwise from your current weight (with obesity, capped at the weight for BMI 30).')}</p>
-      <p class="small">${LL('<b>Склад.</b> База USDA FoodData Central (SR Legacy): числа на 100 г і мірки — без змін з першоджерела. Ваші продукти — з етикетки, страви — з вашого рецепта.', '<b>Composition.</b> USDA FoodData Central (SR Legacy): per-100 g numbers and measures exactly as published. Your foods — from the label; your dishes — from your recipe.')}</p>
+      <p class="small">${LL('<b>Склад.</b> Дві державні бази: USDA FoodData Central (SR Legacy, США) і BLS 4.0 (Max Rubner-Institut, Німеччина, 2025; CC BY 4.0, doi.org/10.25826/Data20251217-134202-0). Числа на 100 г і мірки — без змін з першоджерела; лише у BLS вуглеводи вказано без клітковини, тут клітковину додано, як у USDA. Мірки (штука, ложка, чашка) є лише в USDA, у продуктів BLS — грами. Страви бази — середній рецепт, ваш може відрізнятися. Кефіру 2,5 % немає в жодній державній базі: його склад — середнє записів BLS для 1,5 % і 3,5 % (білок і вуглеводи кефіру від жирності майже не залежать). Ваші продукти — з етикетки, страви — з вашого рецепта.', '<b>Composition.</b> Two government databases: USDA FoodData Central (SR Legacy, US) and BLS 4.0 (Max Rubner-Institut, Germany, 2025; CC BY 4.0, doi.org/10.25826/Data20251217-134202-0). Per-100 g numbers and measures exactly as published; only BLS lists carbohydrates without fibre — here fibre is added, as in USDA. Measures (piece, spoon, cup) exist only in USDA; BLS foods are in grams. Database dishes are an average recipe, yours may differ. No government database lists 2.5% kefir: its composition is the average of the BLS entries for 1.5% and 3.5% (kefir’s protein and carbs barely depend on fat). Your foods — from the label; your dishes — from your recipe.')}</p>
       <p class="small">${LL('<b>Точність.</b> «зважено» і «етикетка» — найточніше; «мірка» — склад точний, а вага залежить від повноти ложки чи склянки; «орієнтир» — порції руками Precision Nutrition.', '<b>Accuracy.</b> “weighed” and “label” are the most accurate; “measure” — the composition is exact, the weight depends on how full the spoon or cup is; “estimate” — Precision Nutrition hand portions.')}</p>
       <p class="small">${(isLb() ? LL('<b>Тарілка й білок.</b> 0,18 г білка на lb ваги на прийом, щонайменше 4 прийоми (огляд Schoenfeld і Aragon, 2018). У день тренування — прийом з білком до й після.', '<b>Plate and protein.</b> 0.18 g of protein per lb of body weight per meal, at least 4 meals (Schoenfeld and Aragon, 2018). On training days — a protein-rich meal before and after.') : LL('<b>Тарілка й білок.</b> 0,4 г білка на кг на прийом, щонайменше 4 прийоми (огляд Schoenfeld і Aragon, 2018). У день тренування — прийом з білком до й після.', '<b>Plate and protein.</b> 0.4 g of protein per kg per meal, at least 4 meals (Schoenfeld and Aragon, 2018). On training days — a protein-rich meal before and after.'))}</p>
       <p class="small">${LL('<b>Вода.</b> Ваш план — у «Налаштуваннях кухні»: скільки пити на день, перша й остання склянка (за замовчуванням — норма програми: чоловікам 2,5 л, жінкам 2 л); у день тренування застосунок додає 0,5 л. Перша склянка — після сну. Температура — як приємніше: досліджень, що гаряча вода прискорює обмін, немає.', '<b>Water.</b> Your plan is in “Kitchen settings”: how much to drink a day, your first and last glass (by default, the program target: 2.5 L for men, 2 L for women); on training days the app adds 0.5 L. The first glass is after you wake up. Temperature is up to you: there’s no research showing hot water speeds up your metabolism.')}</p>${kHeartNote()}
@@ -3469,8 +3573,10 @@ window.APP_START = () => {
       const tl = (p.body.tests || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1)), tv = TV();
       /* з 3.27.4 кожен тест — окрема картка (слово Alexа 26.10: «кожен тест + 3Д має бути окремо, бо не усі тести я кожен раз зможу проходити»): назва й останній результат,
          короткий рядок, 3D і що означає число, свої поля й своя кнопка «Зберегти», графік саме цього тесту; до 3.27.4 — «Як виконувати тести» окремо, одна форма на всі й графіки нижче */
-      const seg = (k, opts) => `<div class="seg" style="grid-column:1/-1;margin:0 0 6px">${opts.map(([v, l]) => `<button type="button" class="${tv[k] === v ? 'on' : ''}" data-act="tVar" data-k="${k}" data-v="${v}" data-tip="${esc(LL('Як робили — так і запишеться: графік порівнює лише той самий варіант.', 'Mark how you did it: the chart compares only the same version.'))}">${l}</button>`).join('')}</div>`;
-      const ttip = TEST_TIP(), tu = TEST_U(), field = ([k, l, u]) => `<div><label class="f">${l}, ${u}</label><input inputmode="${k === 'srt' ? 'decimal' : 'numeric'}" id="t_${k}"${ttip[k] ? ` data-tip="${esc(ttip[k])}"` : ''}></div>`;
+      const seg = (k, opts) => `<div class="seg" style="margin:0 0 8px">${opts.map(([v, l]) => `<button type="button" class="${tv[k] === v ? 'on' : ''}" data-act="tVar" data-k="${k}" data-v="${v}" data-tip="${esc(LL('Як робили — так і запишеться: графік порівнює лише той самий варіант.', 'Mark how you did it: the chart compares only the same version.'))}">${l}</button>`).join('')}</div>`;
+      const ttip = TEST_TIP(), tu = TEST_U(), inp = (k, u) => `<input inputmode="${k === 'srt' ? 'decimal' : 'numeric'}" id="t_${k}" placeholder="${esc(u)}" aria-label="${esc((TESTS.find((x) => x[0] === k) || [])[1] || '')}"${ttip[k] ? ` data-tip="${esc(ttip[k])}"` : ''}>`;
+      /* з 3.27.7 — кожне поле своїм рядком: підпис, поле й плашка норми чи рекорду праворуч (до того — два стовпчики, поля різної висоти «розкидані», норма — лише в 3D) */
+      const field = ([k, l, u]) => (k === 'walkS' ? '' : `<div class="tf"><label class="f" for="t_${k}">${l}</label><div class="tfi">${inp(k, u)}${k === 'walkM' ? `<span class="tsep">:</span>${inp('walkS', LL('с', 'sec'))}` : ''}${tChip(k)}</div></div>`);
       /* графіки: віджимання — окремою лінією на кожен варіант; бічна планка — останній варіант (старі записи без позначки — «з ніг», як радив опис до 3.27.3) */
       const pts = (key, f, sel) => tl.filter((t) => t[key] !== null && t[key] !== undefined && t[key] !== '' && (!sel || sel(t))).map((t) => ({ t: tms(t.d), v: f ? f(Number(t[key])) : Number(t[key]) }));
       const LR = LL('<div class="legend"><span><i></i>ліва</span><span><i style="background:var(--d)"></i>права</span></div>', "<div class=\"legend\"><span><i></i>left</span><span><i style=\"background:var(--d)\"></i>right</span></div>");
@@ -3494,7 +3600,7 @@ window.APP_START = () => {
         const viz = typeof VIZ === 'undefined' || !VIZ.has(v3) ? (nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : '')
           : `<details class="vz3 vzt" data-k="${v3}"><summary data-tip="${esc(LL('Дотик — 3D: як виконувати тест і що означає число.', 'Tap for 3D: how to do the test and what the number means.'))}"><b>${LL('Як виконувати — 3D', 'How to do it — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>${vizInner()}${nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : ''}</details>`;
         const form = !on ? `<p class="tiny muted" style="margin:8px 0 0">${LL('Цього тесту вже немає у вашій програмі — лишилась історія.', 'This test is no longer in your program — your history stays.')}</p>`
-          : `<div class="grid2" style="margin-top:10px">${TESTS.filter(([f]) => TEST_IN[k].indexOf(f) >= 0).map(field).join('')}${k === 'push' ? seg('pushV', [['k', LL('з колін', 'from the knees')], ['t', LL('з носків', 'from the toes')]]) : k === 'sp' ? seg('spV', [['k', LL('з колін', 'from the knees')], ['f', LL('з ніг', 'from the feet')]]) : ''}</div>`
+          : `<div class="tfs">${k === 'push' ? seg('pushV', [['k', LL('з колін', 'from the knees')], ['t', LL('з носків', 'from the toes')]]) : k === 'sp' ? seg('spV', [['k', LL('з колін', 'from the knees')], ['f', LL('з ніг', 'from the feet')]]) : ''}${TESTS.filter(([f]) => TEST_IN[k].indexOf(f) >= 0).map(field).join('')}</div>`
           + `<button type="button" class="pri wide" data-act="saveTest" data-t="${k}" data-tip="${esc(LL('Зберегти результат лише цього тесту за сьогодні; інші — коли зробите.', 'Save the result of this test only for today; the others whenever you do them.'))}">${LL('Зберегти', 'Save')}</button>`;
         return `<div class="card tcard" data-t="${k}"><div class="sp"><b>${name}</b><span class="small muted">${lastTxt(k, lastOf(k))}</span></div><p class="small muted" style="margin:4px 0 0">${line}</p>${viz}${form}${chartOf(k, name)}</div>`;
       }).join('') + (testOn('bal') ? `<div class="card"><b>${LL('Фото осанки збоку', 'Side posture photo')}</b><p class="small muted" style="margin:4px 0 0">${LL('Вухо, плече, таз і кісточка — чи на одній лінії; однакове світло й місце («Тіло» → «Фото» → «Збоку»).', 'Ear, shoulder, hip and ankle — are they in one line; same light and spot (“Body” → “Photos” → “Side”).')}</p></div>` : '');
@@ -3959,7 +4065,7 @@ window.APP_START = () => {
     if (act === 'kp') return openKp(i, j, b.dataset.f);
     if (act === 'stype') { if (p.draft.items[i].sets[j].done) return toast(LL('Підхід уже позначено ✓ — спершу зніміть позначку', "Set already checked off ✓ — uncheck it first")); return typeSheet(i, j); }
     if (act === 'stypeSet') { const s = p.draft.items[i].sets[j]; s.type = b.dataset.t; save(); haptic(); closeSheet(); return rWorkout(); }
-    if (act === 'mode') { S().mode = S().mode === 'list' ? 'coach' : 'list'; if (S().mode === 'coach' && p.draft && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }
+    if (act === 'mode') { if (!p.draft) return; p.draft.mode = wMode() === 'list' ? 'coach' : 'list'; if (p.draft.mode === 'coach' && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }  // лише це тренування (з 3.27.7)
     if (act === 'cdone') return coachDone();
     if (act === 'cwarm') { p.draft.coach.warm = true; save(); const cs = curStep(p.draft), gs = cs ? gSay(p.draft, 'card') : ''; rWorkout(); window.scrollTo(0, 0); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || LL('Добре. ', "Good. ")) + LL('Перша вправа. ', "First exercise. ") + setSpeech(p.draft, cs) + gs); return; }
     if (act === 'cstep') {
@@ -4004,7 +4110,7 @@ window.APP_START = () => {
     if (act === 'painOff') { const ex = p.draft.items[i].ex; p.draft.pain = (p.draft.pain || []).filter((x) => x !== ex); save(); closeSheet(); toast(LL('Позначку прибрано', 'Mark removed')); return rWorkout(); }
     if (act === 'noteSave') { const it = p.draft.items[i]; const v = document.getElementById('exNote').value.trim(); if (v) p.notes[it.ex] = v; else delete p.notes[it.ex]; save(); closeSheet(); toast(LL('Нотатку збережено', "Note saved")); return rWorkout(); }
     if (act === 'delset') { const it = p.draft.items[i]; if (it.sets.length > 1 && !it.sets[it.sets.length - 1].done) it.sets.pop(); save(); closeSheet(); return rWorkout(); }
-    if (act === 'skip') { p.draft.items[i].skipped = true; save(); closeSheet(); rWorkout(); const cs = curStep(p.draft); if (cs && S().mode !== 'list' && !T.id) talk((hard() ? COACH.line('skip', G().sex, 0) + ' ' : LL('Пропускаємо. ', "Skipping. ")) + LL('Далі. ', "Next up. ") + setSpeech(p.draft, cs)); return; }
+    if (act === 'skip') { p.draft.items[i].skipped = true; save(); closeSheet(); rWorkout(); const cs = curStep(p.draft); if (cs && wMode() !== 'list' && !T.id) talk((hard() ? COACH.line('skip', G().sex, 0) + ' ' : LL('Пропускаємо. ', "Skipping. ")) + LL('Далі. ', "Next up. ") + setSpeech(p.draft, cs)); return; }
     if (act === 'unskip') { p.draft.items[i].skipped = false; save(); return rWorkout(); }
     /* підсумок */
     if (act === 'shareSum') return shareSummary();
@@ -4122,7 +4228,10 @@ window.APP_START = () => {
       openSheet(`<img src="${img ? img.src : ''}${LL(`" style="width:100%" alt="фото"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="`, `" style="width:100%" alt="photo"><p></p><button type="button" class="ghost wide" style="color:var(--bad);border-color:var(--bad)" data-act="photoDel" data-id="`)}${id}${LL(`">Видалити фото</button>`, `">Delete photo</button>`)}`); return;
     }
     if (act === 'photoDel') { if (!confirm(LL('Видалити фото?', "Delete photo?"))) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
-    if (act === 'tVar') { TV()[b.dataset.k] = b.dataset.v; b.parentNode.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); return; }  // без перемальовування — введене лишається
+    if (act === 'tVar') { TV()[b.dataset.k] = b.dataset.v; b.parentNode.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));  // без перемальовування — введене лишається
+      TEST_IN[b.dataset.k === 'pushV' ? 'push' : 'sp'].forEach((f) => { const el = document.getElementById('tc_' + f); if (el) el.outerHTML = tChip(f); }); return; }  // плашка — свого варіанта (з 3.27.7)
+    if (act === 'tNorm') { const f = b.dataset.f, c = testChip(f), tk = Object.keys(TEST_IN).find((x) => TEST_IN[x].indexOf(f) >= 0), nm = (TEST_HOW().find((x) => x[0] === tk) || [])[1] || '';
+      if (c) openSheet(`<h2>${esc(nm)} · ${esc(c.t)}</h2><p class="small">${esc(c.tip)}</p><button type="button" class="ghost wide" data-act="closeSheet">${LL('Зрозуміло', 'Got it')}</button>`); return; }
     if (act === 'saveTest') {
       /* один тест — своя кнопка (з 3.27.4): читаємо лише поля цього тесту; той самий день — доповнюємо (інші тести можуть бути окремо): порожнє поле не стирає вже записане */
       const tk = b.dataset.t, rec = { d: today() }; let bad = false; if (!TEST_IN[tk]) return;
@@ -4147,7 +4256,7 @@ window.APP_START = () => {
       save(); closeSheet(); toast(LL('Пульс збережено', 'Pulse saved')); return rBody();
     }
     /* більше */
-    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') S().mode = v; else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
+    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') { S().mode = v; if (p && p.draft) delete p.draft.mode; } else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
     if (act === 'vpack') { ensureAudio(); S().voice.packs[DB.active] = b.dataset.id; S().voice.packsManual = S().voice.packsManual || {}; S().voice.packsManual[DB.active] = true; save(); const id = b.dataset.id;
       if (id) VOICEPACK.load(id).then(() => { rMore(); talk(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout."), true); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast(LL('Не вдалося завантажити голос — перевірте інтернет', "Couldn’t download the voice — check your internet")));
       else { rMore(); talk(LL('Так звучить системний голос.', "This is the system voice."), true); }

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="FORTES">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.27.6">
+<meta name="app-version" content="3.27.7">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -156,6 +156,10 @@ label.f{display:block;font-size:.8rem;color:var(--muted);margin:10px 0 4px}
 .seg button:active{transform:none;box-shadow:none;background:transparent}
 .seg button.on{background:var(--card);color:var(--ink);font-weight:700;box-shadow:var(--e1),inset 0 0 0 1px var(--accent-text)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px} .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+/* «Тіло» → «Тести» (з 3.27.7): поле — своїм рядком, плашка норми чи рекорду праворуч; норма — бірюза, рекорд — нейтрально, «без норми» — приглушено */
+.tfs{margin:10px 0 12px} .tf+.tf{margin-top:8px} .tf label.f{margin:0 0 4px} .tfi{display:flex;align-items:center;gap:8px} .tfi input{flex:1;min-width:0} .tfi .tsep{color:var(--muted);font-weight:700}
+button.tch{flex:none;min-height:44px;padding:0 12px;border:0;border-radius:var(--r-sm);font:inherit;font-size:.8rem;font-weight:700;white-space:nowrap;background:var(--soft);color:var(--ink);box-shadow:var(--e1)}
+button.tch.n{background:var(--accent-soft);color:var(--accent-text)} button.tch.z{color:var(--muted);font-weight:500}
 .stat{background:var(--card);border:1px solid var(--card-line);border-radius:var(--r-md);box-shadow:var(--e1),var(--hl);padding:12px}
 .stat b{display:block;font-size:1.4rem;font-weight:700;line-height:1.15;letter-spacing:-.02em;font-variant-numeric:tabular-nums} .stat span{font-size:.74rem;color:var(--muted)}
 .hero{background:var(--hero);background:linear-gradient(160deg,var(--hero),var(--hero2));color:var(--hero-ink);border:1px solid var(--card-line);border-radius:var(--r-lg);box-shadow:var(--e2),var(--hl)}
@@ -312,6 +316,9 @@ button.pri.cdone{box-shadow:var(--glow),var(--pri-hl)}
 .center{text-align:center}
 button.q{min-height:40px;min-width:40px;width:40px;padding:0;border-radius:50%;font-weight:700;font-size:.85rem;background:var(--soft);border:0;color:var(--accent-text);vertical-align:middle;box-shadow:none}
 .pick.rd button{display:flex;flex-direction:column;gap:2px}
+/* «Як спина сьогодні?» (з 3.27.7): «Добре» і «Терпимо» — в один ряд, без підписів (пояснення — на затисканні); «Що підготувати» вдома */
+.pick.rd .rd2{display:grid;grid-template-columns:1fr 1fr;gap:12px} .pick.rd .rd2 button{align-items:center;text-align:center;padding:12px 8px} .pick.rd .rd2 b{margin:0}
+.card.prep .list li{padding:8px 0} .card.prep .sp{align-items:center;gap:8px}
 .rdot{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--accent-text)} .rdot.y{background:var(--ochre)} .rdot.r{background:var(--bad)}
 .hero button.ghost{color:var(--accent-text);border-color:var(--accent-text);margin-top:6px}
 .hero .hbtn{display:flex;gap:8px;margin-top:12px} .hero .hbtn button{margin:0;min-width:0} .hero .hbtn .pri{flex:2 1 0} .hero .hbtn .ghost{flex:1 1 0}  /* з 3.27.1 — «Почати» й «Інше» в один ряд (слово Alexа 25.10: «Роби як сказав, але кнопки підпиши Почати та Інше»), картка нижча */
@@ -438,23 +445,23 @@ button.mic.busy{opacity:.55}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="i18n.js?v=3.27.6"></script>
-<script src="i18n_en.js?v=3.27.6"></script>
-<script src="program.js?v=3.27.6"></script>
-<script src="engine.js?v=3.27.6"></script>
-<script src="voice.js?v=3.27.6"></script>
-<script src="coach.js?v=3.27.6"></script>
-<script src="radio.js?v=3.27.6"></script>
-<script src="voicepack.js?v=3.27.6"></script>
-<script src="tips.js?v=3.27.6"></script>
-<script src="charts.js?v=3.27.6"></script>
-<script src="store.js?v=3.27.6"></script>
-<script src="generator.js?v=3.27.6"></script>
-<script src="food_db.js?v=3.27.6"></script>
-<script src="kitchen.js?v=3.27.6"></script>
-<script src="coachctx.js?v=3.27.6"></script>
-<script src="viz.js?v=3.27.6"></script>
-<script src="app.js?v=3.27.6"></script>
-<script src="accounts.js?v=3.27.6"></script>
+<script src="i18n.js?v=3.27.7"></script>
+<script src="i18n_en.js?v=3.27.7"></script>
+<script src="program.js?v=3.27.7"></script>
+<script src="engine.js?v=3.27.7"></script>
+<script src="voice.js?v=3.27.7"></script>
+<script src="coach.js?v=3.27.7"></script>
+<script src="radio.js?v=3.27.7"></script>
+<script src="voicepack.js?v=3.27.7"></script>
+<script src="tips.js?v=3.27.7"></script>
+<script src="charts.js?v=3.27.7"></script>
+<script src="store.js?v=3.27.7"></script>
+<script src="generator.js?v=3.27.7"></script>
+<script src="food_db.js?v=3.27.7"></script>
+<script src="kitchen.js?v=3.27.7"></script>
+<script src="coachctx.js?v=3.27.7"></script>
+<script src="viz.js?v=3.27.7"></script>
+<script src="app.js?v=3.27.7"></script>
+<script src="accounts.js?v=3.27.7"></script>
 </body>
 </html>

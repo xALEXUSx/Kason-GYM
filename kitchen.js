@@ -1,5 +1,5 @@
 /* «Кухня» (з 3.20.0, слово Alexа 23.10: «щоб це була моя кухня всередині додатку … без збоїв, багів, розбіжностей, щоб не брехала»).
-   Чисті функції без DOM — усе перевіряється тестами. Склад продуктів — лише FOOD_DB (USDA SR Legacy, CC0; звіряє tools/food_check.py)
+   Чисті функції без DOM — усе перевіряється тестами. Склад продуктів — лише FOOD_DB (USDA SR Legacy, CC0; з 3.27.7 і BLS 4.0, Max Rubner-Institut, CC BY 4.0; звіряє tools/food_check.py)
    або етикетка людини; жодного числа складу тут немає, крім таблиці порцій руками Precision Nutrition («hand portion math», approximations).
    Запис: food — продукт бази + грами (how 'g' — зважено, 'm' — мірка); my — свій продукт з етикетки; dish — своя страва за рецептом;
    hand — порції руками (орієнтир); quick — числа з етикетки на порцію. Точність запису (q): exact · label · measure · hand. */
@@ -418,18 +418,40 @@ var KITCHEN = (function () {
   var FISH = ['salmon', 'cod', 'pollock', 'mackerel', 'herring', 'tuna_can', 'trout', 'carp', 'pike', 'flounder', 'sardine', 'tuna_oil'], MEAT = ['chicken_breast', 'chicken_thigh', 'turkey_breast', 'beef_lean', 'beef_mince_5', 'beef_mince_15', 'pork_tender', 'pork_loin', 'pork_mince', 'pork_neck', 'veal', 'rabbit', 'duck'];
   /* з 3.27.6 (база 102 → 221 продукт; слово Alexа 26.10: «база продуктів занадто мала, навіть курячих сердець немає») — нові продукти й у звичних словах */
   var COTTAGE = ['cottage_0', 'cottage_1', 'cottage_2', 'cottage_4'];
+  /* з 3.27.7 (база 221 → 608, BLS 4.0; слово Alexа 26.10: «кефіру немає 2.5 і багато чого іншого») — і нові продукти у звичних словах */
+  FISH = FISH.concat(['hake', 'haddock', 'pike_perch', 'perch', 'redfish', 'bream', 'catfish', 'pangasius', 'horse_mackerel', 'tuna_fresh', 'pink_salmon', 'tilapia',
+    'herring_salted', 'herring_oil', 'mackerel_smoked', 'mackerel_canned_oil', 'mackerel_tomato', 'sardine_tomato', 'sprats', 'salmon_salted', 'salmon_smoked', 'trout_salted', 'dried_fish', 'fish_fingers', 'fish_breaded']);
+  MEAT = MEAT.concat(['mince_mixed', 'beef_shoulder', 'beef_steak', 'beef_brisket', 'beef_neck', 'pork_belly', 'pork_shoulder_lean', 'pork_hock', 'lamb', 'chicken_whole', 'goose', 'turkey_thigh']);
+  var QUARK = ['quark_02', 'quark_2', 'quark_5', 'quark_11'];
   var ALIAS = [
-    [['курк', 'курят', 'курин', 'куроч', 'chick'], ['chicken_breast', 'chicken_thigh', 'chicken_drum', 'chicken_wing', 'chicken_liver', 'chicken_heart', 'chicken_gizzard']],
-    [['яйц', 'яєч', 'egg'], ['egg', 'egg_white']],
+    [['курк', 'курят', 'курин', 'куроч', 'chick'], ['chicken_breast', 'chicken_thigh', 'chicken_drum', 'chicken_wing', 'chicken_liver', 'chicken_heart', 'chicken_gizzard',
+      'chicken_whole', 'chicken_thigh_skin', 'chicken_drum_skin', 'chicken_wing_skin', 'chicken_fillet_fried', 'chicken_fillet_breaded', 'chicken_liver_fried', 'chicken_patty', 'chicken_broth', 'chicken_noodle_soup']],
+    [['яйц', 'яєч', 'egg'], ['egg', 'egg_white', 'egg_quail', 'egg_duck', 'egg_yolk', 'egg_fried', 'egg_scrambled', 'omelette']],
     [['риб', 'fish'], FISH], [['мʼяс', "м'яс", 'мяс', 'meat'], MEAT],
-    [['свин', 'pork'], ['pork_tender', 'pork_loin', 'pork_neck', 'pork_mince', 'pork_liver', 'salo']], [['індич', 'індик', 'turkey'], ['turkey_breast']],
-    [['ялович', 'beef'], ['beef_lean', 'beef_mince_5', 'beef_mince_15', 'beef_liver']], [['фарш', 'mince', 'ground'], ['beef_mince_5', 'beef_mince_15', 'pork_mince']],
-    [['овес', 'вівс', 'геркулес', 'oatmeal', 'porridge'], ['oats']], [['сир', 'cheese'], COTTAGE.concat(['gouda', 'mozzarella', 'mozzarella_whole', 'feta', 'parmesan', 'cheddar', 'swiss', 'cheese_processed', 'ricotta'])], [['творог', 'кисломол', 'cottage'], COTTAGE],
-    [['печінк', 'liver'], ['chicken_liver', 'beef_liver', 'pork_liver']], [['ніжк', 'гоміл', 'drumst'], ['chicken_drum']], [['серц', 'серде', 'heart'], ['chicken_heart']], [['шлун', 'пупк', 'gizzard'], ['chicken_gizzard']], [['крил', 'wing'], ['chicken_wing']], [['ковбас', 'sausag'], ['bologna', 'frankfurter']],
-    [['каш', 'круп', 'grain'], ['buckwheat', 'rice_white', 'rice_brown', 'oats', 'bulgur', 'millet', 'barley', 'quinoa', 'couscous', 'semolina', 'corn_grits']],
-    [['картоп', 'potat'], ['potato', 'potato_baked', 'mashed_potato', 'fries']], [['томат', 'tomat'], ['tomato']], [['гриб', 'mushroom'], ['mushrooms', 'oyster_mushrooms', 'chanterelles']],
-    [['горіх', 'nut'], ['walnuts', 'almonds', 'peanuts', 'hazelnuts', 'cashews', 'pistachios', 'pine_nuts']], [['ягід', 'ягод', 'berr'], ['strawberry', 'blueberry', 'raspberry', 'blackberry', 'currant_black', 'gooseberry', 'cherry', 'sweet_cherry']],
-    [['масло', 'oil'], ['butter', 'oil_sunflower', 'oil_olive', 'oil_flax']], [['шоколад', 'chocol'], ['dark_choc', 'milk_choc']], [['сік', 'juice'], ['orange_juice', 'apple_juice', 'tomato_juice']]
+    [['свин', 'pork'], ['pork_tender', 'pork_loin', 'pork_neck', 'pork_mince', 'pork_liver', 'salo', 'pork_belly', 'pork_belly_smoked', 'pork_shoulder_lean', 'pork_hock', 'pork_heart', 'pork_tongue', 'pork_kidney', 'chop_breaded', 'chop_fried', 'pork_roast', 'goulash_pork']],
+    [['індич', 'індик', 'turkey'], ['turkey_breast', 'turkey_thigh', 'cutlets_turkey']],
+    [['ялович', 'beef'], ['beef_lean', 'beef_mince_5', 'beef_mince_15', 'beef_liver', 'beef_shoulder', 'beef_steak', 'beef_brisket', 'beef_neck', 'beef_heart', 'beef_tongue', 'beef_kidney', 'beef_tripe', 'beef_liver_fried', 'goulash_beef']],
+    [['фарш', 'mince', 'ground'], ['beef_mince_5', 'beef_mince_15', 'pork_mince', 'mince_mixed', 'soy_mince']],
+    [['овес', 'вівс', 'геркулес', 'oatmeal', 'porridge'], ['oats']], [['сир', 'cheese'], COTTAGE.concat(QUARK, ['gouda', 'mozzarella', 'mozzarella_whole', 'feta', 'parmesan', 'cheddar', 'swiss', 'cheese_processed', 'ricotta',
+      'cheese_semi_45', 'cheese_semi_50', 'edam', 'brynza_cow', 'brynza_sheep', 'halloumi', 'brie', 'camembert', 'blue_cheese', 'goat_cheese', 'mascarpone', 'cream_cheese'])], [['творог', 'кисломол', 'cottage', 'quark'], COTTAGE.concat(QUARK)],
+    [['печінк', 'liver'], ['chicken_liver', 'beef_liver', 'pork_liver', 'veal_liver', 'chicken_liver_fried', 'beef_liver_fried', 'liver_sausage', 'liver_pate', 'cod_liver']],
+    [['ніжк', 'гоміл', 'drumst'], ['chicken_drum', 'chicken_drum_skin']], [['серц', 'серде', 'heart'], ['chicken_heart', 'beef_heart', 'pork_heart']], [['шлун', 'пупк', 'gizzard'], ['chicken_gizzard']],
+    [['крил', 'wing'], ['chicken_wing', 'chicken_wing_skin']], [['ковбас', 'sausag'], ['bologna', 'frankfurter', 'salami', 'kabanos', 'sausage_thick', 'sausage_chicken', 'liver_sausage', 'blood_sausage']],
+    [['каш', 'круп', 'grain'], ['buckwheat', 'rice_white', 'rice_brown', 'oats', 'bulgur', 'millet', 'barley', 'quinoa', 'couscous', 'semolina', 'corn_grits',
+      'wheat_groats', 'barley_groats', 'rice_parboiled', 'rice_wild', 'amaranth', 'spelt', 'buckwheat_butter', 'rice_pudding']],
+    [['картоп', 'potat'], ['potato', 'potato_baked', 'mashed_potato', 'fries', 'fried_potatoes', 'potato_pancakes', 'potato_soup', 'potato_salad_mayo']],
+    [['томат', 'tomat'], ['tomato', 'tomato_canned', 'tomato_dried_oil', 'tomato_pickled', 'tomato_puree', 'tomato_paste']],
+    [['гриб', 'mushroom'], ['mushrooms', 'oyster_mushrooms', 'chanterelles', 'porcini', 'honey_mushroom', 'slippery_jack', 'milk_cap', 'birch_bolete', 'orange_bolete', 'shiitake', 'mushroom_canned']],
+    [['горіх', 'nut'], ['walnuts', 'almonds', 'peanuts', 'hazelnuts', 'cashews', 'pistachios', 'pine_nuts', 'brazil_nut', 'macadamia', 'pecan']],
+    [['ягід', 'ягод', 'berr'], ['strawberry', 'blueberry', 'raspberry', 'blackberry', 'currant_black', 'gooseberry', 'cherry', 'sweet_cherry',
+      'currant_red', 'currant_white', 'lingonberry', 'sea_buckthorn', 'elderberry', 'cranberry', 'mulberry', 'rose_hip']],
+    [['масло', 'oil'], ['butter', 'oil_sunflower', 'oil_olive', 'oil_flax', 'oil_rapeseed', 'oil_corn', 'oil_sesame', 'oil_pumpkin', 'oil_coconut', 'ghee', 'margarine']],
+    [['шоколад', 'chocol'], ['dark_choc', 'milk_choc', 'choc_semisweet', 'choc_white', 'choc_milk_nuts', 'choc_candies', 'choc_bar_peanut', 'choc_bar_wafer', 'choc_dragee']],
+    [['сік', 'juice'], ['orange_juice', 'apple_juice', 'tomato_juice', 'juice_multi', 'juice_grape', 'juice_cherry', 'juice_pear', 'juice_pineapple', 'juice_grapefruit', 'juice_lemon', 'juice_carrot', 'juice_beet']],
+    /* кава — повними формами: основа «кав» і «каву» зачіпали б «кавун» (знайдено перед прогоном 26.10) */
+    [['суп', 'soup'], ['borscht', 'chicken_noodle_soup', 'veg_soup', 'pea_soup', 'lentil_soup', 'potato_soup']], [['хліб', 'bread'], ['bread_white', 'bread_wholewheat', 'bread_rye', 'bread_wheat_rye', 'bread_rye_wheat', 'bread_seeds', 'bread_multigrain', 'bread_toast', 'baguette', 'bread_protein']],
+    [['кава', 'кави', 'кавою', 'coffee'], ['coffee', 'cappuccino', 'cappuccino_sugar', 'latte', 'coffee_instant']], [['чай', 'tea'], ['tea', 'tea_green', 'tea_herbal', 'tea_sugar', 'iced_tea']],
+    [['печив', 'cookie', 'biscuit'], ['cookies', 'cookies_oat', 'gingerbread', 'crackers']], [['цукерк', 'candy', 'sweets'], ['choc_candies', 'hard_candy', 'toffee', 'gummies', 'marmalade_jelly', 'choc_dragee']]
   ];
   /* з 3.27.6 — слова в будь-якому порядку й інша форма слова («перепелине яйце» → «Яйце перепелине», «огірок» → «Огірки солоні»):
      кожне слово запиту від 3 літер — початок якогось слова назви або та сама основа (без закінчення-голосної, англійського -s
