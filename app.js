@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.8';
+  const VERSION = '3.27.9';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -77,7 +77,8 @@ window.APP_START = () => {
   let audio = null, wakeLock = null, kp = null;
   /* голосовий тренер-співрозмовник: розмова, запис, сеанс Gemini Live, потоковий звук; gen — номер дії: нова дія глушить усі попередні */
   const ASK = { chat: [], st: 'idle', msg: '', rec: null, t0: 0, tick: null, i: -1, gen: 0, help: false, warn: false, photo: null };  // photo — фото до наступного питання { b64, src }
-  const LIVE = { ws: null, ready: null, turn: null, prog: '' };
+  /* kb — розмова в форматі «мінімум» (з 3.27.9): ядро бази в промпті, довідку до питання додає застосунок; kbs — теми, уже надіслані в цій розмові */
+  const LIVE = { ws: null, ready: null, turn: null, prog: '', kb: false, kbs: [] };
   const PLAY = { t: 0, srcs: [] };
   /* телефон: Android чи iPhone — лише для підказок «як встановити / дозволити» (поведінка застосунку однакова, кроки різні).
      Ні те, ні те (компʼютер) — підказки iPhone. TX(айфон, андроїд) — текст для цього телефона. */
@@ -1932,10 +1933,10 @@ window.APP_START = () => {
     try { wav = blob && blob.size ? await toWav16k(await blob.arrayBuffer()) : null; } catch (e) { wav = null; }
     if (g !== ASK.gen) return;
     if (!wav) { ASK.st = 'err'; ASK.msg = LL('Не почув — скажіть ще раз, ближче до телефону.', "Didn’t catch that — say it again, closer to the phone."); return askDraw(); }
-    const j = await post('/hear', { audio: wav, lang: I18N.lang }, 8000);
+    const j = await post('/hear', { audio: wav, lang: I18N.lang, kb: 'min' }, 8000);
     if (g !== ASK.gen) return;
     if (!j || !j.q) { ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
-    askTurn(j.q);
+    askTurn(j.q, Array.isArray(j.kb) ? j.kb : []);
   }
   /* запис → WAV 16 кГц моно (так його найкраще чує розпізнавання), base64; тиша чи коротше 0,4 с — null */
   async function toWav16k(buf) {
@@ -1975,19 +1976,21 @@ window.APP_START = () => {
   }
   /* Одне питання. Головний шлях — Gemini Live: голос тренера йде потоком. Немає звуку за 5 с (слово Alexа 23.10: «має бути 5 сек») —
      запасний шлях: текстова відповідь сервера (кожна модель — до 5 с) і голос телефона. */
-  async function askTurn(q) {
+  /* kb — теми довідки до питання ([{ id, x, h }] з /hear); немає (питання текстом) — запит /kb одразу, поки налаштовується розмова */
+  async function askTurn(q, kb) {
     askHush();
     /* попередня відповідь ще йшла — її обриваємо (текст лишається з «…» і кнопкою «Прослухати»), нова розмова з Live, щоб шматки не змішались */
     if (LIVE.turn) { const pt = LIVE.turn.t; if (pt) { pt.a = String(pt.a).replace(/\s+/g, ' ').trim() + (pt.a ? ' …' : ''); pt.done = !!pt.a; } liveClose(); }
     const g = ASK.gen, t = { q, a: '', pcm: [], done: false, heard: false, img: ASK.photo || null };
     ASK.photo = null;
+    t.kbP = Array.isArray(kb) ? Promise.resolve(kb) : post('/kb', { q, lang: I18N.lang, kb: 'min' }, 3000).then((j) => (j && Array.isArray(j.kb) ? j.kb : []));
     ASK.chat.push(t); ASK.st = 'think'; ASK.msg = ''; ASK.help = false; askDraw();
     let ok = false;
     try { ok = await liveTurn(t, g); } catch (e) { ok = false; }
     if (ok || g !== ASK.gen) return;
     liveClose(); t.a = ''; t.pcm = [];
     const prog = G();
-    const j = await post('/ask', { text: q, lang: I18N.lang, image: t.img ? t.img.b64 : undefined, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: qText(x), a: x.a })) }, 32000);
+    const j = await post('/ask', { text: q, lang: I18N.lang, kb: 'min', image: t.img ? t.img.b64 : undefined, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: qText(x), a: x.a })) }, 32000);
     if (g !== ASK.gen) return;
     if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); if (t.img && !ASK.photo) ASK.photo = t.img; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
     t.a = j.a; t.done = true; ASK.st = 'idle'; askDraw();
@@ -2001,12 +2004,12 @@ window.APP_START = () => {
   function liveOpen() {
     if (LIVE.ready) return LIVE.ready;
     const p = (async () => {
-      const prog = G(), j = await post('/live', { sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), lang: I18N.lang }, 5000);
+      const prog = G(), j = await post('/live', { sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), lang: I18N.lang, kb: 'min' }, 5000);
       if (!j || !j.token) throw new Error(LL('немає токена', "no token"));
       return new Promise((ok, no) => {
         const ws = new WebSocket('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(j.token));
         const to = setTimeout(() => { no(new Error(LL('налаштування', "setup"))); try { ws.close(); } catch (e) { /* уже */ } }, 8000);
-        LIVE.ws = ws; LIVE.prog = '';
+        LIVE.ws = ws; LIVE.prog = ''; LIVE.kb = j.kb === 'min'; LIVE.kbs = [];
         ws.onopen = () => ws.send(JSON.stringify({ setup: { model: 'models/' + j.model } }));
         ws.onmessage = async (ev) => {
           let m; try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : await ev.data.text()); } catch (e) { return; }
@@ -2026,6 +2029,13 @@ window.APP_START = () => {
     p.catch(() => { if (LIVE.ready === p) { LIVE.ready = null; LIVE.ws = null; } });
     return p;
   }
+  /* блок довідки — той самий, що складає сервер для запасного шляху (server/src/topics.js → kbText) */
+  function kbText(list) {
+    const sec = list.filter((x) => !x.h).map((x) => x.x), tip = list.filter((x) => x.h).map((x) => '- ' + x.x);
+    if (!sec.length && !tip.length) return '';
+    return LL('ДОВІДКА З НАШИХ ДОКУМЕНТІВ ДО ЦЬОГО ПИТАННЯ (пріоритет 2):\n\n', "REFERENCE FROM OUR DOCUMENTS FOR THIS QUESTION (priority 2; sections in Ukrainian):\n\n") + sec.join('\n\n') +
+      (tip.length ? (sec.length ? '\n\n' : '') + LL('Підказки до кнопок застосунку:\n', "App button tips:\n") + tip.join('\n') : '');
+  }
   function liveClose() { const ws = LIVE.ws; LIVE.ws = null; LIVE.ready = null; LIVE.turn = null; if (ws) try { ws.close(); } catch (e) { /* уже */ } }
   /* true — тренер заговорив (звук прийшов за 5 с); false — ні: тоді запасний шлях */
   function liveTurn(t, g) {
@@ -2033,7 +2043,7 @@ window.APP_START = () => {
       let settled = false, got = false;
       const fin = (v) => { if (!settled) { settled = true; resolve(v); } };
       const wait = setTimeout(() => { if (!got) { if (LIVE.turn && LIVE.turn.t === t) LIVE.turn = null; fin(false); } }, 5000);
-      Promise.race([liveOpen(), new Promise((no, bad) => setTimeout(() => bad(new Error(LL('5 с', "5 sec"))), 5000))]).then((ws) => {
+      Promise.race([liveOpen().then((ws) => (LIVE.kb ? t.kbP.then((kb) => [ws, kb]) : [ws, []])), new Promise((no, bad) => setTimeout(() => bad(new Error(LL('5 с', "5 sec"))), 5000))]).then(([ws, kb]) => {
         if (settled || g !== ASK.gen) return fin(false);
         const turns = [], prog = coachProgram();
         /* програма — у першому питанні розмови й щоразу, як змінилась (зроблені підходи, інший тиждень) */
@@ -2043,7 +2053,10 @@ window.APP_START = () => {
           LIVE.prog = prog;
         }
         /* фото — частиною питання (inlineData у clientContent; кадр realtimeInput.video Live не бачить — стенд tools/photo_test.mjs 23.10) */
-        turns.push({ role: 'user', parts: (t.img ? [{ inlineData: { mimeType: 'image/jpeg', data: t.img.b64 } }] : []).concat([{ text: t.q }]) });
+        /* довідка до питання (формат «мінімум») — лише теми, яких у цій розмові ще не було */
+        const kbNew = (kb || []).filter((x) => x && x.id && x.x && LIVE.kbs.indexOf(x.id) < 0), kbT = kbText(kbNew);
+        kbNew.forEach((x) => LIVE.kbs.push(x.id));
+        turns.push({ role: 'user', parts: (t.img ? [{ inlineData: { mimeType: 'image/jpeg', data: t.img.b64 } }] : []).concat(kbT ? [{ text: kbT }] : [], [{ text: t.q }]) });
         const k = () => ASK.chat.indexOf(t);
         LIVE.turn = {
           t,
