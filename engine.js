@@ -758,6 +758,25 @@ var ENGINE = (function () {
     if (set.rir >= 3 && r >= max) return 1;
     return 0;
   }
+  /* «Вага нижча, ніж минулого разу» (з 3.27.8; слова Alexа 26.10: «…у попередніх тренуваннях тренер бачить що я брав більшу вагу то має вискочити вікно з голосовим тренером
+     і він має перепитати в чому справа і запропонувати ще один підхід (можливо не повний)»; 27.10: «приймаю рекомендації»). Програма — із запасом, не до відмови в кожному
+     підході: ближче до відмови — трохи більше росту мʼязів, на силу майже не впливає (Robinson та ін. 2024, Sports Med 54:2209); більше підходів — більше результату
+     зі спадною віддачею (Pelland та ін. 2026, Sports Med 56:481). Питаємо лише тоді, коли вагу знизила сама людина: робочий підхід легший і за запланований застосунком
+     (plan), і за той самий підхід минулого разу (prev — та сама вправа, варіант і місце). Не питаємо, коли вагу знижує застосунок: легкий тиждень (deload), повернення
+     після перерви (back), «Як спина сьогодні?» → «Терпимо» чи «Болить суглоб» минулого разу (easy), біль сьогодні (pain), вправа вперше (first) */
+  function selfLower(set, o) {
+    o = o || {};
+    if (!set || (set.type !== 'N' && set.type !== 'M') || o.deload || o.back || o.easy || o.pain || o.first) return false;
+    var num = function (v) { return v === null || v === undefined || v === '' || isNaN(Number(v)) ? null : Number(v); };
+    var L = num(set.load), P = num(set.plan), V = set.prev ? num(set.prev.load) : null;
+    return L !== null && P !== null && V !== null && L < P - 1e-9 && L < V - 1e-9;
+  }
+  /* «Ще один підхід» після такого підходу — лише коли безпечно: не 55+ і не тиск / серце (у них програма без міо-підходів — myoFrom 0), не вправа на поперек
+     при позначеній спині (backCare), не легкий тиждень, не повернення після перерви, не біль, не коротка версія — інакше додатковий підхід міняє задуманий обсяг */
+  function extraSetOk(prog, ex, o) {
+    o = o || {};
+    return !!(prog && prog.myoFrom) && !(prog.backCare && ex && ex.spine) && !o.deload && !o.back && !o.easy && !o.pain && !o.short;
+  }
   /* Місячний звіт. */
   function monthReport(prog, profile, ym, handle) {
     var r = { sessions: 0, mins: 0, volume: 0, sets: 0, prs: 0, best: null, kcal: null };
@@ -994,7 +1013,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
            KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };

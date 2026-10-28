@@ -331,7 +331,8 @@ var KITCHEN = (function () {
     if (rn === null) return null;
     var own = ownOf(r, ra, ra !== null && A.f ? rel(A.f) : null, per);
     var gone = {}; [A].concat(Array.isArray(marks) ? marks.map(markOf) : []).forEach(function (x) { x.g.forEach(function (t) { var a = rel(t); for (var q = 0; q < n; q++) if (a !== null && r[q] === a) gone[q] = true; }); });
-    var mk = null; if (Array.isArray(marks)) { mk = {}; marks.forEach(function (x) { x = markOf(x); var a = rel(x.t), o; if (a === null) return; o = ownOf(r, a, x.f ? rel(x.f) : null, per); if (o >= 0) mk[o] = true; }); }
+    /* mt — час першої відмітки, зарахованої прийому (з 3.27.8, з «за раз»): ✓ показує, коли людина випила, а не час за розкладом */
+    var mk = null, mt = {}; if (Array.isArray(marks)) { mk = {}; marks.forEach(function (x) { x = markOf(x); var a = rel(x.t), o; if (a === null) return; o = ownOf(r, a, x.f ? rel(x.f) : null, per); if (o >= 0) { mk[o] = true; if (!(o in mt)) mt[o] = x.t; } }); }
     var cum = [], m = r.slice(), skip = [];
     for (i = 0; i < n; i++) { sum += base[i]; cum.push(sum); }
     var doneV = function (j) { return ml >= Math.min(target, cum[j] * h) - 1e-6; };
@@ -354,12 +355,17 @@ var KITCHEN = (function () {
       }
       Object.keys(out).forEach(function (s) { m[s] = out[s]; });
     }
-    var c = -1; for (i = 0; i < n; i++) if (!skip[i] && !gone[i] && m[i] <= rn) c = i;
+    var c = -1, lst = -1; for (i = 0; i < n; i++) { if (!skip[i] && !gone[i] && m[i] <= rn) c = i; if (!skip[i] && !gone[i]) lst = i; }
+    /* з 3.27.8 (скриншот Alexа 28.10: «я хоть і не вчасно випив в 12:10 але не пропустив по випив в 12:57, мало б фіксуватись правильно - час коли я натиснув що випив,
+       а не пропущено і перерахувати наступні прийоми»): з «за раз» прийом, час якого настав, лишається на черзі («зараз») до часу наступного прийому
+       (останній — годину): нагадування про наступний ще не було, тож пізня склянка — для нього. До 3.27.8 (і без «за раз» — досі) — «пропущено» через
+       30 хв, і склянку забирав наступний прийом */
     var items = [], pend = [];
     for (i = 0; i < n; i++) {
       if (skip[i] || gone[i]) continue;
-      var done = (mk && i <= own ? !!mk[i] : doneV(i)) || i === own, open = i > own && (i > c || (i === c && rn < m[i] + 30));  // прийом до відмітки — уже минув
+      var done = (mk && i <= own ? !!mk[i] : doneV(i)) || i === own, open = i > own && (i > c || (i === c && (per ? i !== lst || rn < m[i] + WATER_GAP : rn < m[i] + 30)));  // прийом до відмітки — уже минув
       var it = { m: m[i], t: m[i] === r[i] ? times[i].t : abs(m[i]), h: base[i], k: times[i].k || '', st: done ? 'done' : open ? 'plan' : 'missed', up: false, b: i };
+      if (per && done && mt[i]) it.at = mt[i];
       items.push(it); if (it.st === 'plan') pend.push(it);
     }
     var left = Math.max(0, Math.ceil((target - ml) / h - 1e-9)), short = 0;
@@ -395,7 +401,7 @@ var KITCHEN = (function () {
   }
   function waterDayPlan(times, target, glass, ml, at, now, per, marks) {
     var p = core(times, target, glass, ml, at, now, per, marks);
-    return p && { items: p.items.map(function (x) { return { t: x.t, h: x.h, k: x.k, st: x.st, up: x.up }; }), turn: p.turn, short: p.short };
+    return p && { items: p.items.map(function (x) { var o = { t: x.t, h: x.h, k: x.k, st: x.st, up: x.up }; if (x.at) o.at = x.at; return o; }), turn: p.turn, short: p.short };  // at — коли випито (з 3.27.8)
   }
   /* з 3.27.5 — до якого прийому належить відмітка, зроблена зараз (now; at, ml, marks — до неї): за планом, який людина бачить і про який їй нагадали
      (після попередніх відміток прийоми зсуваються — розклад-основа тут не годиться), тим самим вікном; не раніше прийому попередньої відмітки.
@@ -406,6 +412,8 @@ var KITCHEN = (function () {
     if (!p || !per) return { f: '', g: [] };  // без «за раз» — без збереженого прийому (як до 3.27.5)
     T = p.rel(now); C = p.items.filter(function (x) { return x.b >= 0 && x.b >= p.own; });
     for (k = 0; k < C.length; k++) if ((k ? C[k].m - Math.min(WATER_GAP, (C[k].m - C[k - 1].m) / 2) : C[0].m - WATER_GAP) <= T) o = k;
+    /* з 3.27.8 — прийом на черзі, час якого вже настав (людина пʼє пізніше нагадування), забирає склянку, хоч би який прийом був ближчий за часом */
+    for (k = 0; k < C.length; k++) if (C[k].b > p.own && C[k].st === 'plan' && C[k].m <= T) o = k;
     if (o < 0) return { f: '', g: [] };
     var b = C[o].b, seen = {}, g = []; p.items.forEach(function (x) { seen[x.b] = true; });
     for (k = Math.max(0, p.own + 1); k < b; k++) if (!seen[k]) g.push(times[k].t);

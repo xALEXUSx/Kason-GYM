@@ -969,7 +969,7 @@ I18N.add({
   "Увімкнути нагадування: у дні тренувань в обраний час прийде сповіщення (на iPhone ще й «1» на іконці), поки сьогодні не почали тренування. Телефон один раз спитає дозвіл.": "Turn on reminders: on workout days you’ll get a notification at your chosen time (on iPhone, also a “1” badge on the app icon) until you start today’s workout. Your phone will ask for permission once.",
   "Увімкнути цю станцію. Потрібен інтернет.": "Play this station. Needs internet.",
   "Усе тіло · вт / чт / сб": "Full Body · Tue / Thu / Sat",
-  "Уся вага в руках: диски плюс гриф (якщо гантелі дві — разом).": "Total weight in your hands: plates plus handle (both dumbbells combined if you use two).",
+  "Уся вага: гриф плюс диски (якщо гантелі дві — разом; у сідничному мості гантель лежить на тазі).": "Total weight: handle plus plates (both dumbbells combined if there are two; in the glute bridge the dumbbell rests on your hips).",
   "Усі 12 тижнів програми: що вже зроблено і що далі.": "All 12 weeks of the program: what’s done and what’s next.",
   "Усі ваші диски вже на грифі, а вага легка: повільний темп 4 с, пауза внизу, +1 підхід, одна нога чи рука, до 20–25 повторень на ногах.": "All your plates are already on the handle and the weight feels light: slow 4-sec tempo, a pause at the bottom, +1 set, single leg or arm, up to 20–25 reps for legs.",
   "Усі підходи зроблено — лишилась заминка й завершення.": "All sets done — just the cool-down and finish left.",

@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.7';
+  const VERSION = '3.27.8';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -205,7 +205,11 @@ window.APP_START = () => {
   sheetEl.addEventListener('input', (e) => { const t = e.target; if (t && t.dataset && t.dataset.kin) kInput(t); });  // кухня: пошук і числа без перемальовування шторки
   sheetEl.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'kPhIn') { const f = t.files && t.files[0]; t.value = ''; if (f) kPhotoLoad(f); } });  // кухня: фото тарілки
   sheetEl.addEventListener('change', (e) => { const t = e.target; if (t && t.id === 'kpBarIn') { const f = t.files && t.files[0]; t.value = ''; if (f) kBarLoad(f); } });  // з 3.21.6: штрихкод
-  function closeSheet() { document.body.classList.remove('sheet'); kp = null; if (ASK.rec) askCancel(); }
+  function closeSheet() {
+    document.body.classList.remove('sheet'); kp = null; if (ASK.rec) askCancel();
+    /* 3D «великої трійки» в шторці (з 3.27.8): полотно 3D на застосунок одне — зупинити й повернути «Відновленню мʼязів» на головній */
+    const mcg = typeof VIZ !== 'undefined' && sheetEl.querySelector('.mcg:not(.off)'); if (mcg) { mcg.classList.add('off'); VIZ.attach(null); if (view === 'home') render(); }
+  }
   sheetBg.addEventListener('click', closeSheet);
   /* жест iPhone: потягнути шторку вниз — закрити (слово Alexа 23.10: «не згортаються вікна, коли я сильно тягну пальцем вниз»).
      Шторка йде за пальцем; відпустили нижче 110 px або різким рухом — закривається, інакше — повертається на місце.
@@ -557,10 +561,15 @@ window.APP_START = () => {
   /* малюнок дисків: фунтові 10 / 5 / 2,5 lb — ті самі три розміри, що 5 / 2,5 / 1,25 кг (з 3.18.0) */
   const DISC_LB = { 10: '5', 5: '25', 2.5: '125' };
   function discs(side) { if (!side.length) return ''; return '<span class="disc"><b></b>' + side.map((x) => `<i class="d${isLb() ? DISC_LB[x] || '125' : String(x).replace('.', '')}"></i>`).join('') + '</span>'; }
+  /* одна гантель і вага «у руках» (з 3.27.8; слова Alexа 26.10: «Коли вправа з 1 гантелею то правильно писати скільки на 1 бік, бо зараз пише так як для 2 гантель»;
+     «Так само в таких місцях все підлаштувати під 1 гантель»): диски — «з кожного боку гантелі» (до 3.27.8 «на кожен бік» читалось як ліва й права рука, тобто дві гантелі);
+     де гантель не в руках — сідничний міст, гантель лежить на тазі, — не «у руках 13 кг», а «гантель 13 кг» */
+  const ON_BODY = { bridge: 1 };
+  const SIDE_TXT = () => LL('з кожного боку гантелі: ', 'each side of the dumbbell: ');
   function plateLine(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return '';
     const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
-    return `<span class="plt">${pl.ok ? (pl.side.length ? LL('на кожен бік: ', "per side: ") + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)}</span>`;
+    return `<span class="plt">${pl.ok ? (pl.side.length ? SIDE_TXT() + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)}</span>`;
   }
 
   /* ---------- чернетка тренування ---------- */
@@ -614,7 +623,9 @@ window.APP_START = () => {
     }
     if (o.from) note = LL('Замість «', "Instead of “") + prog.ex[o.from].name + LL('». ', '.” ') + note;
     if (o.myo && ex.iso && ex.type !== 'amrap' && sets.length) sets[sets.length - 1].type = 'M';
-    return { ex: it.ex, variant: vo ? variant : defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets, first: !hist.length };
+    /* plan — вага, яку запланував застосунок (з 3.27.8): з нею порівнюємо, чи вагу знизила сама людина (ENGINE.selfLower); easy — сьогодні застосунок сам полегшив вправу */
+    sets.forEach((s) => { s.plan = s.load; });
+    return { ex: it.ex, variant: vo ? variant : defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets, first: !hist.length, easy: !!(o.ra && o.ra.act === 'light') || !!hurt };
   }
   /* перемкнули варіант (з 3.21.9): невиконані підходи — заново за порадою цього варіанта (вага, повторення, кількість); виконані лишаються як є;
      розминка — заново, якщо ще нічого не зроблено */
@@ -863,9 +874,16 @@ window.APP_START = () => {
   };
   /* Фраза про наступний підхід. Перший раз у вправі — навіщо, положення, рух і дихання; другий — чого не робити й чому;
      останній робочий — характер. brief — лише ціль (для «Почати раніше» й повтору). */
+  /* диски голосом (з 3.27.8, як на екрані): «З кожного боку гантелі — …» замість «На кожен бік — …» (з однією гантеллю звучало як дві) — лише коли нова фраза вже
+     записана голосом тренера (без записаного голосу — одразу нова); до запису — стара записана, щоб речення не йшло системним голосом */
+  function sideVoice(t) {
+    const m = t.match(/На кожен бік — [^.]*\./); if (!m) return t;
+    const nt = m[0].replace('На кожен бік — ', 'З кожного боку гантелі — '), id = packId();
+    return !id || VOICEPACK.has(id, VOICE.split(nt)) ? t.replace(m[0], nt) : t;
+  }
   function setSpeech(d, st, brief) {
     const it = d.items[st.i], ex = G().ex[it.ex], s = it.sets[st.j], full = S().voice.level !== 'short', sc = script(it.ex);
-    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null);
+    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + sideVoice(VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null));
     if (s.type === 'M') t += LL(' Міо-підхід: до відмови, далі короткі паузи.', " Myo-rep set: go to failure, then short rests.");
     if (s.type === 'D') t += LL(' Одразу.', " No rest.");
     if (ex.spine && s.type !== 'W') t += LL(' Запас два.', " Two reps in reserve.");
@@ -920,16 +938,25 @@ window.APP_START = () => {
       it.calib = true; const dd = ENGINE.calibrate(s, it.min, it.max);
       if (dd) {
         const st = isMach(ex) ? loadStep(ex, it.ex, d.place) : ENGINE.stepFor(p.inv), cap = isMach(ex) ? (ex.cap || 300) : (G().cap || 20), nl = ENGINE.shiftLoad(ex, s.load, dd, st, cap);
-        let ch = false; it.sets.forEach((x, k) => { if (k > j && !x.done && !x.touched && x.type !== 'W' && x.load !== nl) { x.load = nl; ch = true; } });
+        let ch = false; it.sets.forEach((x, k) => { if (k > j && !x.done && !x.touched && x.type !== 'W' && x.load !== nl) { x.load = nl; x.plan = nl; ch = true; } });
         if (ch) s.calib = dd;
       }
+    }
+    /* вагу знизила сама людина, а запас — 3+ (з 3.27.8): наступні підходи — знову запланована вага (до того вони брали знижену з цього підходу) */
+    if (ENGINE.selfLower(s, lowCtx(d, it)) && s.rir >= 3) {
+      let up = false; it.sets.forEach((x, k) => { if (k > j && !x.done && !x.touched && (x.type === 'N' || x.type === 'M') && typeof x.plan === 'number' && x.load !== x.plan) { x.load = x.plan; up = true; } });
+      if (up) s.lowUp = true;
     }
     if (d.coach) d.coach.last = { i, j };
     save();
     if (s.pr.length) toast(LL('🏆 Рекорд: ', "🏆 PR: ") + ex.name, true);
     else if (s.calib) toast(calibText(s.calib));
+    else if (s.lowUp) toast(LOW_UP());
     return s;
   }
+  const LOW_UP = () => LL('Запас був 3+ — наступний підхід знову із запланованою вагою.', 'You had 3+ in reserve — the next set goes back to the planned weight.');
+  /* що знижує вагу сам застосунок (ENGINE.selfLower не питає): легкий тиждень, повернення після перерви, полегшена сьогодні вправа, біль у суглобі сьогодні, вправа вперше */
+  const lowCtx = (d, it) => ({ deload: !!ENGINE.planFor(G(), d.n).deload, back: !!d.back, easy: !!it.easy, pain: (d.pain || []).indexOf(it.ex) >= 0, first: !!it.first, short: !!d.short });
   const calibText = (dd) => (dd < 0 ? LL('Наступні підходи — на крок легше.', 'Next sets: one step lighter.') : LL('Наступні підходи — на крок важче.', 'Next sets: one step heavier.'));
   /* Список: позначка будь-якого підходу. */
   function toggleDone(i, j) {
@@ -950,8 +977,27 @@ window.APP_START = () => {
     if (!(Number(s.reps) > 0)) { openKp(cs.i, cs.j, 'reps'); return; }
     VOICE.unlock(); markDone(cs.i, cs.j);
     const pr = s.pr.length ? (hard() ? COACH.line('pr', G().sex, d.n + cs.i) + ' ' : LL('Новий рекорд! ', "New PR! ")) : '';
+    /* вагу знизила сама людина (з 3.27.8): раз на вправу за тренування — «що сталося?» (голосом — лише записана фраза, інакше лише вікно) */
+    const it = d.items[cs.i], ask = !it.low && ENGINE.selfLower(s, lowCtx(d, it));
+    const q = ask ? recOnly(LL('Вага нижча, ніж минулого разу — що сталося?', 'The weight is lower than last time — what happened?')) : '';
     if (s.type === 'M') { d.coach.myo = { i: cs.i, j: cs.j, k: 0 }; s.mini = []; save(); startTimer(15, LL('Міо: пауза', "Myo: rest"), 'myo'); rWorkout(); talk(pr + L('myo', 0) + LL('Пауза 15 секунд. Глибоко дихай.', "Rest 15 seconds. Breathe deep.")); return; }
-    afterSet(d, cs.i, cs.j, pr + (s.calib ? calibText(s.calib) + ' ' : ''));
+    afterSet(d, cs.i, cs.j, pr + (s.calib ? calibText(s.calib) + ' ' : '') + (s.lowUp ? recOnly(LL('Наступний підхід — знову запланована вага.', 'Next set: back to the planned weight.')) : '') + q);
+    if (ask) lowSheet(cs.i, cs.j);
+  }
+  /* «Вага нижча, ніж минулого разу» (з 3.27.8): причина — одним дотиком; «Болить» — правило болю («Болить суглоб»); на останньому підході вправи, коли безпечно
+     (ENGINE.extraSetOk), — «＋ Ще один підхід» тією самою вагою, скільки вийде. Відповідь — у вправі тренування (it.low), удруге за тренування не питаємо */
+  function lowSheet(i, j) {
+    const d = P().draft, it = d.items[i], s = it.sets[j], ex = G().ex[it.ex];
+    const last = !it.sets.some((x, k) => k !== j && !x.done && (x.type === 'N' || x.type === 'M')), extra = last && ENGINE.extraSetOk(G(), ex, lowCtx(d, it));
+    const why = [['tired', '😮‍💨 ' + LL('Втома', 'Tired'), LL('Втома чи мало сну. Наступного разу застосунок підбере вагу за тим, що вийшло сьогодні.', 'Tired or short on sleep. Next time the app picks the weight from what you did today.')],
+      ['pain', '🩹 ' + LL('Болить', 'It hurts'), LL('Відкриє правило болю: легше на крок або досить на сьогодні.', 'Opens the pain rule: one step lighter or enough for today.')],
+      ['plan', '👌 ' + LL('Так задумав', 'On purpose'), LL('Свідомо легше — техніка, темп чи самопочуття.', 'Lighter on purpose — technique, tempo, or how you feel.')],
+      ['kit', '⚖️ ' + LL('Немає потрібної ваги', 'No matching weight'), LL('Немає потрібних дисків чи тренажер інший.', 'No matching plates, or a different machine.')]];
+    openSheet(`<div class="sp"><b>⚖️ ${LL('Вага нижча, ніж минулого разу', 'Lower weight than last time')}</b><button type="button" class="sm ghost" data-act="closeSheet">${LL('Закрити', 'Close')}</button></div>
+      <p class="small">${esc(ex.name)}: ${LL('минулого разу', 'last time')} — ${esc(setText(ex, s.prev))}, ${LL('сьогодні', 'today')} — ${esc(setText(ex, s))}. ${LL('Що сталося?', 'What happened?')}</p>
+      ${s.lowUp ? `<p class="small muted">${esc(LOW_UP())}</p>` : ''}
+      <div class="grid2" style="margin-top:10px">${why.map(([k, t, tip]) => `<button type="button" data-act="lowWhy" data-i="${i}" data-v="${k}" data-tip="${esc(tip)}">${t}</button>`).join('')}</div>
+      ${extra ? `<button type="button" class="pri wide" style="margin-top:12px" data-act="lowExtra" data-i="${i}" data-j="${j}" data-tip="${esc(LL('Додає в кінець вправи ще один робочий підхід тією самою вагою: скільки вийде, з тим самим запасом. Більше підходів — більше результату.', 'Adds one more working set at the same weight at the end of the exercise: as many reps as you can, with the same reserve. More sets, more results.'))}">＋ ${LL('Ще один підхід — скільки вийде', 'One more set — as many as you can')}</button>` : ''}`);
   }
   function afterSet(d, i, j, pre) {
     const st = draftStats(d), nx = curStep(d);
@@ -1069,7 +1115,7 @@ window.APP_START = () => {
     const kgOn = hasKg(ex) && s.load !== null && s.load !== undefined && s.load !== '';
     const boxL = isLoad(ex) ? `<div class="cbox"><span class="cl2">${ex.type === 'band' ? LL('рівень еспандера', "band level") : isMach(ex) ? KG(LL('вага, кг', "weight, kg")) : KG(LL('диски на гантель, кг', "plates per dumbbell, kg"))}</span>
       <button type="button" class="cval" data-act="kp" data-f="load" ${ij}${loadTip(ex, LL('. Торкніться, щоб ввести інше число.', ". Tap to enter a different number."))}>${esc(loadText(ex, s.load))}</button>${pm('load')}
-      <span class="tiny muted"${isMach(ex) ? KG(LL(' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. На вашому тренажері інший — введіть свою вагу цифрами: застосунок підхопить крок."', " data-tip=\"This machine’s step: the − and + buttons change the weight by this many kg. If your machine’s step is different, type in your weight and the app will pick it up.\"")) : ex.type === 'band' ? LL(' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."', " data-tip=\"Level is the sum of the band numbers if you use more than one.\"") : ''}>${kgOn ? LL('у руках ', "total ") + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + KG(LL(' кг', " kg")) : ex.type === 'band' ? LL('сума номерів джгутів', "sum of band numbers") : isMach(ex) ? LL('на тренажері · крок ', "on machine · step ") + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
+      <span class="tiny muted"${isMach(ex) ? KG(LL(' data-tip="Крок цього тренажера: на стільки кг змінюють вагу кнопки − і +. На вашому тренажері інший — введіть свою вагу цифрами: застосунок підхопить крок."', " data-tip=\"This machine’s step: the − and + buttons change the weight by this many kg. If your machine’s step is different, type in your weight and the app will pick it up.\"")) : ex.type === 'band' ? LL(' data-tip="Рівень — сума номерів джгутів, якщо їх кілька."', " data-tip=\"Level is the sum of the band numbers if you use more than one.\"") : ''}>${kgOn ? (ON_BODY[it.ex] ? LL('гантель ', 'dumbbell ') : LL('у руках ', "total ")) + fmt(ENGINE.totalLoad(ex, s.load, P().handle, it.variant)) + KG(LL(' кг', " kg")) : ex.type === 'band' ? LL('сума номерів джгутів', "sum of band numbers") : isMach(ex) ? LL('на тренажері · крок ', "on machine · step ") + fmt(loadStep(ex, it.ex)) : '&nbsp;'}</span></div>` : '';
     const boxR = `<div class="cbox"><span class="cl2">${ex.type === 'time' ? LL('секунди', "seconds") : LL('повторення', "reps")}${ex.side ? LL(' · на бік', " · per side") : ''}</span>
       <button type="button" class="cval" data-act="kp" data-f="reps" ${ij}>${s.reps === null || s.reps === undefined ? '—' : s.reps}</button>${pm('reps')}${LL(`
       <span class="tiny muted">ціль: `, `
@@ -1099,11 +1145,13 @@ window.APP_START = () => {
      Анімація, тема, «Зменшити рух», кадри — у viz.js; анімація — та сама, що в атласі (tools/viz/atlas3d.html) */
   const vzKey = (it) => VIZ.keyFor(it.ex, it.variant, (PROGRAMS[DB.active] && PROGRAMS[DB.active].ex[it.ex]) || GEN.GYM.ex[it.ex]);
   /* розгорнутий: людина сама відкрила / згорнула (d.vz) — так і лишається; інакше — перший підхід нової вправи чи варіанта */
-  const vizOpen = (d, it) => { if (typeof VIZ === 'undefined') return false; const k = vzKey(it); if (!k) return false; const vz = d.vz || {}; return vz[k] !== undefined ? vz[k] : !!(it.first && !it.sets.some((x) => x.done)); };
-  function vizBox(d, it) {
+  /* rest — екран відпочинку (з 3.27.8; слово Alexа 26.10: «Тут теж потрібно показувати 3D модель для кожної вправи»): там 3D наступної вправи
+     розгорнутий завжди — відпочинок і є час подивитись, як робити далі; згорнула людина — так і лишається (той самий d.vz, що й на картці) */
+  const vizOpen = (d, it, rest) => { if (typeof VIZ === 'undefined') return false; const k = vzKey(it); if (!k) return false; const vz = d.vz || {}; return vz[k] !== undefined ? vz[k] : rest ? true : !!(it.first && !it.sets.some((x) => x.done)); };
+  function vizBox(d, it, rest) {
     if (typeof VIZ === 'undefined') return '';
     const k = vzKey(it); if (!k) return '';
-    const open = vizOpen(d, it);
+    const open = vizOpen(d, it, rest);
     return `<details class="vz3" data-k="${k}"${open ? ' open' : ''}><summary><b>${LL('Як рухатись — 3D', 'How to move — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>${vizInner()}</details>`;
   }
   /* начинка блоку 3D: полотно, підпис фази, пауза, режими й стилі (картка «Тренер» і з 3.27.3 — «Як виконувати тести») */
@@ -1119,7 +1167,7 @@ window.APP_START = () => {
       style: () => (S().vz3 === 'xray' ? 'xray' : 'clay'), setStyle: (v) => { S().vz3 = v; save(); },
       onToggle: (open) => { const det = app.querySelector('details.vz3'); if (!det) return; (d.vz = d.vz || {})[det.dataset.k] = open; save(); },
       L: { right: LL('правий бік', 'right side'), left: LL('лівий бік', 'left side'), work: LL('Працюють: ', 'Working: '), red: LL(' — червоним', ' — shown in red'),
-        wait: LL('Завантаження…', 'Loading…'), fail: LL('3D недоступне на цьому пристрої — дивіться «Як робити» нижче.', '3D isn’t available on this device — see “How to do it” below.'),
+        wait: LL('Завантаження…', 'Loading…'), fail: app.querySelector('.crest details.vz3') ? LL('3D недоступне на цьому пристрої.', '3D isn’t available on this device.') : LL('3D недоступне на цьому пристрої — дивіться «Як робити» нижче.', '3D isn’t available on this device — see “How to do it” below.'),  /* на відпочинку «Як робити» немає */
         play: LL('Грати', 'Play'), pause: LL('Пауза', 'Pause') } });
   }
   function skippedBox(d) {
@@ -1148,12 +1196,13 @@ window.APP_START = () => {
   function restCard(d) {
     const nx = curStep(d), prog = G(), last = d.coach.last;
     let nxt = '';
-    if (nx) { const it = d.items[nx.i], ex = prog.ex[it.ex], s = it.sets[nx.j]; nxt = `${LL(`<div class="cnext"><span class="tiny muted">Далі`, `<div class="cnext"><span class="tiny muted">Up next`)}${it.ss ? LL(' · суперсет ', " · superset ") + it.ss.g : ''}</span><b>${esc(ex.name)}</b><span class="small">${esc(stepTitle(d, nx))} · ${esc(setText(ex, s))}${ex.side ? LL(' на бік', " per side") : ''}</span>${plateLine(ex, it, s.load)}</div>`; }
+    /* під «Далі» — 3D наступної вправи (з 3.27.8); «✎ Виправити щойно зроблений підхід» — над «Далі»: він про підхід, який щойно зробили, і лишається на першому екрані */
+    if (nx) { const it = d.items[nx.i], ex = prog.ex[it.ex], s = it.sets[nx.j]; nxt = `${LL(`<div class="cnext"><span class="tiny muted">Далі`, `<div class="cnext"><span class="tiny muted">Up next`)}${it.ss ? LL(' · суперсет ', " · superset ") + it.ss.g : ''}</span><b>${esc(ex.name)}</b><span class="small">${esc(stepTitle(d, nx))} · ${esc(setText(ex, s))}${ex.side ? LL(' на бік', " per side") : ''}</span>${plateLine(ex, it, s.load)}</div>${vizBox(d, it, true)}`; }
     return `<div class="coach crest"><div class="cring">${ringSvg()}${LL(`<div class="ctime"><b id="cTime">0:00</b><span>відпочинок</span></div></div>
       <div class="grid3"><button type="button" data-act="tadd" data-v="-15">−15 с</button><button type="button" data-act="tadd" data-v="15">+15 с</button><button type="button" class="pri" data-act="tskip">Почати</button></div>
       `, `<div class="ctime"><b id="cTime">0:00</b><span>rest</span></div></div>
       <div class="grid3"><button type="button" data-act="tadd" data-v="-15">−15 sec</button><button type="button" data-act="tadd" data-v="15">+15 sec</button><button type="button" class="pri" data-act="tskip">Start</button></div>
-      `)}${nxt}${last ? `<button type="button" class="ghost wide" data-act="kp" data-f="reps" data-i="${last.i}" data-j="${last.j}${LL(`">✎ Виправити щойно зроблений підхід</button>`, `">✎ Edit the set you just did</button>`)}` : ''}${LL(`
+      `)}${last ? `<button type="button" class="ghost wide" data-act="kp" data-f="reps" data-i="${last.i}" data-j="${last.j}${LL(`">✎ Виправити щойно зроблений підхід</button>`, `">✎ Edit the set you just did</button>`)}` : ''}${nxt}${LL(`
       <div class="grid2 cacts"><button type="button" data-act="say" data-what="set">🔊 Що далі</button><button type="button" data-act="mode">☰ Усі вправи</button></div></div>`, `
       <div class="grid2 cacts"><button type="button" data-act="say" data-what="set">🔊 What’s next</button><button type="button" data-act="mode">☰ All exercises</button></div></div>`)}`;
   }
@@ -1338,7 +1387,7 @@ window.APP_START = () => {
     if (!isRep && hasKg(ex)) {
       const pl = v === null ? null : ENGINE.plates(v, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
       const tot = v === null ? 0 : ENGINE.totalLoad(ex, v, P().handle, it.variant);
-      extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : LL('усього в руках: ', "total in hand: ") + fmt(tot) + KG(LL(' кг', " kg"))}${pl ? ' · ' + (pl.ok ? (pl.side.length ? LL('на бік: ', "per side: ") + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
+      extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : (ON_BODY[it.ex] ? LL('гантель: ', 'dumbbell: ') : LL('усього в руках: ', "total in hand: ")) + fmt(tot) + KG(LL(' кг', " kg"))}${pl ? ' · ' + (pl.ok ? (pl.side.length ? SIDE_TXT() + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
     }
     const quick = [];
     if (s.prev) quick.push([LL('минулого: ', "last time: ") + (isRep ? s.prev.reps : loadText(ex, s.prev.load)), isRep ? s.prev.reps : s.prev.load]);
@@ -1458,7 +1507,22 @@ window.APP_START = () => {
   }
   function guideSheet(id) {
     const sec = (G().guide || []).find((g) => g.id === id); if (!sec) return;
-    openSheet(`<div class="sp"><b>${esc(sec.title)}${LL(`</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>`, `</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>`)}${guideBody(sec)}`);
+    const mcg = id === 'back' && sec.items.some((x) => x === MCG_H || x === TR(MCG_H)) && typeof VIZ !== 'undefined';  /* G() — уже перекладений: англійською заголовок інший (огляд 27.10 спіймав) */
+    openSheet(`<div class="sp"><b>${esc(sec.title)}${LL(`</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>`, `</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>`)}${mcg ? mcgHtml(ui.mcg || MCG[0][0]) : ''}${guideBody(sec)}`);
+    if (mcg) mcgAttach();
+  }
+  /* «велика трійка» Макгілла — 3D над текстом (з 3.27.8; слово Alexа 26.10: «Натиснув як робити Макгіла - Чому не має 3д моделі? Має бути над текстом»):
+     ті самі моделі, що на картці «Тренер» (бічна планка — з колін, як радить текст: «спершу з колін»); перемикач — яку з трьох показати, памʼятає до перезапуску */
+  const MCG = [['curlup', 'Скручування', 'Curl-up'], ['sideplank', 'Бічна планка', 'Side plank'], ['birddog', 'Птах-собака', 'Bird dog']], MCG_H = '#«Велика трійка» Макгілла — щодня 5 хв';
+  function mcgHtml(k) {
+    return `<div class="mcg"><details class="vz3" data-k="${k}" open><summary><b>${LL('«Велика трійка» Макгілла — 3D', 'McGill’s Big Three — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>
+      <div class="seg mcgs">${MCG.map((x) => `<button type="button" class="${x[0] === k ? 'on' : ''}" data-act="mcg" data-k="${x[0]}" data-tip="${esc(LL('Показати в 3D: ', 'Show in 3D: ') + LL(x[1], x[2]).toLowerCase())}">${LL(x[1], x[2])}</button>`).join('')}</div>${vizInner()}</details></div>`;
+  }
+  function mcgAttach() {
+    const det = sheetEl.querySelector('.mcg details.vz3'); if (!det) return;
+    VIZ.attach(det, { t: TR, esc, mus: (ids) => ids.map(mName).join(' · ').toLowerCase(), style: () => (S().vz3 === 'xray' ? 'xray' : 'clay'), setStyle: (v) => { S().vz3 = v; save(); },
+      L: { right: LL('правий бік', 'right side'), left: LL('лівий бік', 'left side'), work: LL('Працюють: ', 'Working: '), red: LL(' — червоним', ' — shown in red'),
+        wait: LL('Завантаження…', 'Loading…'), fail: LL('3D недоступне на цьому пристрої — опис нижче.', '3D isn’t available on this device — see the description below.'), play: LL('Грати', 'Play'), pause: LL('Пауза', 'Pause') } });
   }
   function guideChips(ids) {
     const list = (G().guide || []).filter((g) => !ids || ids.indexOf(g.id) >= 0);
@@ -1693,7 +1757,7 @@ window.APP_START = () => {
     const kg = KG(LL(' кг', ' kg')), w = (x) => fmt(Math.round((h + x.load) * 100) / 100);
     const rows = list.map((x) => {
       const pl = ENGINE.plates(x.load, p.inv, x.n, prog.cap, isLb() ? 'lb' : 'kg');
-      return `<li style="display:block"><div class="sp"><b>${w(x)}${kg} × ${x.n}</b><span class="small muted">${pl.ok ? (pl.side.length ? LL('на бік: ', 'per side: ') + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', 'handle only')) : '⚠ ' + esc(pl.text)}</span></div>`
+      return `<li style="display:block"><div class="sp"><b>${w(x)}${kg} × ${x.n}</b><span class="small muted">${pl.ok ? (pl.side.length ? SIDE_TXT() + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', 'handle only')) : '⚠ ' + esc(pl.text)}</span></div>`
         + `<div class="tiny muted">${esc(x.ex.join(' · '))}${x.warm ? LL(' — розминка', ' — warm-up') : ''}</div></li>`;
     }).join('');
     const ws = list.map(w), sum = ws.length > 1 ? ws.slice(0, -1).join(', ') + LL(' і ', ' and ') + ws[ws.length - 1] : ws[0];
@@ -2386,7 +2450,7 @@ window.APP_START = () => {
           return { t: tms(x.date), v: Math.round(v * 10) / 10, pr };
         }).filter((q) => q.t >= cut);
         const rec = ENGINE.records(ex, histAll, h);
-        const unit = ui.metric === 'vol' ? KG(LL('кг за тренування', "kg per workout")) : ui.metric === 'heavy' ? (isMach(ex) ? KG(LL('кг на тренажері', "kg on the machine")) : KG(LL('кг у руках', "kg in hand"))) : ui.metric === 'reps' ? LL('повторень', "reps") : ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg');
+        const unit = ui.metric === 'vol' ? KG(LL('кг за тренування', "kg per workout")) : ui.metric === 'heavy' ? (isMach(ex) ? KG(LL('кг на тренажері', "kg on the machine")) : ON_BODY[ui.progEx] ? KG(LL('кг — гантель', 'kg — dumbbell')) : KG(LL('кг у руках', "kg in hand"))) : ui.metric === 'reps' ? LL('повторень', "reps") : ENGINE.metricLabel(ex, isLb() ? 'lb' : 'kg');
         const repRows = Object.keys(rec.reps).map(Number).sort((a, b) => b - a).slice(0, 8);
         body = `<select id="exSel">${ids.map((id) => `<option value="${id}"${id === ui.progEx ? ' selected' : ''}>${esc(prog.ex[id].name)}</option>`).join('')}</select>
           <div class="seg">${metrics.map(([k, l]) => `<button type="button" class="${ui.metric === k ? 'on' : ''}" data-act="metric" data-v="${k}"${k === 'heavy' && isMach(ex) ? LL(' data-tip="Найбільша вага на тренажері за кожне тренування."', " data-tip=\"Heaviest weight on the machine in each workout.\"") : ''}>${l}</button>`).join('')}</div>
@@ -2394,7 +2458,7 @@ window.APP_START = () => {
           ${CHARTS.line([{ pts, color: 'var(--accent)', area: true }], { label: ex.name, empty: LL('Ще немає підходів у цій вправі', "No sets for this exercise yet") })}</div>
           ${histAll.length ? `<div class="grid3">
             <div class="stat"><b>${rec.e1rm ? fmt(rec.e1rm.v) : '—'}</b><span>${ex.type === 'db' || isMach(ex) ? KG(LL('рекорд максимуму, кг', "best est. 1RM, kg")) : LL('найкращий показник', "best result")}</span></div>
-            <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? LL('найбільша вага', "heaviest weight") : LL('найважче в руках', "heaviest in hand")}${KG(LL(`, кг`, `, kg`))}${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
+            <div class="stat"><b>${rec.heavy ? fmt(rec.heavy.total) : '—'}</b><span>${isMach(ex) ? LL('найбільша вага', "heaviest weight") : ON_BODY[ui.progEx] ? LL('найважча гантель', 'heaviest dumbbell') : LL('найважче в руках', "heaviest in hand")}${KG(LL(`, кг`, `, kg`))}${rec.heavy ? ' × ' + rec.heavy.set.reps : ''}</span></div>
             <div class="stat"><b>${rec.vol ? fmt(Math.round(rec.vol.v)) : '—'}${KG(LL(`</b><span>найбільший обсяг, кг</span></div></div>
             `, `</b><span>biggest volume, kg</span></div></div>
             `))}${repRows.length ? `${LL(`<h2>Рекорди повторень</h2><div class="card"><ul class="list">`, `<h2>Rep PRs</h2><div class="card"><ul class="list">`)}${repRows.map((L) => `<li><span>${ex.type === 'band' ? LL('рівень ', "level ") + fmt(L) : isMach(ex) ? fmt(L) + KG(LL(' кг', " kg")) : LL('гриф + ', "handle + ") + fmt(L) + KG(LL(' кг', " kg"))}</span><span><b>${rec.reps[String(L)].reps}</b> <span class="tiny muted">${dm(rec.reps[String(L)].date)}</span></span></li>`).join('')}</ul></div>` : ''}${LL(`
@@ -2800,7 +2864,8 @@ window.APP_START = () => {
     const wd = kWaterDay(), day = kday(wd);
     return KITCHEN.waterDayPlan(kWaterTimes(wd), kWTarget(wd), kit().set.glass, day.water || 0, kWAt(day), kNowHM(), kit().set.per, kWMarks(day));  // з 3.22.2 — ✓ лише прийомам з відміткою
   }
-  const kPlanTxt = (items) => items.map((x) => x.t + (x.st === 'done' ? ' ✓' : x.st === 'missed' ? LL(' пропущено', ' missed') : ' — ' + kGlW(x.h / 2) + (x.k === 'extra' ? LL(' (додатковий)', ' (extra)') : ''))).join(' · ');
+  /* з 3.27.8 — ✓ з часом, коли людина випила (x.at), а не з часом за розкладом */
+  const kPlanTxt = (items) => items.map((x) => (x.st === 'done' && x.at ? x.at : x.t) + (x.st === 'done' ? ' ✓' : x.st === 'missed' ? LL(' пропущено', ' missed') : ' — ' + kGlW(x.h / 2) + (x.k === 'extra' ? LL(' (додатковий)', ' (extra)') : ''))).join(' · ');
   /* прийомів на день і порції — для налаштувань: «4 прийоми по 2 склянки» (у день тренування — свої) */
   /* з 3.22.1 — і порція за раз (per): вийшло більше обраного (вікно коротке або склянка велика) — кажемо чому */
   const kIntWhy = (g, per) => { per = per || kit().set.per; const a = kIntakesTxt(g, false, per), b = kIntakesTxt(g, true, per), over = Math.max(a.hi, b.hi) > per;
@@ -2898,7 +2963,7 @@ window.APP_START = () => {
     const ph = a.ph = { st: 'wait' }; kAddDraw();
     const live = () => ui.kAdd === a && a.ph === ph && document.body.classList.contains('sheet') && sheetEl.querySelector('[data-kph]');
     let img = null; try { img = await jpegOf(file); } catch (e) { img = null; }
-    const j = img ? await post('/food', { image: img.b64, lang: I18N.lang }, 40000) : null;  // сервер: до 3 моделей × 8 с + передача фото (живий замір 23.10 — 26,7 с у пік)
+    const j = img ? await post('/food', { image: img.b64, lang: I18N.lang }, 50000) : null;  // з 3.27.8: сервер відповідає щонайпізніше за 40 с (FOOD_BUDGET) + 10 с на передачу фото; до того — 40 с, а сервер міг шукати до 48
     if (!live()) return;  // шторку закрили чи відкрили іншу — нічого не малюємо
     a.ph = kPhotoResult(img, j);
     kAddDraw();
@@ -3937,6 +4002,7 @@ window.APP_START = () => {
     if (act === 'noop') return;
     if (act === 'closeSheet') return closeSheet();
     if (act === 'guide') return guideSheet(b.dataset.id);
+    if (act === 'mcg') { const box = sheetEl.querySelector('.mcg'); if (!box || !MCG.some((x) => x[0] === b.dataset.k)) return; ui.mcg = b.dataset.k; box.outerHTML = mcgHtml(ui.mcg); return mcgAttach(); }
     if (act === 'gl') return glSheet(b.dataset.k);
     if (act === 'glAll') return glAll();
     if (act === 'say') return sayWhat(b);
@@ -4099,13 +4165,19 @@ window.APP_START = () => {
       it.sets.push({ type: 'D', load: dropLoad(it), reps: it.min || null, rir: null, done: false, pr: [], prev: null, touched: true });
       save(); haptic(); closeSheet(); toast(LL('Дроп-сет додано — одразу після останнього підходу, без відпочинку', "Drop set added — right after the last set, no rest")); return rWorkout();
     }
-    if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false }); save(); closeSheet(); return rWorkout(); }
+    if (act === 'addset') { const it = p.draft.items[i], l = it.sets.filter((x) => x.type !== 'W').slice(-1)[0] || it.sets[it.sets.length - 1] || {}; it.sets.push({ type: 'N', load: l.load === undefined ? null : l.load, reps: l.reps === undefined ? null : l.reps, rir: null, done: false, pr: [], prev: null, touched: false, plan: l.plan === undefined ? l.load : l.plan }); save(); closeSheet(); return rWorkout(); }
     if (act === 'warm') { const it = p.draft.items[i], ex = G().ex[it.ex], fw = it.sets.find((s) => s.type !== 'W'); const ws = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), G().warm, isMach(ex) ? loadStep(ex, it.ex) : 0); it.sets = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(it.sets); save(); closeSheet(); return rWorkout(); }
     if (act === 'exmenu') return exMenu(i);
     if (act === 'pain') return painSheet(i);  // з 3.21.5 — «Болить суглоб»
     if (act === 'cycMark') { const c = p.body.cycle = p.body.cycle || [], t = today(); if (c.indexOf(t) < 0) c.push(t); c.sort(); save(); toast(LL('Позначено: початок циклу', 'Marked: period start')); return rBody(); }  // з 3.21.5
     if (act === 'cycDel') { p.body.cycle = (p.body.cycle || []).filter((d) => d !== today()); save(); toast(LL('Позначку прибрано', 'Mark removed')); return rBody(); }
-    if (act === 'painLight') { const it = p.draft.items[i], ex = G().ex[it.ex], st = isMach(ex) ? loadStep(ex, it.ex, p.draft.place) : ENGINE.stepFor(p.inv); it.sets.forEach((s) => { if (!s.done && typeof s.load === 'number' && s.load > 0) s.load = Math.max(0, Math.round((s.load - st) * 100) / 100); }); save(); closeSheet(); toast(LL('Решта підходів — на крок легше', 'Remaining sets — one step lighter')); return rWorkout(); }
+    if (act === 'lowWhy') { const it = p.draft.items[i], v = b.dataset.v; if (['tired', 'pain', 'plan', 'kit'].indexOf(v) < 0) return; it.low = v; save(); closeSheet(); if (v === 'pain') return painSheet(i); return rWorkout(); }
+    if (act === 'lowExtra') {
+      const it = p.draft.items[i], s0 = it.sets[Number(b.dataset.j)]; if (!s0 || it.low) return closeSheet();
+      it.low = 'extra'; it.sets.push({ type: 'N', load: s0.load, reps: it.min || s0.reps, rir: null, done: false, pr: [], prev: null, touched: true, plan: s0.load, extra: true });
+      save(); closeSheet(); toast(LL('Додано ще один підхід — скільки вийде', 'One more set added — as many as you can')); return rWorkout();
+    }
+    if (act === 'painLight') { const it = p.draft.items[i], ex = G().ex[it.ex], st = isMach(ex) ? loadStep(ex, it.ex, p.draft.place) : ENGINE.stepFor(p.inv); it.sets.forEach((s) => { if (!s.done && typeof s.load === 'number' && s.load > 0) { s.load = Math.max(0, Math.round((s.load - st) * 100) / 100); s.plan = s.load; } }); save(); closeSheet(); toast(LL('Решта підходів — на крок легше', 'Remaining sets — one step lighter')); return rWorkout(); }
     if (act === 'painStop') { const it = p.draft.items[i]; if (it.sets.some((s) => s.done)) it.sets = it.sets.filter((s) => s.done); else it.skipped = true; save(); closeSheet(); toast(LL('Вправу завершено — зроблені підходи збережено', 'Exercise finished — the sets you did are saved')); return rWorkout(); }
     if (act === 'painOff') { const ex = p.draft.items[i].ex; p.draft.pain = (p.draft.pain || []).filter((x) => x !== ex); save(); closeSheet(); toast(LL('Позначку прибрано', 'Mark removed')); return rWorkout(); }
     if (act === 'noteSave') { const it = p.draft.items[i]; const v = document.getElementById('exNote').value.trim(); if (v) p.notes[it.ex] = v; else delete p.notes[it.ex]; save(); closeSheet(); toast(LL('Нотатку збережено', "Note saved")); return rWorkout(); }

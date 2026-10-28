@@ -46,7 +46,7 @@ var VOICE = (function () {
     else if (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load)) {
       if (!hasLoad) { if (ex.type === 'dbopt') out.push(LL('Без гантелі.', "No dumbbell.")); }
       else if (Number(s.load) === 0) out.push(LL('Лише гриф.', "Handle only."));
-      else { out.push(cap(kg(s.load)) + LL(' дисків.', " of plates.")); if (side && side.length) out.push(LL('На кожен бік — ', "Each side: ") + side.map(numWords).join(LL(' плюс ', " plus ")) + '.'); }
+      else { out.push(cap(kg(s.load)) + LL(' дисків.', " of plates.")); if (side && side.length) out.push(LL('На кожен бік — ', "Each side of the dumbbell: ") + side.map(numWords).join(LL(' плюс ', " plus ")) + '.'); }
     }
     else if (ex.type === 'mach') { if (hasLoad) out.push(cap(kg(s.load)) + '.'); }  // тренажер чи блок: вага в кг, без дисків
     if (ex.type === 'amrap') out.push(LL('Скільки зможете, із запасом два.', "As many as you can, with two in reserve."));
