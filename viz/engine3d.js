@@ -358,6 +358,44 @@ function VIZ3D(THREE) {
       bx.getBoundingSphere(sp); target = sp.center.clone();
       base = V(...(ex.dir || [1, 0.5, 1.15])).normalize().multiplyScalar(sp.radius / Math.sin(17 * RAD) * (ex.zoom || 1.04));
     }
+    /* кадр — за людиною (з 3.27.8; слово Alexа 26.10: «…збільшити такі моделі трішки бо погано видно, на 20-30%»). До 3.27.8 камера (target, base вище)
+       брала в кадр кулю навколо тіла й усього обладнання — двері, тренажер, — і людина виходила дрібною (замір 27.10: медіана 55 % висоти кадру,
+       найменше — 32 %). Тепер у кадрі — кулі сегментів тіла, того, що в руках (held: гантелі, ручки), і частин «помилки» в 9 фазах руху (й на обох боках);
+       для кожного кута огляду (YAW_GRID — межа повороту пальцем у застосунку) — своя ціль і відстань: уся людина з полем FIT_M, краї обладнання можуть
+       обрізатись. Наближаємо не більш ніж у FIT_MAX раза проти колишнього кадру з того самого кута (Alex: «на 20–30 %»: ближче губиться обладнання,
+       на якому вправа; 1,26 відстані — це до +30 % зросту в кадрі: ближні частини тіла в перспективі ростуть трохи більше). camFlip — лише перший бік: другий — дзеркало сцени й камери (кадр той самий) */
+    const FIT_M = 0.06, FIT_MAX = 1.26, YAW_GRID = 1.4, YAW_STEP = 0.1;
+    const sph = [], grab = (m) => { const g = m.geometry; if (!g.boundingSphere) g.computeBoundingSphere(); sph.push(g.boundingSphere.clone().applyMatrix4(m.matrixWorld)); };
+    const gpOf = (sd) => (sd ? ex.ghost.map((n) => n.replace(/L$/, '#').replace(/R$/, 'L').replace(/#$/, 'R')) : ex.ghost);
+    for (let i = 0; i <= 8; i++) [0, ex.sides && !ex.camFlip ? 1 : 0].forEach((sd, k, a) => {
+      if (k && a[0] === sd) return;
+      const t = i / 8, P = poseAt(t, false, sd), J = poseBody(body, P); if (ex1.after) ex1.after(P, J);
+      body.root.updateMatrixWorld(true); eq.updateMatrixWorld(true);
+      body.all.forEach(grab); eq.traverse((m) => { if (m.isMesh && m.userData.held) grab(m); });
+      if (ex.ghost.length) { const gp = gpOf(sd); poseBody(ghost, poseAt(t, true, sd)); ghost.root.updateMatrixWorld(true); ghost.all.forEach((m) => { if (gp.indexOf(m.userData.name) >= 0) grab(m); }); }
+    });
+    const ctr = new THREE.Box3(); sph.forEach((s) => ctr.expandByPoint(s.center)); const c0 = ctr.getCenter(V(0, 0, 0));
+    const tv = Math.tan(17 * RAD) * (1 - FIT_M), th = tv * 4 / 3;
+    function fit(yaw) {
+      const bo = base.clone().applyAxisAngle(UP, yaw), d = bo.clone().normalize(), f = d.clone().negate();
+      const rt = V(0, 0, 0).crossVectors(f, UP).normalize(), up = V(0, 0, 0).crossVectors(rt, f), c = c0.clone(), p = V(0, 0, 0);
+      let D = 0;
+      for (let pass = 0; pass < 3; pass++) {
+        D = 0; sph.forEach((s) => { p.copy(s.center).sub(c); const z = p.dot(f); D = Math.max(D, (Math.abs(p.dot(up)) + s.radius) / tv - z, (Math.abs(p.dot(rt)) + s.radius) / th - z); });
+        if (pass === 2) break;
+        /* ціль — на середину видимого: тоді поле однакове з обох боків і людина більша */
+        let u0 = 9, u1 = -9, v0 = 9, v1 = -9;
+        sph.forEach((s) => { p.copy(s.center).sub(c); const z = D + p.dot(f), x = p.dot(rt), y = p.dot(up); u0 = Math.min(u0, (x - s.radius) / z); u1 = Math.max(u1, (x + s.radius) / z); v0 = Math.min(v0, (y - s.radius) / z); v1 = Math.max(v1, (y + s.radius) / z); });
+        c.addScaledVector(rt, (u0 + u1) / 2 * D).addScaledVector(up, (v0 + v1) / 2 * D);
+      }
+      D = Math.max(D, target.clone().add(bo).distanceTo(c) / FIT_MAX);  // не ближче, ніж FIT_MAX × колишній кадр з того самого кута
+      return { c, pos: c.clone().addScaledVector(d, D) };
+    }
+    const grid = []; for (let y = -YAW_GRID; y <= YAW_GRID + 1e-9; y += YAW_STEP) grid.push(fit(y));
+    function camAt(yaw) {
+      const u = (Math.max(-YAW_GRID, Math.min(YAW_GRID, yaw || 0)) + YAW_GRID) / YAW_STEP, i = Math.min(grid.length - 2, Math.floor(u)), k = u - i, a = grid[i], b = grid[i + 1];
+      return { c: a.c.clone().lerp(b.c, k), pos: a.pos.clone().lerp(b.pos, k) };
+    }
     function draw(sec, v, style, yaw) {
       const f = tAt(sec);
       styleBody(body, style, v === 'mus', ex.work);
@@ -368,8 +406,9 @@ function VIZ3D(THREE) {
       if (show) poseBody(ghost, poseAt(f.t, true, f.side));
       const P = poseAt(f.t, false, f.side), J = poseBody(body, P); if (ex1.after) ex1.after(P, J);
       /* camFlip — обладнання з одного боку (крісло під рукою): на другому боці камера дзеркалиться разом зі сценою, тож кадр той самий */
-      const fl = ex.camFlip && f.side, tg = fl ? V(target.x, target.y, -target.z) : target, bs = fl ? V(base.x, base.y, -base.z) : base;
-      camera.position.copy(tg).add(bs.clone().applyAxisAngle(UP, (fl ? -1 : 1) * (yaw || 0))); camera.lookAt(tg);
+      const fl = ex.camFlip && f.side, k = camAt(yaw);  /* як до 3.27.8: дзеркало кадру першого боку з того самого кута */
+      if (fl) { k.c.z = -k.c.z; k.pos.z = -k.pos.z; }
+      camera.position.copy(k.pos); camera.lookAt(k.c);
       return f;
     }
     const rebuild = () => { scene.remove(...scene.children.filter((c) => (c.isMesh || c.isGroup) && c !== floor)); build(); };
