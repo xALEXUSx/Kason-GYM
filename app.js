@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.9';
+  const VERSION = '3.27.10';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -178,11 +178,16 @@ window.APP_START = () => {
     const t = document.getElementById('toast'); t.textContent = msg; t.className = 'on' + (gold ? ' gold' : '');
     clearTimeout(toastT); toastT = setTimeout(() => { t.className = ''; }, 3200);
   }
-  function haptic() {
+  function haptic(pattern) {
     if (!S().haptics) return;
     try { document.getElementById('hapLb').click(); } catch (e) { /* немає */ }
-    if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(12);
+    if (navigator.vibrate && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate(pattern || 12);
   }
+  /* кінець відпочинку й паузи міо-підходу (з 3.27.10; план Google Play, розділ 3а п. 1; слово Alexа 29.10 «Спершу вібрація»): помітна серія замість 12 мс —
+     там, де браузер уміє вібрацію (Chrome на Android з 32; лише після дотику людини до сторінки — з Chrome 60, MDN browser-compat-data 29.10);
+     iPhone вібрації в Safari не має — там, як і було, дотик перемикача (hapLb); вимкнений «Вібровідгук» — тиша */
+  const ALARM_VIB = [200, 100, 200];
+  const hapticAlarm = () => haptic(ALARM_VIB);
   /* iOS: звук Web Audio за замовчуванням вимикається перемикачем беззвучного режиму; тип «playback» — грає й тоді. */
   /* iOS (Safari 17+): «playback» — тренер говорить і в беззвучному режимі; але з ним WebKit одразу відмовляє мікрофону (навіть без віконця дозволу),
      тож поки тренер-співрозмовник слухає — «play-and-record» */
@@ -264,7 +269,7 @@ window.APP_START = () => {
     const left = Math.ceil((T.end - Date.now()) / 1000);
     if (left === 10 && T.total >= 30 && !T.said10 && T.kind === 'rest') { T.said10 = true; if (!speaking()) talk(LL('Десять секунд.', "Ten seconds.")); }
     if (coachOn()) {
-      if (left <= 0) { if (!T.alarmed) { T.alarmed = true; const k = T.kind; beep(); haptic(); stopTimer(); onTimerEnd(k); } return; }
+      if (left <= 0) { if (!T.alarmed) { T.alarmed = true; const k = T.kind; beep(); hapticAlarm(); stopTimer(); onTimerEnd(k); } return; }
       const tEl = document.getElementById('cTime'), arc = document.getElementById('cArc');
       if (tEl) tEl.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
       if (arc) { const c = 2 * Math.PI * 52, f = Math.max(0, Math.min(1, left / T.total)); arc.setAttribute('stroke-dasharray', (c * f).toFixed(1) + ' ' + c.toFixed(1)); }
@@ -282,7 +287,7 @@ window.APP_START = () => {
     }
     const arc = document.getElementById('tArc'); if (arc) arc.setAttribute('stroke-dasharray', (c * f).toFixed(1) + ' ' + c.toFixed(1));
     if (state === 'al') {
-      if (!T.alarmed) { T.alarmed = true; beep(); haptic(); if (T.kind === 'myo') talk(LL('Ще від трьох до пʼяти повторень.', "Three to five more reps.")); else talk(T.next ? LL('Час! ', "Time! ") + T.next.split(' · ')[0] + '.' : LL('Час!', "Time!")); }
+      if (!T.alarmed) { T.alarmed = true; beep(); hapticAlarm(); if (T.kind === 'myo') talk(LL('Ще від трьох до пʼяти повторень.', "Three to five more reps.")); else talk(T.next ? LL('Час! ', "Time! ") + T.next.split(' · ')[0] + '.' : LL('Час!', "Time!")); }
       timerEl.className = 'on al';
       if (left < -30) stopTimer();
       return;
@@ -673,6 +678,8 @@ window.APP_START = () => {
       if (ra && ra.act === 'swap') { from = it.ex; it.ex = ra.to; }
       return makeItem(it, o.ss, plan, step, { ra: ra && ra.act !== 'swap' ? ra : null, from, myo, where, back });
     });
+    /* удома пара з двох вправ із гантелями — підряд, а не суперсетом: диски перекручують раз на вправу (з 3.27.10, ENGINE.homeStraight) */
+    if (where === 'home') ENGINE.homeStraight(prog, list);
     /* розминковий підхід — перед першою базовою вправою з вагою */
     for (const st of ENGINE.stepOrder(list)) {
       const it = list[st.i], ex = prog.ex[it.ex], fw = it.sets.find((s) => s.type !== 'W');
@@ -3819,7 +3826,7 @@ window.APP_START = () => {
       <h2>Music</h2><div class="card"><div class="sp"><div><b>Workout radio</b><div class="small muted">`)}${RADIO.cur ? esc(RADIO.cur.name) + ' · ' + ({ playing: LL('грає', "playing"), loading: LL('підключаюся', "connecting"), paused: LL('пауза', "paused"), error: LL('не відповідає', "not responding") }[RADIO.state] || '') : RADIO.STATIONS.length + LL(' станцій: денс, хіти, українські, рок, метал, драм-н-бейс', " stations: dance, hits, Ukrainian, rock, metal, drum and bass")}${LL(`</div></div><button type="button" class="sm pri" data-act="radio">Відкрити</button></div></div>
       <h2>Тренування</h2><div class="card" id="mWork"><label class="f">Екран тренування</label>`, `</div></div><button type="button" class="sm pri" data-act="radio">Open</button></div></div>
       <h2>Workout</h2><div class="card" id="mWork"><label class="f">Workout screen</label>`)}${seg('mode', [['coach', LL('Тренер · крок за кроком', "Coach · step by step")], ['list', LL('Список вправ', "Exercise list")]], S().mode)}
-        ${sw('sound', LL('Звук таймера', "Timer sound"), LL('сигнал, коли відпочинок скінчився', "a beep when rest is over"))}${sw('haptics', LL('Вібровідгук', "Haptics"), TX(LL('на iPhone з iOS 18+, якщо підтримується', "on iPhone with iOS 18+, if supported"), LL('коротка вібрація на дотиках', "a short vibration on taps")))}${sw('awake', LL('Не гасити екран', "Keep screen on"), LL('під час тренування', "during workouts"))}${sw('guide', LL('Вести за руку', "Hands-on guidance"), LL('3 тренування: тренер каже й підсвічує, що натиснути', "3 workouts: the coach tells you what to tap and highlights it"))}${LL(`</div>
+        ${sw('sound', LL('Звук таймера', "Timer sound"), LL('сигнал, коли відпочинок скінчився', "a beep when rest is over"))}${sw('haptics', LL('Вібровідгук', "Haptics"), TX(LL('на iPhone з iOS 18+, якщо підтримується', "on iPhone with iOS 18+, if supported"), LL('коротка вібрація на дотиках, помітна — коли скінчився відпочинок', "a short vibration on taps, a stronger one when rest is over")))}${sw('awake', LL('Не гасити екран', "Keep screen on"), LL('під час тренування', "during workouts"))}${sw('guide', LL('Вести за руку', "Hands-on guidance"), LL('3 тренування: тренер каже й підсвічує, що натиснути', "3 workouts: the coach tells you what to tap and highlights it"))}${LL(`</div>
       <h2>Програма</h2><div class="card">`, `</div>
       <h2>Program</h2><div class="card">`)}${progCard()}
         <button type="button" class="wide" style="margin-top:10px" data-act="qEdit"${p.draft ? ' disabled' : ''}>${DB.custom ? LL('Змінити анкету й оновити програму', "Edit questionnaire and update program") : LL('Скласти програму за анкетою', "Build a program from the questionnaire")}${LL(`</button>

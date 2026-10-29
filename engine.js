@@ -812,6 +812,28 @@ var ENGINE = (function () {
     list.forEach(function (x, i) { if (x.ss && x.ss.k === 1) { x.ss.g = letters[li]; list[i + 1].ss.g = letters[li]; li++; } });
     return list;
   }
+  /* Удома пара суперсету з двох вправ із гантелями — підряд (з 3.27.10; слово Alexа 27.10: «Якщо це не ламає програму то краще для домашнього формату
+     тренування щоб йшли по наростаючій вазі, бо важко постійно перекручувати диски. В мене на приклад тільки 2 гантелі…»; 29.10: «виконуй по усім правилам»).
+     Гантелі вдома — гриф із дисками: у суперсеті двох гантельних вправ диски перекручують перед кожним підходом. Тож такі пари — звичайними підходами:
+     спершу всі підходи першої, потім другої; порядок вправ — той самий. Суперсет і звичайні підходи дають той самий результат — сила й мʼязи
+     (Zhang та ін. 2025, Sports Med 55:953–975, 19 досліджень); порядок «за зростанням ваги» — ні: сила росте більше у вправах, що йдуть першими
+     (Nunes та ін. 2021, Eur J Sport Sci 21:149–157), а найважчі базові опинились би в кінці. Пару розбиваємо, лише поки оцінка тривалості
+     (без розминки) не довша за STRAIGHT_CAP — межу тривалості програм (тест «найдовше тренування ≤ 55 хв»).
+     Замір 29.10 на 22 848 анкетах удома (тижні 1, 3, 6, 10): перекручувань дисків за тренування — 2,41 → 1,42; тривалість — у середньому +1 хв, найдовше — 55;
+     пару лишено суперсетом — у 216 зі 182 784 тренувань (2 дні на тиждень, «мʼязи»). list — пункти чернетки ({ ex, ss, rest, sets, skipped }) — змінює на місці. */
+  var STRAIGHT_CAP = 55;
+  function plateEx(e) { return !!e && (e.type === 'db' || e.type === 'dbopt' || (e.type === 'time' && !!e.db)); }
+  function homeStraight(prog, list) {
+    for (var i = 0; i + 1 < list.length; i++) {
+      var a = list[i], b = list[i + 1];
+      if (!(a.ss && a.ss.k === 1 && b.ss && b.ss.k === 2 && plateEx(prog.ex[a.ex]) && plateEx(prog.ex[b.ex]))) continue;
+      var sa = a.ss, sb = b.ss; a.ss = null; b.ss = null;
+      if (estimateMins(prog, list) > STRAIGHT_CAP) { a.ss = sa; b.ss = sb; }
+    }
+    var letters = LL('АБВГДЕ', "ABCDEF"), li = 0;
+    list.forEach(function (x, j) { if (x.ss && x.ss.k === 1 && list[j + 1] && list[j + 1].ss) { x.ss.g = letters[li]; list[j + 1].ss.g = letters[li]; li++; } });
+    return list;
+  }
   /* ---------- v3 ---------- */
   /* Порядок кроків тренування: у суперсеті підходи чергуються (А1, А2, А1, А2…), розминка — перед першим підходом своєї вправи.
      items — [{ss, skipped, sets:[…]}]; повертає [{i, j}]. */
@@ -1013,7 +1035,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
            KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };

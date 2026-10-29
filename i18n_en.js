@@ -1510,3 +1510,8 @@ I18N.add({
   "✕ Не спирайся рукою об підлогу": "✕ Don’t push off the floor with your hand",
   "Іди якомога швидше рівним кроком — не біжи": "Walk as fast as you can at an even pace — don’t run"
 });
+
+/* вібрація в кінці відпочинку (з 3.27.10; app/tips.js — підказка «Вібровідгук») */
+I18N.add({
+  "Вібрація: легка — коли відмічаєте підхід, помітна — коли скінчився відпочинок (на iPhone — легка й там).": "Vibration: a light one when you check off a set, a stronger one when rest is over (on iPhone it stays light)."
+});
