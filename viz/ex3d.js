@@ -1,5 +1,5 @@
 /* Вправи для 3D-візуалізації (дні 3–4, 24.10; слово Alexа: «роби день 3 та 4»): усі 53 вправи програм + тяга зверху на колінах + 6 варіантів = 60;
-   з 3.27.3 — ще 4 тести форми (крісло, одна нога, сісти й встати з підлоги, ходьба) = 64.
+   з 3.27.3 — ще 4 тести форми (крісло, одна нога, сісти й встати з підлоги, ходьба) = 64; з 3.27.11 — ще 7 вправ розтяжки = 71.
    Поза за t (0 — старт, 1 — крайня точка), g — поза з помилкою (червоним — лише частини ghost; порожньо — помилку видно лише в тексті).
    id і v — як у застосунку (app/program.js, app/generator.js; v — варіант); work — мʼязи з програми (m: p — основні, s — допоміжні).
    Рух — з тексту тренера (app/coach.js: Положення / Рух), помилка — перша з «Чого не робити», яку видно оком. Обладнання — equip3d.js.
@@ -691,6 +691,82 @@ function EX3D(E, Q) {
         /* хода на місці (як у прогулянках), руки — маятником проти ніг: ліва рука вперед, коли попереду права нога */
         const P = walk(t, 2, g ? { lumb: 12, chest: 24, head: 12 } : {});
         P.hand = hang(P, 0.07, 0.02, 0.54).map((h, i) => h.add(V(0.55 * P.ank[i ? 0 : 1].x, 0, 0))); P.elbowPole = eps(-1, 0, 0.3); return P;
+      } }),
+    /* ---------- розтяжка: останній блок тренування (з 3.27.11; app/stretch.js) — t: 0 вихідне, 1 крайня точка, правий бік ---------- */
+    mk({ id: 's_chest', grp: 'stretch', name: 'Розтяжка грудей', work: { p: ['chest'], s: ['delts'] }, sides: true, dir: [-0.6, 0.35, -1.1], camFlip: true,  // ззаду-збоку: стійка не затуляє людину
+      t1: 1.8, t2: 1.4, c1: 'Передпліччя на опору, крок уперед', c2: 'Тримай 30 с — без болю й ривків', bad: '✕ Не прогинай поперек', ghost: TORSO,
+      build(k) { this.w = jamb(k, 0.08, -0.47); },
+      after(P) { this.w.g.scale.z = P.mirror ? -1 : 1; },
+      pose(t, g) {
+        /* права рука зігнута під прямим кутом, передпліччя — на задній грані стійки; ліва нога йде вперед, корпус за нею, лікоть лишається */
+        const P = stand({ px: lerp(-0.12, 0.05, t), py: 0.92, lumb: g ? -14 * t : 2, chest: g ? -18 * t : 2, fw: 0.1, fa: 8 });
+        P.ank = [V(lerp(-0.05, 0.26, t), 0.07, 0.1), V(-0.16, 0.07, -0.1)]; P.kneePole = eps(1, 0, 0.1);
+        const sh = shOf(P); P.hand = [sh[0].clone().add(V(0.03, -0.54, 0.07)), V(-0.04, 1.61, -0.49)]; P.elbowPole = [V(-1, 0, 0.3).normalize(), V(-0.1, -1, -0.5).normalize()];
+        return P;
+      } }),
+    mk({ id: 's_shoulder', grp: 'stretch', name: 'Розтяжка плеча', work: { p: ['delts'], s: ['reardelts'] }, sides: true,
+      t1: 1.6, t2: 1.4, c1: 'Рука через груди, плечі опущені', c2: 'Тримай 30 с — притискай вище ліктя', bad: '✕ Не тисни на сам лікоть', ghost: ['shoulderL', 'uaL', 'faL', 'elbowL', 'handL'],
+      build() {},
+      pose(t, g) {
+        /* права рука йде поперек грудей, ліва притискає її вище ліктя (помилка — на самому лікті) */
+        const P = stand({ py: 0.95, fw: 0.12, fa: 8, lumb: 1, chest: 1 }), sh = shOf(P);
+        const r0 = sh[1].clone().add(V(0.03, -0.54, -0.07)), l0 = sh[0].clone().add(V(0.03, -0.54, 0.07)), rEnd = V(0.45, sh[1].y - 0.02, 0.07), bow = V(0.26 * Math.sin(Math.PI * t), 0, 0), r = r0.clone().lerp(rEnd, t).add(bow);
+        const u = r.clone().sub(sh[1]).normalize(), on = sh[1].clone().addScaledVector(u, g ? 0.29 : 0.2).add(V(0.06, -0.005, 0));
+        P.hand = [l0.clone().lerp(on, t).add(bow), r]; P.elbowPole = [V(0.8, -0.3, 0.9).normalize(), V(0.4, -0.6, -0.7).normalize()];
+        return P;
+      } }),
+    mk({ id: 's_quad', grp: 'stretch', name: 'Розтяжка передньої поверхні стегна', work: { p: ['quads'], s: [] }, sides: true, dir: [-0.2, 0.3, -1.2], camFlip: true,  // з боку ноги, що згинається
+      t1: 1.8, t2: 1.4, c1: 'Пʼяту до сідниці, коліна поруч', c2: 'Тримай 30 с — без болю в коліні', bad: '✕ Не нахиляйся вперед', ghost: TORSO,
+      build(k) { this.w = jamb(k, -0.05, 0.62); },
+      after(P) { this.w.g.scale.z = P.mirror ? -1 : 1; },
+      pose(t, g) {
+        /* стоїмо на лівій, ліва рука — на стійці; права стопа йде до сідниці, права рука — на щиколотці */
+        const P = stand({ px: lerp(0, 0.03, t), py: lerp(0.95, 0.94, t), lumb: g ? 10 * t : 2, chest: g ? 16 * t : 2, fw: 0.1, fa: 8 }); P.pelvis.z = lerp(0, 0.05, t);
+        const f = V(1, 0, -0.08).normalize().lerp(V(-0.3, 0.95, 0).normalize(), t).normalize(), a = V(0, 0.07, -0.1).lerp(V(-0.26, 0.92, -0.11), t);
+        P.ank = [V(0, 0.07, 0.1), a]; P.foot = [V(1, 0, 0.08).normalize(), f]; P.kneePole = [V(1, 0, 0.1).normalize(), V(1, 0, -0.1).normalize().lerp(V(0.3, -1, 0).normalize(), t).normalize()];
+        const sh = shOf(P); P.hand = [V(-0.02, 1.2, 0.572), sh[1].clone().add(V(0.03, -0.54, -0.07)).lerp(V(g ? -0.2 : -0.26, 0.95, -0.16), t)]; P.elbowPole = [V(-0.4, -1, 0.3).normalize(), V(-0.6, -0.6, -0.8).normalize()];
+        return P;
+      } }),
+    mk({ id: 's_calf', grp: 'stretch', name: 'Розтяжка литки', work: { p: ['calves'], s: [] }, sides: true, dir: [-0.5, 0.42, 1],
+      t1: 1.8, t2: 1.4, c1: 'Нога пряма позаду, пʼята на підлозі', c2: 'Тримай 30 с — нахиляйся вперед усім тілом', bad: '✕ Не відривай пʼяту', ghost: ['thighR', 'shinR', 'kneeR', 'ankleR', 'footR'],
+      build(k) { this.dw = doorway(k, 0.52); },
+      pose(t, g) {
+        /* обличчям до рами: руки на стійках, ліва нога зігнута попереду, права пряма позаду; таз іде вперед */
+        const P = stand({ px: lerp(-0.14, -0.04, t), py: lerp(0.9, 0.86, t), lumb: lerp(8, 14, t), chest: lerp(8, 14, t), head: -6, fw: 0.1, fa: 6 });
+        const h = g ? 0.08 * t : 0; P.ank = [V(0.14, 0.07, 0.1), V(-0.43, 0.07 + h, -0.1)]; P.foot = [V(1, 0, 0.06).normalize(), g ? V(1, -0.6 * t, -0.05).normalize() : V(1, 0, -0.05).normalize()]; P.kneePole = eps(1, 0, 0.1);
+        P.hand = both(0.45, 1.24, 0.43); P.elbowPole = eps(-0.6, -1, 0.5);
+        return P;
+      } }),
+    mk({ id: 's_hipflex', grp: 'stretch', name: 'Розтяжка згиначів стегна', work: { p: ['quads'], s: ['glutes'] }, sides: true,
+      t1: 1.8, t2: 1.4, c1: 'Напівшпагат, таз уперед, сідниця напружена', c2: 'Тримай 30 с — поперек рівний', bad: '✕ Не прогинай поперек', ghost: TORSO,
+      build(k) { Q.mat(k, { x: -0.12 }); },
+      pose(t, g) {
+        /* права гомілка на килимку, ліва стопа попереду; таз іде вперед і трохи вниз, руки — на поясі */
+        const P = stand({ px: lerp(-0.1, 0.03, t), py: lerp(0.53, 0.5, t), lumb: g ? -14 * t : 0, chest: g ? -14 * t : 0, fw: 0.1, fa: 8 });
+        P.ank = [V(0.36, 0.07, 0.12), V(-0.62, 0.078, -0.1)]; P.foot = [V(1, 0, 0.05).normalize(), V(-0.98, 0.2, 0).normalize()]; P.kneePole = [V(1, 0.5, 0.05).normalize(), V(0.5, -1, 0).normalize()];
+        P.hand = [V(0, 0.08, 0.215).add(P.pelvis), V(0, 0.08, -0.215).add(P.pelvis)]; P.elbowPole = [V(-0.6, 0, 1).normalize(), V(-0.6, 0, -1).normalize()];
+        return P;
+      } }),
+    mk({ id: 's_ham', grp: 'stretch', name: 'Розтяжка задньої поверхні стегна', work: { p: ['hams'], s: [] }, sides: true, dir: [1, 0.5, -1.15], camFlip: true,  // з боку піднятої ноги
+      t1: 2, t2: 1.4, c1: 'За стегно — випрями ногу до легкого натягу', c2: 'Тримай 30 с — поперек і таз на підлозі', bad: '✕ Не відривай таз', ghost: ['pelvis', 'lumb'],
+      build(k) { matK(k); },
+      pose(t, g) {
+        /* ліва нога зігнута, стопа на килимку; праве стегно майже вертикальне, гомілка випрямляється (a — кут гомілки від −10° до стегна) */
+        const P = supine({ y: BACK + (g ? 0.06 * t : 0), lumb: g ? 12 * t : 0, chest: g ? -6 * t : 0 });
+        const hip = V(AX + 0.02, BACK, -0.1), th = 88 * RAD, a = lerp(-10, 87, t) * RAD, kn = hip.clone().add(V(Math.cos(th), Math.sin(th), 0).multiplyScalar(0.44));
+        const an = kn.clone().add(V(Math.cos(a), Math.sin(a), 0).multiplyScalar(0.425));
+        return world(P, { ank: [V(AX + 0.5, 0.078, 0.14), an], foot: [V(1, 0, 0.15).normalize(), V(-Math.sin(a), Math.cos(a), 0)], kneePole: [V(0, 1, 0.15).normalize(), V(-0.6, 0.8, 0)],
+          hand: [V(AX - 0.02, 0.31, 0.015), V(AX - 0.02, 0.31, -0.19)], elbowPole: eps(0, 0.1, 1) });
+      } }),
+    mk({ id: 's_glute', grp: 'stretch', name: 'Розтяжка сідниць', work: { p: ['glutes'], s: ['lowback'] }, sides: true, dir: [1, 0.5, -1.15], camFlip: true,  // з боку піднятої ноги
+      t1: 2, t2: 1.4, c1: 'Коліно до грудей — тягни за стегно', c2: 'Тримай 30 с — поперек на підлозі', bad: '✕ Не підіймай плечі й голову', ghost: ['chest', 'neck', 'head', 'girdle', 'shoulderL', 'shoulderR'],
+      build(k) { matK(k); },
+      pose(t, g) {
+        /* ліва нога зігнута, стопа на килимку; права стопа відривається, коліно йде до грудей, кисті — на стегні нижче коліна */
+        const P = supine({ chest: g ? 28 * t : 0, head: g ? 30 * t : 0 });
+        const an = V(AX + 0.5, 0.078, -0.14).lerp(V(AX + 0.32, 0.437, -0.1), t), up = 0.2 * Math.sin(Math.PI * t);
+        return world(P, { ank: [V(AX + 0.5, 0.078, 0.14), an], foot: [V(1, 0, 0.15).normalize(), V(1, 0, -0.15).normalize().lerp(V(0.4, 0.9, 0).normalize(), t).normalize()], kneePole: [V(0, 1, 0.15).normalize(), V(-0.7, 0.7, 0).normalize()],
+          hand: [V(AX + 0.03, 0.06 + up, 0.27).lerp(V(AX - 0.06, 0.41, -0.02), t), V(AX + 0.03, 0.06 + up, -0.27).lerp(V(AX - 0.06, 0.41, -0.175), t)], elbowPole: eps(0, 0.7, 0.8) });
       } })
   ];
 }

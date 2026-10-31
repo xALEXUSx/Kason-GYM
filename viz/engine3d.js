@@ -363,8 +363,10 @@ function VIZ3D(THREE) {
        найменше — 32 %). Тепер у кадрі — кулі сегментів тіла, того, що в руках (held: гантелі, ручки), і частин «помилки» в 9 фазах руху (й на обох боках);
        для кожного кута огляду (YAW_GRID — межа повороту пальцем у застосунку) — своя ціль і відстань: уся людина з полем FIT_M, краї обладнання можуть
        обрізатись. Наближаємо не більш ніж у FIT_MAX раза проти колишнього кадру з того самого кута (Alex: «на 20–30 %»: ближче губиться обладнання,
-       на якому вправа; 1,26 відстані — це до +30 % зросту в кадрі: ближні частини тіла в перспективі ростуть трохи більше). camFlip — лише перший бік: другий — дзеркало сцени й камери (кадр той самий) */
-    const FIT_M = 0.06, FIT_MAX = 1.26, YAW_GRID = 1.4, YAW_STEP = 0.1;
+       на якому вправа; 1,26 відстані — це до +30 % зросту в кадрі: ближні частини тіла в перспективі ростуть трохи більше). camFlip — лише перший бік: другий — дзеркало сцени й камери (кадр той самий).
+       З 3.27.11 (слово Alexа 31.10: «Далеко манекен, не видно що робити. І це не єдиний випадок» — на знімку Паллоф-жим; «Так, виправляй»): межа +30 % лишала людину дрібною там, де старий кадр вміщав двері чи
+       тренажер (замір 31.10 на 64 анімаціях: менше 70 % кадру — у 32, найменше — 45 %), тож тепер ближче, поки людина не займе ≈ FIT_T кадру; кадри, де людина вже більша, — без змін */
+    const FIT_M = 0.06, FIT_T = 0.15, FIT_MAX = 1.26, YAW_GRID = 1.4, YAW_STEP = 0.1;
     const sph = [], grab = (m) => { const g = m.geometry; if (!g.boundingSphere) g.computeBoundingSphere(); sph.push(g.boundingSphere.clone().applyMatrix4(m.matrixWorld)); };
     const gpOf = (sd) => (sd ? ex.ghost.map((n) => n.replace(/L$/, '#').replace(/R$/, 'L').replace(/#$/, 'R')) : ex.ghost);
     for (let i = 0; i <= 8; i++) [0, ex.sides && !ex.camFlip ? 1 : 0].forEach((sd, k, a) => {
@@ -388,7 +390,10 @@ function VIZ3D(THREE) {
         sph.forEach((s) => { p.copy(s.center).sub(c); const z = D + p.dot(f), x = p.dot(rt), y = p.dot(up); u0 = Math.min(u0, (x - s.radius) / z); u1 = Math.max(u1, (x + s.radius) / z); v0 = Math.min(v0, (y - s.radius) / z); v1 = Math.max(v1, (y + s.radius) / z); });
         c.addScaledVector(rt, (u0 + u1) / 2 * D).addScaledVector(up, (v0 + v1) / 2 * D);
       }
-      D = Math.max(D, target.clone().add(bo).distanceTo(c) / FIT_MAX);  // не ближче, ніж FIT_MAX × колишній кадр з того самого кута
+      /* відстань, на якій людина займає ≈ 1 − FIT_T кадру (поле FIT_M лишається межею: ближче не буває); далі за неї камера не стоїть */
+      const tv2 = Math.tan(17 * RAD) * (1 - FIT_T), th2 = tv2 * 4 / 3;
+      let Dt = 0; sph.forEach((s) => { p.copy(s.center).sub(c); const z = p.dot(f); Dt = Math.max(Dt, (Math.abs(p.dot(up)) + s.radius) / tv2 - z, (Math.abs(p.dot(rt)) + s.radius) / th2 - z); });
+      D = Math.max(D, Math.min(Dt, target.clone().add(bo).distanceTo(c) / FIT_MAX));  // FIT_MAX × колишній кадр — лише там, де людина вже більша за ціль
       return { c, pos: c.clone().addScaledVector(d, D) };
     }
     const grid = []; for (let y = -YAW_GRID; y <= YAW_GRID + 1e-9; y += YAW_STEP) grid.push(fit(y));
