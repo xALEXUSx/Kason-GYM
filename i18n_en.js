@@ -1515,3 +1515,44 @@ I18N.add({
 I18N.add({
   "Вібрація: легка — коли відмічаєте підхід, помітна — коли скінчився відпочинок (на iPhone — легка й там).": "Vibration: a light one when you check off a set, a stronger one when rest is over (on iPhone it stays light)."
 });
+
+/* ---- розтяжка (3.27.11) ---- */
+I18N.add({
+  "Розтяжка грудей": "Chest stretch",
+  "Передпліччя на одвірку чи стійці, лікоть на рівні плеча. Крок уперед до легкого натягу в грудях.": "Forearm on a door frame or post, elbow at shoulder height. Step forward until you feel a light pull in your chest.",
+  "Розтяжка плеча": "Shoulder stretch",
+  "Рука через груди, плечі опущені. Другою рукою притисніть її вище ліктя, на сам лікоть не тисніть.": "Arm across your chest, shoulders down. With the other hand press above the elbow, not on the elbow itself.",
+  "Розтяжка передньої поверхні стегна": "Front-of-thigh stretch",
+  "Тримайтесь за стіну чи крісло, коліна поруч. Підтягніть пʼяту до сідниці; болить у коліні — менше.": "Hold a wall or chair, knees together. Pull your heel toward your buttock; if your knee hurts, pull less.",
+  "Розтяжка литки": "Calf stretch",
+  "Обличчям до стіни, руки на стіні, одна нога пряма позаду. Пʼята на підлозі, нахиляйтесь уперед до натягу в литці.": "Face a wall, hands on it, one leg straight behind you. Keep the heel down and lean forward until you feel it in your calf.",
+  "Розтяжка згиначів стегна": "Hip flexor stretch",
+  "Напівшпагат, коліно на подушці чи рушнику. Таз уперед, сідниця напружена, поперек не прогинайте.": "Half-kneeling, knee on a pillow or towel. Hips forward, glute tight, don’t arch your lower back.",
+  "Розтяжка задньої поверхні стегна": "Hamstring stretch",
+  "Лежачи на спині, обидві ноги зігнуті. Одну підніміть, візьміться за стегно й повільно випряміть до легкого натягу; віддає в ногу чи поперек — опустіть.": "Lie on your back, both knees bent. Lift one leg, hold your thigh and slowly straighten to a light pull; if it shoots down your leg or into your lower back, lower it.",
+  "Розтяжка сідниць": "Glute stretch",
+  "Лежачи на спині, другу ногу зігніть. Тягніть одне коліно до грудей за стегно, а не за коліно; поперек на підлозі.": "Lie on your back with the other knee bent. Pull one knee toward your chest by the thigh, not the knee; lower back on the floor.",
+  "До легкого натягу, без болю й ривків; дихайте рівно.": "To a light pull, no pain or bouncing; breathe evenly.",
+  "Розтяжку зроблено. Вставайте повільно.": "Stretching done. Get up slowly.",
+  "За бажанням спершу 5 хв повільної ходьби.": "If you like, start with 5 minutes of slow walking.",
+  "Передпліччя на опору, крок уперед": "Forearm on the support, step forward",
+  "Тримай 30 с — без болю й ривків": "Hold 30 s — no pain or bouncing",
+  "✕ Не прогинай поперек": "✕ Don’t arch your lower back",
+  "Рука через груди, плечі опущені": "Arm across your chest, shoulders down",
+  "Тримай 30 с — притискай вище ліктя": "Hold 30 s — press above the elbow",
+  "✕ Не тисни на сам лікоть": "✕ Don’t press on the elbow itself",
+  "Пʼяту до сідниці, коліна поруч": "Heel to buttock, knees together",
+  "Тримай 30 с — без болю в коліні": "Hold 30 s — no knee pain",
+  "Нога пряма позаду, пʼята на підлозі": "Back leg straight, heel down",
+  "Тримай 30 с — нахиляйся вперед усім тілом": "Hold 30 s — lean forward with your whole body",
+  "✕ Не відривай пʼяту": "✕ Keep your heel down",
+  "Напівшпагат, таз уперед, сідниця напружена": "Half-kneeling, hips forward, glute tight",
+  "Тримай 30 с — поперек рівний": "Hold 30 s — lower back neutral",
+  "За стегно — випрями ногу до легкого натягу": "Hold your thigh — straighten to a light pull",
+  "Тримай 30 с — поперек і таз на підлозі": "Hold 30 s — lower back and pelvis on the floor",
+  "✕ Не відривай таз": "✕ Keep your pelvis down",
+  "Коліно до грудей — тягни за стегно": "Knee to chest — pull by the thigh",
+  "Тримай 30 с — поперек на підлозі": "Hold 30 s — lower back on the floor",
+  "✕ Не підіймай плечі й голову": "✕ Don’t lift your shoulders and head",
+  "✕ Не нахиляйся вперед": "✕ Don’t lean forward"
+});

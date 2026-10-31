@@ -524,6 +524,8 @@ var GEN = (function () {
       if (!loadWarm) return null;                                            // лише петля: розминковий підхід застосунок не додає
       return has.gym && !has.db && !has.mach ? 'У залі п' + x.slice(1) : x;   // удома з петлею — лише в залі
     }).filter(function (x) { return x !== null; }) };
+    /* заминка — усім (з 3.27.11; слово Alexа 31.10 «так»): шаблон «лише петля вдома» її не мав — побічний наслідок, не рішення (розтяжку вага чи обмеження не забирають) */
+    if (!warm.items.some(function (x) { return /^#Заминка/.test(x); })) { warm.title = 'Розминка й заминка'; warm.items = warm.items.concat(GYM_WARM.slice(-2)); }
     out.push(warm);
     if (back) out.push(backGuide(ex, lists));
     if (has.db) out.push(pick('him', 'gear'));
@@ -536,6 +538,13 @@ var GEN = (function () {
     return out.filter(Boolean);
   }
 
-  return { VER: VER, maxDays: maxDays, GOALS: GOALS, GOAL_CLASH: GOAL_CLASH, goalsOf: goalsOf, goalText: goalText, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
+  /* Дні поспіль при 2–4 днях (з 3.27.11): усе тіло за тренування, тож ті самі мʼязи не встигають відпочити 48 год (ACSM 2011). На тижні з 7 днів 3 дні можна рознести повністю, а з 4 одна пара неминуча, тож показуємо лише зайві.
+     5–6 днів — «верх / низ» по черзі: дні поспіль там задумані. → [[день, наступний день], …] або [] */
+  function adjacentDays(days) {
+    var ds = (days || []).slice(), k = ds.length; if (k < 2 || k > 4) return [];
+    var pairs = ds.filter(function (d) { return ds.indexOf((d + 1) % 7) >= 0; }).map(function (d) { return [d, (d + 1) % 7]; });
+    return pairs.length > (k === 4 ? 1 : 0) ? pairs : [];
+  }
+  return { adjacentDays: adjacentDays, VER: VER, maxDays: maxDays, GOALS: GOALS, GOAL_CLASH: GOAL_CLASH, goalsOf: goalsOf, goalText: goalText, EQUIP: EQUIP, MACH: MACH, PULL: PULL, PLACES: PLACES, LIMITS: LIMITS, DAYS: DAYS, check: check, build: build, needs: needs, AVOID: AVOID, GAVOID: GAVOID, GYM: GYM, GYM_WARM: GYM_WARM, GYM_WARM_SHORT: GYM_WARM_SHORT, HOME_WARM_SHORT: HOME_WARM_SHORT };
 })();
 if (typeof module !== 'undefined') module.exports = GEN;

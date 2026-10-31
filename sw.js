@@ -1,7 +1,7 @@
 /* Робота без інтернету. Файли застосунку — спершу з мережі (щоб одразу бачити оновлення), без мережі — з кешу.
    Голоси тренера — в окремому кеші й не стираються з оновленням. */
-const CACHE = 'trening-3.27.10', VCACHE = 'trening-voices';
-const FILES = ['./', 'index.html', 'i18n.js', 'i18n_en.js', 'program.js', 'engine.js', 'voice.js', 'coach.js', 'radio.js', 'voicepack.js', 'tips.js', 'charts.js', 'store.js', 'generator.js', 'food_db.js', 'kitchen.js', 'coachctx.js', 'app.js', 'accounts.js', 'manifest.webmanifest', 'icon-32.png', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'fonts/manrope-cyrillic.woff2', 'fonts/manrope-latin.woff2',
+const CACHE = 'trening-3.27.11', VCACHE = 'trening-voices';
+const FILES = ['./', 'index.html', 'i18n.js', 'i18n_en.js', 'program.js', 'engine.js', 'voice.js', 'coach.js', 'radio.js', 'voicepack.js', 'tips.js', 'charts.js', 'store.js', 'generator.js', 'food_db.js', 'kitchen.js', 'coachctx.js', 'stretch.js', 'app.js', 'accounts.js', 'manifest.webmanifest', 'icon-32.png', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'fonts/manrope-cyrillic.woff2', 'fonts/manrope-latin.woff2',
   /* 3D-рух на картці підходу (з 3.22.0) — у кеші одразу: у залі без звʼязку відкриється й уперше */
   'viz.js', 'viz/engine3d.js', 'viz/equip3d.js', 'viz/ex3d.js', 'vendor/three/three.module.min.js', 'vendor/three/three.core.min.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'no-cache' })))).catch(() => {}).then(() => self.skipWaiting())); });

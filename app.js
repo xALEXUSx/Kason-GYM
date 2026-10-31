@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.10';
+  const VERSION = '3.27.11';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -175,9 +175,17 @@ window.APP_START = () => {
 
   let toastT = null;
   function toast(msg, gold) {
-    const t = document.getElementById('toast'); t.textContent = msg; t.className = 'on' + (gold ? ' gold' : '');
+    const t = document.getElementById('toast'); t.textContent = msg; t.className = 'on' + (gold ? ' gold' : ''); t.style.transform = t.style.opacity = '';
     clearTimeout(toastT); toastT = setTimeout(() => { t.className = ''; }, 3200);
   }
+  /* спливне повідомлення прибирається пальцем (з 3.27.11; слово Alexа 31.10: «Такі вспливаючі вікна мають зоортатись палцем, а не кати поки вони самі згорнуться»; воно ще й закриває кнопки вгорі): змах або дотик; під пальцем саме не зникає */
+  (function toastSwipe() {
+    const t = document.getElementById('toast'); if (!t) return; let st = null;
+    t.addEventListener('pointerdown', (e) => { st = { x: e.clientX, y: e.clientY }; clearTimeout(toastT); try { t.setPointerCapture(e.pointerId); } catch (x) { /* немає */ } });
+    t.addEventListener('pointermove', (e) => { if (!st) return; const dx = e.clientX - st.x, dy = Math.min(0, e.clientY - st.y); t.style.transform = `translate(${dx}px, ${dy}px)`; t.style.opacity = String(Math.max(0.3, 1 - (Math.abs(dx) + Math.abs(dy)) / 160)); });
+    t.addEventListener('pointerup', () => { if (!st) return; st = null; t.className = ''; t.style.transform = t.style.opacity = ''; });
+    t.addEventListener('pointercancel', () => { st = null; t.style.transform = t.style.opacity = ''; toastT = setTimeout(() => { t.className = ''; }, 3200); });
+  })();
   function haptic(pattern) {
     if (!S().haptics) return;
     try { document.getElementById('hapLb').click(); } catch (e) { /* немає */ }
@@ -461,7 +469,7 @@ window.APP_START = () => {
       <div class="pick">`)}${[['back', LL('Грижа або біль у спині', "Herniated disc or back pain"), LL('грижа, протрузія, часто болить поперек', "herniated or bulging disc, frequent lower back pain")], ['knees', LL('Коліна', "Knees"), LL('біль або травма коліна', "knee pain or injury")], ['shoulders', LL('Плечі', "Shoulders"), LL('біль або травма плеча', "shoulder pain or injury")], ['heart', LL('Тиск або серце', "Blood pressure or heart"), LL('гіпертонія, хвороби серця', "hypertension, heart disease")], ['pregnant', LL('Вагітність', "Pregnancy"), ''], ['none', LL('Нічого з цього', "None of these"), '']].filter(([v]) => v !== 'pregnant' || a.sex !== 'm').map(([v, l, d]) => opt('qLimit', v, l, d, a.limits.indexOf(v) >= 0)).join('')}</div>${err('limits')}`;
     else if (step === 'days') body = `${LL(`<h1>Дні тренувань</h1><p class="muted small">${GEN.maxDays(a) === 4 ? 'Оберіть від 2 до 4 днів — усе тіло за тренування, краще з днем відпочинку між ними. Для 55+ і з тиском чи серцем 5–6 днів не пропонуємо: з обережними 3 підходами на вправу «верх / низ» дає менше роботи, ніж 3–4 дні, а поради для серця — про 2–3 силові тренування на тиждень.' : 'Оберіть від 2 до 6 днів. 2–4 дні — усе тіло за тренування, краще з днем відпочинку між ними; 5–6 — по черзі «верх» і «низ» тіла: тренування коротші, кожна група мʼязів 2–3 рази на тиждень.'}</p>
       <div class="qdays">`, `<h1>Workout days</h1><p class="muted small">${GEN.maxDays(a) === 4 ? 'Pick 2 to 4 days — full body each workout, ideally with a rest day in between. For 55+ and with blood pressure or heart issues we don’t offer 5–6 days: with careful 3 sets per exercise, upper/lower gives less work than 3–4 days, and heart guidance is about 2–3 strength workouts a week.' : 'Pick 2 to 6 days. 2–4 days — full body each workout, ideally with a rest day in between; 5–6 — upper and lower body in turn: shorter workouts, each muscle group 2–3 times a week.'}</p>
-      <div class="qdays">`)}${GEN.DAYS.map(([d, l]) => opt('qDay', d, TR(l), '', a.days.indexOf(d) >= 0)).join('')}</div>${err('days')}`;
+      <div class="qdays">`)}${GEN.DAYS.map(([d, l]) => opt('qDay', d, TR(l), '', a.days.indexOf(d) >= 0)).join('')}</div>${adjacentNote(a.days)}${err('days')}`;
     else {
       const blk = GEN.check(a).block, lim = a.limits.filter((x) => x !== 'none');
       /* підсумок відповідей: біля кожної — «Змінити» (з 3.27.0): відкриває цей крок, «Готово» повертає сюди */
@@ -508,7 +516,7 @@ window.APP_START = () => {
     p.days = a.days.slice().sort(); p.handle = a.handle; p.units = a.units === 'lb' ? 'lb' : 'kg'; p.inv = {}; PLATES(p.units === 'lb').forEach((k) => { p.inv[k] = a.inv[k] || 0; });
     if (!fresh && was !== p.units) logToUnits(p, PROGRAMS.me, p.units === 'lb', p.inv);  // з 3.27.7 — як «Більше» → «Одиниці» (гриф і диски вже в нових одиницях)
     p.me = Object.assign({}, p.me || {}, { height: a.height, age: a.age });
-    if (!fresh) keepWeek(p, oldPw, PROGRAMS.me);
+    if (!fresh) { keepWeek(p, oldPw, PROGRAMS.me); if (oldPw && oldPw !== PROGRAMS.me.perWeek) daysToast(PROGRAMS.me.perWeek); }
     if (p.draft) p.draft = null;
     /* новому користувачеві картка «Нове» ні до чого — для нього все нове */
     if (fresh && Object.keys(DB.profiles).length === 1) { S().tour.v3 = true; S().tour.v4 = true; S().tour.v5 = true; }  // v5 — 3.24.0
@@ -696,7 +704,7 @@ window.APP_START = () => {
   const KG_SAY = /^\d+(,\d+)?( з половиною)? (кілограм|фунт)(а|и|ів)?( дисків)?\.$/, ON_SCREEN = LL('Вага — на екрані.', "The weight is on the screen.");
   const packId = () => { const v = S().voice; return v.packs && DB.active ? v.packs[DB.active] || '' : ''; };
   /* Хто зараз говорить і чому — видно в «Більше» → «Голосовий тренер» (щоб не гадати, чому звучить системний голос). */
-  const voiceInfo = { mode: '', why: '' };
+  const voiceInfo = { mode: '', why: '', skip: '', skipAt: 0 };
   function sysSay(text, why) { voiceInfo.mode = 'system'; voiceInfo.why = why; return VOICE.say(text); }
   /* Автоматичний голос тренера (з 3.21.8; слово Alexа 24.10: «потрібна кнопка яка вимикає/вмикає голос тренера під час тренування.
      за замовчування він має бути увімкненим завжди але в налаштуваннях … вимкнути … повністю, частково або не вимикати»):
@@ -715,7 +723,9 @@ window.APP_START = () => {
   let vEpoch = 0;
   function talk(t, force) {
     const ep = vEpoch;
-    if (!S().voice.on || (!force && vAuto() === 'off') || ASK.st === 'talk' || ASK.rec) return false;  // говорить тренер-співрозмовник або людина — фразу тренування пропускаємо
+    /* говорить тренер-співрозмовник або людина — фразу тренування пропускаємо; причину видно в «Більше» → «Голосовий тренер» (з 3.27.11: щоб тиша не лишалась без пояснення) */
+    const skip = !S().voice.on ? LL('голос тренера вимкнено в налаштуваннях', "the coach voice is off in settings") : (!force && vAuto() === 'off') ? LL('голос вимкнено кнопкою з динаміком або в налаштуваннях', "the voice is off via the speaker button or in settings") : ASK.rec ? LL('іде запис вашого питання', "your question is being recorded") : ASK.st === 'talk' ? LL('відповідає тренер-співрозмовник', "the voice coach is answering") : '';
+    if (skip) { voiceInfo.skip = skip; voiceInfo.skipAt = Date.now(); return false; }
     const text = sp(t), id = I18N.lang === 'en' ? '' : packId();  // англійською — голос телефона: записані голоси українські
     if (I18N.lang === 'en') return sysSay(text, 'English: phone voice');
     if (!id) return sysSay(text, VPACKS.length ? LL('у налаштуваннях обрано системний голос', "system voice is selected in settings") : LL('записані голоси ще не завантажились', "recorded voices haven’t loaded yet"));
@@ -765,8 +775,34 @@ window.APP_START = () => {
   function beginWorkout(wid, place) {
     const prog = G();
     if (prog.gymWorkouts && !place) return placeSheet(wid);
+    if (ui.restOk) ui.restOk = false; else { const w = restCheck(wid, place); if (w) return restSheet(wid, place, w); }
     if (prog.custom && !prog.askReady) return prepCard(wid, place) ? prepSheet(wid, place) : startWorkout(wid, 'g', place);
     return readySheet(wid, place);
+  }
+  /* Відхилення від розкладу на старті (з 3.27.11; слова Alexа 31.10 — ENGINE.restWarn): ті самі мʼязи тренувались сьогодні чи вчора. Лише попередження: людина вирішує сама, план не змінюється */
+  function restCheck(wid, place) {
+    let d = null; try { d = buildDraft(wid, 'g', place, ui.shortNext); } catch (e) { return null; }
+    return ENGINE.restWarn(G(), d.items.map((x) => x.ex), P().sessions, trainDays(), Date.now());
+  }
+  function restSheet(wid, place, w) {
+    const attr = `data-w="${wid || ''}" data-p="${place || ''}"`, names = w.muscles.map(mName).join(', ');
+    openSheet(`<b>⏳ ${LL('Мʼязи ще відпочивають', 'These muscles are still recovering')}</b>
+      <p class="small">${esc(names)}: ${w.today ? LL('уже тренувались сьогодні', 'already trained today') : LL(`тренувались ${w.h} год тому`, `trained ${w.h} h ago`)}. ${LL('Орієнтир — щонайменше 48 год між тренуваннями тих самих мʼязів (ACSM).', 'The guideline is at least 48 hours between workouts for the same muscles (ACSM).')}</p>
+      <button type="button" class="pri wide" data-act="closeSheet" data-tip="${esc(LL('Сьогодні без тренування. План не зсувається: наступне тренування лишається тим самим.', 'No workout today. The plan doesn’t shift: your next workout stays the same.'))}">${LL('Завтра', 'Tomorrow')}</button>
+      ${ui.shortNext ? '' : `<button type="button" class="wide" style="margin-top:8px" data-act="restGo" data-short="1" ${attr} data-tip="${esc(SHORT_TIP())}">${LL('Коротка версія', 'Short version')}</button>`}
+      <button type="button" class="ghost wide" style="margin-top:8px" data-act="restGo" ${attr} data-tip="${esc(LL('Почати, як заплановано. Ви вирішуєте самі; план від цього не змінюється.', 'Start as planned. It’s your call; the plan doesn’t change.'))}">${LL('Все одно почати', 'Start anyway')}</button>`);
+    const say = recOnly(LL('Ці мʼязи ще відпочивають — краще завтра або коротка версія.', 'These muscles are still recovering — better tomorrow or the short version.'));
+    if (say) talk(say);
+  }
+  /* дні поспіль при 2–4 днях (GEN.adjacentDays) — пояснення під вибором днів; не заборона */
+  function adjacentNote(days) {
+    const pairs = GEN.adjacentDays(days); if (!pairs.length) return '';
+    return `<p class="note w small" style="margin-top:8px">${LL('Дні поспіль: ', 'Back-to-back days: ')}${pairs.map(([x, y]) => DAYS[x] + LL(' і ', ' and ') + DAYS[y]).join(', ')}. ${LL('Усе тіло за тренування, тож ті самі мʼязи не встигнуть відпочити 48 год. Краще з днем між ними.', 'Each workout covers the whole body, so the same muscles won’t get 48 hours of rest. Better with a day between them.')}</p>`;
+  }
+  /* що змінилось у програмі зі зміною кількості днів (тиждень і історія — ті самі: keepWeek) */
+  function daysToast(n) {
+    toast(n >= 5 ? LL(`Тепер ${n} тренувань на тиждень: по черзі «верх» і «низ» тіла. Тиждень програми той самий, історія збережена.`, `Now ${n} workouts a week: upper and lower body in turn. Same program week, history kept.`)
+      : LL(`Тепер ${n} тренування на тиждень: усе тіло, А і Б по черзі. Тиждень програми той самий, історія збережена.`, `Now ${n} workouts a week: full body, A and B in turn. Same program week, history kept.`));
   }
   /* «Що підготувати» перед стартом — удома всім (з 3.27.7; слово Alexа 26.10: «показуй «Що підготувати» вдома всім перед стартом»):
      кого питають про спину — блок у «Як спина сьогодні?»; решті — це вікно з «Почати»; без гантелей, еспандера й тренажерів — одразу старт */
@@ -913,11 +949,6 @@ window.APP_START = () => {
   /* розминка й заминка: для «і вдома, і в залі» в день залу — залу (без квартири й крісла), інакше — з довідки програми */
   /* raw — український оригінал (у ньому позначки «#Заминка», «Перед першою…»); без raw — мовою застосунку, рядок у рядок */
   function warmSrc(raw) { const d = P() && P().draft, prog = raw ? PROGRAMS[DB.active] : G(); const w = d && d.place === 'gym' && prog.gymWorkouts ? { id: 'warm', items: prog.gymWarm || GEN.GYM_WARM } : (prog.guide || []).find((g) => g.id === 'warm'); return w && !raw && w.items === (PROGRAMS[DB.active].gymWarm || GEN.GYM_WARM) ? { id: w.id, items: w.items.map(TR) } : w; }
-  function coolText() {
-    const r = warmSrc(true), w = warmSrc(); if (!r || !w) return '';
-    const k = r.items.findIndex((x) => /^#Заминка/.test(x)); if (k < 0) return '';
-    return w.items.slice(k + 1).join(' ');
-  }
   function warmList() {
     const r = warmSrc(true), w = warmSrc(); if (!r || !w) return { title: LL('Розминка', "Warm-up"), items: [] };
     let title = LL('Розминка', "Warm-up"); const items = [];
@@ -1012,7 +1043,7 @@ window.APP_START = () => {
     let t = pre || '';
     if (!d.coach.half && st.total >= 6 && st.done * 2 >= st.total && nx) { d.coach.half = true; t += vAuto() === 'part' ? '' : hard() ? L('half', 0) : LL('Половина тренування позаду. ', "Halfway there. "); }
     save();
-    if (!nx) { stopTimer(); const gs = gSay(d, 'cool'); rWorkout(); talk(t + LL('Усі підходи зроблено. ', "All sets done. ") + (coolText() ? LL('Заминка. ', "Cool-down. ") + (vAuto() === 'part' ? '' : coolText()) : LL('Можна завершувати.', "You can wrap up now.")) + gs); return; }
+    if (!nx) { stopTimer(); const sx = wMode() === 'list' ? null : stCur(d), gs = sx ? '' : gSay(d, 'cool'); rWorkout(); talk(t + LL('Усі підходи зроблено. ', "All sets done. ") + (sx ? LL('Розтяжка. ', "Stretching. ") + stSay(sx) : LL('Можна завершувати.', "You can wrap up now.")) + gs); return; }
     const left = ENGINE.stepOrder(d.items).filter((x) => !d.items[x.i].sets[x.j].done).length;
     const rest = ENGINE.restAfter(d.items, i, j), lastTxt = left === 1 ? LL('Останній підхід тренування. ', "Last set of the workout. ") : '';
     const nIt = d.items[nx.i], restLine = nIt.sets.filter((x) => x.done).length >= 2 ? L('rest', d.n + i + j) : '';
@@ -1034,6 +1065,7 @@ window.APP_START = () => {
   }
   function onTimerEnd(kind) {
     const d = P() && P().draft; if (!d) return;
+    if (kind === 'hold' || kind === 'holdgap') return stTimerEnd(d, kind);
     if (kind === 'myo') { talk(LL('Ще від трьох до пʼяти повторень.', "Three to five more reps.")); rWorkout(); return; }
     const cs = curStep(d), gs = cs ? gSay(d, 'card') : '';
     talk(cs ? LL('Час! ', "Time! ") + G().ex[d.items[cs.i].ex].name + '.' + gs : LL('Час!', "Time!"));
@@ -1060,7 +1092,7 @@ window.APP_START = () => {
     const list = wMode() === 'list';
     return `${LL(`<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="згорнути">⌄</button>
       <div class="t"><b>`, `<div class="wbar"><button type="button" class="ghost" data-act="minimize" aria-label="minimize">⌄</button>
-      <div class="t"><b>`)}${esc(wTitle(d))}</b><span id="elapsed">0:00</span> · <span>${st.done}/${st.total}${LL(`</span></div>
+      <div class="t"><b>`)}${esc(wTitle(d))}</b> · <span id="elapsed">0:00</span> · <span>${st.done}/${st.total}${LL(`</span></div>
       <div class="wbr"><button type="button" class="ic" data-act="ask" aria-label="запитати тренера">`, `</span></div>
       <div class="wbr"><button type="button" class="ic" data-act="ask" aria-label="ask the coach">`)}${ICON.mic}</button>${vBtn()}<button type="button" class="ic${RADIO.state === 'playing' || RADIO.state === 'loading' ? ' rad' : ''}${LL(`" id="radBtn" data-act="radio" aria-label="радіо">`, `" id="radBtn" data-act="radio" aria-label="radio">`)}${ICON.radio}</button><button type="button" class="ic" id="modeBtn" data-act="mode" aria-label="${list ? LL('режим тренера', "coach mode") : LL('список усіх вправ', "list of all exercises")}">${list ? ICON.coach : ICON.list}${LL(`</button><button type="button" class="pri" data-act="finish">Готово</button></div>
       <div class="wradio" id="wRadio">`, `</button><button type="button" class="pri" data-act="finish">Finish</button></div>
@@ -1094,7 +1126,7 @@ window.APP_START = () => {
     else if (T.id && T.kind === 'myo') body = myoPauseCard(d);
     else if (d.coach.myo) body = myoMiniCard(d);
     else if (T.id && T.kind === 'rest') body = restCard(d);
-    else { const cs = curStep(d); body = cs ? setCard(d, cs) : coolCard(); }
+    else { const cs = curStep(d); body = cs ? setCard(d, cs) : stCur(d) ? stretchCard(d) : coolCard(); }
     app.innerHTML = wbar(d, prog, st) + body;
     vizAttach(d);
     startElapsed(d); keepAwake(true);
@@ -1139,16 +1171,17 @@ window.APP_START = () => {
       ${plateLine(ex, it, s.load)}
       ${s.prev && s.type !== 'W' ? `<button type="button" class="ghost cprev" data-act="copyprev" ${ij}${LL(`>Минулого: `, `>Last time: `)}${esc(setText(ex, s.prev))}${LL(` — повторити</button>`, ` — repeat</button>`)}` : ''}
       ${rir}
-      <button type="button" class="pri wide big cdone" data-act="cdone">✓ ${s.type === 'W' ? LL('Розминковий підхід зроблено', "Warm-up set done") : LL('Підхід виконано', "Set done")}</button>
-      ${vizBox(d, it)}${techHtml(it.ex, !it.sets.some((x) => x.done) && !vizOpen(d, it))}${LL(`
+      <button type="button" class="pri wide big cdone" data-act="cdone">✓ ${s.type === 'W' ? LL('Розминковий підхід зроблено', "Warm-up set done") : LL('Підхід виконано', "Set done")}</button>${LL(`
       <div class="grid3 cacts"><button type="button" data-act="say" data-what="tip">🔊 Як робити</button><button type="button" data-act="say" data-what="set">🔁 Повторити</button><button type="button" id="cMore" data-act="exmenu" data-i="`, `
-      <div class="grid3 cacts"><button type="button" data-act="say" data-what="tip">🔊 How to do it</button><button type="button" data-act="say" data-what="set">🔁 Repeat</button><button type="button" id="cMore" data-act="exmenu" data-i="`)}${cs.i}${LL(`">⋯ Ще</button></div>
-      </div>`, `">⋯ More</button></div>
-      </div>`)}${upcoming(d, cs)}${phaseBox(d)}`;
+      <div class="grid3 cacts"><button type="button" data-act="say" data-what="tip">🔊 How to do it</button><button type="button" data-act="say" data-what="set">🔁 Repeat</button><button type="button" id="cMore" data-act="exmenu" data-i="`)}${cs.i}${LL(`">⋯ Ще</button></div>`, `">⋯ More</button></div>`)}
+      ${vizBox(d, it)}${techHtml(it.ex, !it.sets.some((x) => x.done) && !vizOpen(d, it))}
+      </div>${upcoming(d, cs)}${phaseBox(d)}`;
   }
   /* 3D-рух (з 3.22.0; слово Alexа 24.10: «Роби день 5 візуалізації: у застосунок, лише картка підходу «Тренер»»): лише тут — картка підходу «Тренер».
      Розгорнутий на першому підході нової вправи чи нового варіанта (it.first — історії немає), далі — згорнутий; що людина відкрила чи згорнула — у чернетці (d.vz).
-     Місце — під кнопкою «Підхід виконано», над «Як робити» (огляд 24.10, слово Alexа: «3D під кнопку «Підхід виконано»»): над ціллю розгорнутий блок ховав ціль і кнопку
+     Ряд «Як робити / Повторити / ⋯ Ще» — одразу під «Підхід виконано» (з 3.27.11; слово Alexа 31.10: «кнопка ...ЩЕ не завжди працює»; «Так, обидві»): унизу картки до нього треба було гортати,
+     а дотик, поки сторінка докочується, до застосунку не доходить (замір у Safari симулятора, tests/browser/iosmore.js: під час докочування — 0 з 5, сторінка стоїть — 7 з 7).
+     Місце 3D — під цим рядом, над «Як робити» (огляд 24.10, слово Alexа: «3D під кнопку «Підхід виконано»»): над ціллю розгорнутий блок ховав ціль і кнопку
      за край екрана на першому підході кожної нової вправи (кнопка — до 1228 px при екрані 878, у Safari — 699); поки 3D розгорнуте, «Як робити» згорнуте.
      Анімація, тема, «Зменшити рух», кадри — у viz.js; анімація — та сама, що в атласі (tools/viz/atlas3d.html) */
   const vzKey = (it) => VIZ.keyFor(it.ex, it.variant, (PROGRAMS[DB.active] && PROGRAMS[DB.active].ex[it.ex]) || GEN.GYM.ex[it.ex]);
@@ -1205,7 +1238,7 @@ window.APP_START = () => {
     const nx = curStep(d), prog = G(), last = d.coach.last;
     let nxt = '';
     /* під «Далі» — 3D наступної вправи (з 3.27.8); «✎ Виправити щойно зроблений підхід» — над «Далі»: він про підхід, який щойно зробили, і лишається на першому екрані */
-    if (nx) { const it = d.items[nx.i], ex = prog.ex[it.ex], s = it.sets[nx.j]; nxt = `${LL(`<div class="cnext"><span class="tiny muted">Далі`, `<div class="cnext"><span class="tiny muted">Up next`)}${it.ss ? LL(' · суперсет ', " · superset ") + it.ss.g : ''}</span><b>${esc(ex.name)}</b><span class="small">${esc(stepTitle(d, nx))} · ${esc(setText(ex, s))}${ex.side ? LL(' на бік', " per side") : ''}</span>${plateLine(ex, it, s.load)}</div>${vizBox(d, it, true)}`; }
+    if (nx) { const it = d.items[nx.i], ex = prog.ex[it.ex], s = it.sets[nx.j]; nxt = `${LL(`<div class="cnext"><span class="tiny muted">Далі`, `<div class="cnext"><span class="tiny muted">Up next`)}${it.ss ? LL(' · суперсет ', " · superset ") + it.ss.g : ''}</span><b>${esc(ex.name)}</b><span class="small">${esc(stepTitle(d, nx))} · ${esc(setText(ex, s))}${ex.side ? LL(' на бік', " per side") : ''}</span>${plateLine(ex, it, s.load)}${it.sets.some((x) => x.done) ? '' : `<button type="button" class="ghost wide cswap" data-act="swap" data-i="${nx.i}" data-tip="${esc(LL('Тренажер зайнятий чи вправа не підходить — рівноцінна заміна на ті самі мʼязи. Лише поки вправу не почато; вправи, що вже є в сьогоднішньому тренуванні, не пропонуються.', 'Machine taken or the exercise doesn’t suit you — an equivalent swap for the same muscles. Only before you start the exercise; exercises already in today’s workout aren’t offered.'))}">🔄 ${LL('Замінити вправу', 'Swap exercise')}</button>`}</div>${vizBox(d, it, true)}`; }
     return `<div class="coach crest"><div class="cring">${ringSvg()}${LL(`<div class="ctime"><b id="cTime">0:00</b><span>відпочинок</span></div></div>
       <div class="grid3"><button type="button" data-act="tadd" data-v="-15">−15 с</button><button type="button" data-act="tadd" data-v="15">+15 с</button><button type="button" class="pri" data-act="tskip">Почати</button></div>
       `, `<div class="ctime"><b id="cTime">0:00</b><span>rest</span></div></div>
@@ -1245,11 +1278,46 @@ window.APP_START = () => {
       <button type="button" class="pri wide big" data-act="cwarm">✓ Warm-up done</button>
       <div class="grid2 cacts"><button type="button" data-act="say" data-what="warm">🔊 Listen</button><button type="button" data-act="cwarm" data-skip="1">Skip</button></div></div>`)}${phaseBox(P().draft)}`;
   }
+  /* розтяжка — останній блок тренування (з 3.27.11; слова Alexа 31.10: «розтяжка має бути частиною тренування», «Так, останнім блоком»; дані — app/stretch.js): «Більше» → «Тренування» — повний набір, коротка чи вимкнути. Стан — у чернетці (d.sb), набір фіксується, коли підходи скінчились; підходи, рекорди й калорії блок не чіпає */
+  const stMode = () => S().stretch || 'short';
+  const stLim = () => { const l = (((DB.custom || {}).answers || {}).limits || []).slice(); if (G().backCare && l.indexOf('back') < 0) l.push('back'); return l; };
+  const stBox = (d) => d.sb || (d.sb = { ids: STRETCH.pick(stMode(), stLim()), i: 0, side: 0 });
+  const stCur = (d) => { const b = stBox(d); return b.i < b.ids.length ? STRETCH.byId(b.ids[b.i]) : null; };
+  const stSay = (x) => TR(x.name) + '. ' + (vAuto() === 'part' ? '' : TR(x.how));
+  function stNext(d) {
+    stopTimer(); const b = stBox(d); b.i++; b.side = 0; save();
+    const x = stCur(d), gs = x ? '' : gSay(d, 'cool');  /* «Вести за руку»: про «Завершити тренування» — лише після розтяжки */
+    talk((x ? stSay(x) : TR(STRETCH.END)) + gs);
+    if (view === 'workout') { rWorkout(); window.scrollTo(0, 0); }
+  }
+  /* кінець таймера: правий бік → 5 с змінити бік → лівий бік → наступна вправа (Почати — знову дотиком: між вправами людина міняє положення) */
+  function stTimerEnd(d, kind) {
+    const b = stBox(d);
+    if (kind === 'holdgap') { startTimer(STRETCH.HOLD, T.next, 'hold'); if (view === 'workout') rWorkout(); return; }
+    if (!b.side) { b.side = 1; save(); talk(LL('Лівий бік.', 'Left side.')); startTimer(STRETCH.SWITCH, T.next, 'holdgap'); if (view === 'workout') rWorkout(); return; }
+    stNext(d);
+  }
+  function stretchCard(d) {
+    const b = stBox(d), x = stCur(d), run = T.id && (T.kind === 'hold' || T.kind === 'holdgap') && T.end > Date.now();
+    const closed = Object.keys(d.vz || {}).some((k) => /^s_/.test(k) && d.vz[k] === false);
+    const viz = typeof VIZ === 'undefined' || !VIZ.has(x.key) ? '' : `<details class="vz3" data-k="${x.key}"${closed ? '' : ' open'}><summary data-tip="${esc(LL('Дотик — згорнути чи показати 3D: як робити саме цю вправу.', 'Tap to hide or show the 3D of this stretch.'))}"><b>${LL('Як робити — 3D', 'How to do it — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>${vizInner()}</details>`;
+    const ring = run ? `<div class="cring">${ringSvg()}<div class="ctime"><b id="cTime">0:${STRETCH.HOLD}</b><span>${T.kind === 'holdgap' ? LL('змініть бік', 'switch sides') : b.side ? LL('лівий бік', 'left side') : LL('правий бік', 'right side')}</span></div></div>` : '';
+    return `<div class="coach"><div class="cchips"><span class="chip a">${LL('Розтяжка', 'Stretching')} · ${b.i + 1} ${LL('з', 'of')} ${b.ids.length}</span></div><h1 class="cname">${esc(TR(x.name))}</h1>
+      <p>${esc(TR(x.how))}</p>${ring}${run ? '' : `<button type="button" class="pri wide big" data-act="stGo" data-tip="${esc(LL('Таймер: 30 секунд на правий бік, 5 секунд змінити бік, 30 секунд на лівий. Далі — наступна вправа.', 'Timer: 30 seconds on the right side, 5 seconds to switch, 30 seconds on the left. Then the next stretch.'))}">▶ ${LL('Почати · 30 с на кожен бік', 'Start · 30 s each side')}</button>`}
+      <div class="grid2 cacts"><button type="button" data-act="say" data-what="stretch" data-tip="${esc(LL('Тренер прочитає, як робити цю вправу.', 'The coach reads how to do this stretch.'))}">${LL('🔊 Прослухати', '🔊 Listen')}</button><button type="button" data-act="stNext" data-tip="${esc(LL('Пропустити цю вправу — наприклад, якщо болить чи немає місця.', 'Skip this stretch — for example, if it hurts or there’s no room.'))}">${LL('Пропустити', 'Skip')}</button></div>
+      ${viz}<p class="small muted">${esc(TR(STRETCH.RULE))}${b.i === 0 ? ' ' + esc(TR(STRETCH.WALK)) : ''}</p>
+      <button type="button" class="ghost wide" data-act="finish" data-tip="${esc(LL('Завершити тренування зараз — зроблені підходи збережуться.', 'Finish the workout now — your sets are saved.'))}">${LL('Завершити тренування', 'Finish workout')}</button></div>`;
+  }
+  /* екран «Список»: що входить і перехід до таймера (той самий блок на екрані «Тренер»; лише на це тренування) */
+  function stListNote() {
+    const ids = STRETCH.pick(stMode(), stLim()); if (!ids.length) return '';
+    return `<div class="note ok small"><b>${LL('Розтяжка', 'Stretching')} · ≈ ${STRETCH.mins(ids)} ${LL('хв', 'min')}:</b> ${esc(ids.map((id) => TR(STRETCH.byId(id).name)).join(' · '))}. ${LL('По 30 с на кожен бік.', '30 s each side.')} <button type="button" class="sm" data-act="mode" style="margin-top:6px" data-tip="${esc(LL('Перейти на екран «Тренер»: таймер, 3D і голос. Лише на це тренування.', 'Switch to the Coach screen: timer, 3D and voice. For this workout only.'))}">${LL('▶ З таймером і 3D', '▶ With timer and 3D')}</button></div>`;
+  }
   function coolCard() {
-    const c = coolText();
+    const b = stBox(P().draft), c = b.ids.length ? TR(STRETCH.END) : '';
     return `${LL(`<div class="coach"><div class="cchips"><span class="chip ok">Усі підходи зроблено</span></div><h1 class="cname">Майже все 🎉</h1>
       `, `<div class="coach"><div class="cchips"><span class="chip ok">All sets done</span></div><h1 class="cname">Almost done 🎉</h1>
-      `)}${c ? `${LL(`<p><b>Заминка.</b> `, `<p><b>Cool-down.</b> `)}${esc(c)}</p>` : LL('<p>Можна завершувати тренування.</p>', "<p>You can finish your workout now.</p>")}${LL(`
+      `)}${c ? `<p>${esc(c)}</p>` : LL('<p>Можна завершувати тренування.</p>', "<p>You can finish your workout now.</p>")}${LL(`
       <button type="button" class="pri wide big" data-act="finish">Завершити тренування</button><p></p>
       <button type="button" class="ghost wide" data-act="mode">☰ Переглянути всі підходи</button></div>`, `
       <button type="button" class="pri wide big" data-act="finish">Finish workout</button><p></p>
@@ -1300,7 +1368,7 @@ window.APP_START = () => {
       `, `
       <p class="small muted">Set letters: <b>W</b> warm-up · <b>D</b> drop · <b>F</b> to failure · <b>M</b> myo; a number means a working set.<br>💡 Not sure what something means? Press and hold any button or label to see a tip.</p>
       `)}${d.items.map((_, i) => exCard(d, i)).join('')}
-      ${coolText() ? `${LL(`<div class="note ok small"><b>Заминка:</b> `, `<div class="note ok small"><b>Cool-down:</b> `)}${esc(coolText())}</div>` : ''}${LL(`
+      ${stListNote()}${LL(`
       <button type="button" class="pri wide big" data-act="finish">Завершити тренування</button><p></p>
       <button type="button" class="ghost wide" data-act="discard">Скасувати тренування</button>`, `
       <button type="button" class="pri wide big" data-act="finish">Finish workout</button><p></p>
@@ -1687,6 +1755,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🗣 Запитайте тренера</b><div class="small muted">Кнопка з мікрофоном на головному екрані й у тренуванні: питайте голосом або текстом — тренер відповідає за вашою програмою (тиждень, вага, техніка, застосунок) і своїм голосом. Потрібен інтернет.</div></li>
         <li style="display:block"><b>📷 Фото тренеру</b><div class="small muted">У чаті тренера — кнопка з камерою: сфотографуйте тренажер, гантелі чи табличку тренажера й запитайте — тренер скаже, що це і як воно у вашій програмі.</div></li>
         <li style="display:block"><b>📝 Програма за анкетою</b><div class="small muted">Складається під вас: мета, досвід, обладнання, здоровʼя, дні тренувань. Змінити відповіді — «Більше» → «Змінити анкету й оновити програму»; історія тренувань лишається.</div></li>
+        <li style="display:block"><b>🧘 Розтяжка в кінці</b><div class="small muted">Останній блок тренування: 30 с на кожен бік, таймер, 3D і голос. Повний набір, коротка чи вимкнути — «Більше» → «Тренування».</div></li>
         <li style="display:block"><b>🏋️ Удома й у залі</b><div class="small muted">В анкеті — де тренуєтесь. У залі ті самі тренування на тренажерах і блоках; «і вдома, і в залі» — перед тренуванням застосунок спитає, де ви сьогодні. Тренажер зайнятий — «Ще» → «Замінити». Інший крок ваги у вашому залі (2,5 чи 4,5 кг) застосунок підхоплює з ваших ваг.</div></li>
         <li style="display:block"><b>⬇ Дроп-сет і розминка за станом</b><div class="small muted">У фазі 3 (тижні 9–11) — «⋯ Ще» → «Дроп-сет»: одразу після останнього підходу, без відпочинку, легше (на тренажері — фіксатор на 1–2 кроки нижче). Розминка: без обмежень, до 55 років і до 100 кг — 3 хв (тіло розігріває перший легкий підхід), інакше — повні 10 хв.</div></li>
         <li style="display:block"><b>🏠 Тренажери вдома</b><div class="small muted">У «Що є вдома» — ті самі тренажери, що в залі (або «Усе, як у залі»): удома програма бере їх першими; історія й рекорди спільні з залом, вага — окремо для дому й залу. Додати чи прибрати — будь-коли: «Більше» → «Обладнання вдома»; історія й рекорди лишаються.</div></li>
@@ -1704,6 +1773,7 @@ window.APP_START = () => {
         <li style="display:block"><b>🗣 Ask the coach</b><div class="small muted">The microphone button on the Home screen and during a workout: ask by voice or text — the coach answers based on your program (week, weights, form, the app) in its own voice. Requires internet.</div></li>
         <li style="display:block"><b>📷 Photo to the coach</b><div class="small muted">In the coach chat, tap the camera button: snap a photo of a machine, dumbbells, or a machine’s label and ask — the coach will tell you what it is and how it fits into your program.</div></li>
         <li style="display:block"><b>📝 Program from your questionnaire</b><div class="small muted">Built around you: goal, experience, equipment, health, workout days. To change your answers: “More” → “Edit questionnaire and update program”; your workout history stays.</div></li>
+        <li style="display:block"><b>🧘 Stretching at the end</b><div class="small muted">The last part of a workout: 30 s each side with a timer, 3D and voice. Full set, short or off — “More” → “Workout”.</div></li>
         <li style="display:block"><b>🏋️ At home and at the gym</b><div class="small muted">In the questionnaire, choose where you train. At the gym, you get the same workouts on machines and cables; with “Both home and gym,” the app asks where you are before each workout. Machine taken? “More” → “Swap.” If your gym uses a different weight step (2.5 or 4.5 kg), the app picks it up from the weights you enter.</div></li>
         <li style="display:block"><b>⬇ Drop sets and a warm-up that fits you</b><div class="small muted">In phase 3 (weeks 9–11): “⋯ More” → “Drop set” — right after the last set, with no rest, lighter (on a machine, move the pin 1–2 steps down). Warm-up: with no limitations, under 55, and under 100 kg — 3 min (the first light set warms up your body); otherwise, a full 10 min.</div></li>
         <li style="display:block"><b>🏠 Machines at home</b><div class="small muted">In “What you have at home,” pick the same machines as at the gym (or “Full gym setup”): at home, the program uses them first; history and PRs are shared with the gym, while weights are tracked separately for home and gym. Add or remove anytime: “More” → “Home equipment”; your history and PRs stay.</div></li>
@@ -2362,7 +2432,7 @@ window.APP_START = () => {
     const fsk = d ? null : ENGINE.freshStart(p.sessions, trainDays(), today());  // з 3.24.0 — «новий старт» (пункт 3)
     const ym = today().slice(0, 7), mprs = p.sessions.filter((s) => s.date.slice(0, 7) === ym).reduce((a, s) => a + (s.prs || 0), 0);
     const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
-    const warmMin = (warmList().title.match(/(\d+)\s*(?:хв|min)/) || [])[1];
+    const warmMin = (warmList().title.match(/(\d+)\s*(?:хв|min)/) || [])[1], stMin = STRETCH.mins(STRETCH.pick(stMode(), stLim()));
     const nd = nextDayText(p.days);
     /* порядок головної (з 3.27.1; слово Alexа 25.10: «Так, роби в 3.27.1 як радиш: порядок Тренування → Кухня → Як ви сьогодні → Завдання дня → Щодня → Урок дня,
        вода першим рядком у картці кухні…»; «Завдання дня» прибрано — «Прибери картку «Завдання дня» з головної в 3.27.1»: усі її пункти вже мають свої картки поруч): найчастіше застосунок відкривають відмітити воду — «+ склянка» на першому екрані (замір 390 × 844: було 2 047 px, стало ≈ 570) */
@@ -2372,7 +2442,7 @@ window.APP_START = () => {
       ${d ? `${LL(`<div class="card"><div class="sp"><div><b>Тренування триває</b><div class="small muted">`, `<div class="card"><div class="sp"><div><b>Workout in progress</b><div class="small muted">`)}${esc(wTitle(d))} · ${draftStats(d).done}/${draftStats(d).total}${LL(` підходів</div></div><button type="button" class="pri" data-act="resume">Продовжити</button></div></div>`, ` sets</div></div><button type="button" class="pri" data-act="resume">Resume</button></div></div>`)}` : ''}${LL(`
       <div class="card hero"><div class="row"><span class="chip">Тиждень `, `
       <div class="card hero"><div class="row"><span class="chip">Week `)}${plan.week}${plan.cycle > 1 ? LL(' · цикл ', " · cycle ") + plan.cycle : ''}</span><span class="chip">${plan.slot + 1}${LL(` з `, ` of `)}${prog.perWeek || 3}</span>${pv.back ? LL('<span class="chip">після перерви</span>', "<span class=\"chip\">after a break</span>") : plan.deload ? LL('<span class="chip">легкий тиждень</span>', "<span class=\"chip\">deload week</span>") : ''}</div>
-        <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises"))} · ≈ ${est}${LL(` хв`, ` min`)}${warmMin ? LL(' + розминка ', " + warm-up ") + warmMin + LL(' хв', " min") : ''} · ${esc(pv.back ? LL('запас 3–4', "RIR 3–4") : plan.note.rir)}${nd ? LL(' · за планом ', " · scheduled ") + nd : ''}</p>
+        <h1 style="margin-top:10px">${esc(wo.title)}</h1><p class="muted small">${plural(nEx, LL('вправа', "exercise"), LL('вправи', "exercises"), LL('вправ', "exercises"))} · ≈ ${est}${LL(` хв`, ` min`)}${warmMin ? LL(' + розминка ', " + warm-up ") + warmMin + LL(' хв', " min") : ''}${stMin ? LL(' + розтяжка ', ' + stretching ') + stMin + LL(' хв', ' min') : ''} · ${esc(pv.back ? LL('запас 3–4', "RIR 3–4") : plan.note.rir)}${nd ? LL(' · за планом ', " · scheduled ") + nd : ''}</p>
         <p class="small" style="opacity:.92">${pv.back ? '↩ ' + esc(backText(pv.back)) : esc(plan.note.phase)}</p>
         ${fsk && !(fsk === 'back' && pv.back) ? `<p class="small fsl" style="opacity:.92" data-tip="${esc(FS_TIP())}">${esc(FS_TXT()[fsk])}</p>` : ''}
         ${d ? '' : LL('<div class="hbtn"><button type="button" class="pri big" data-act="start">Почати</button><button type="button" class="ghost big" data-act="other">Інше</button></div>', "<div class=\"hbtn\"><button type=\"button\" class=\"pri big\" data-act=\"start\">Start</button><button type=\"button\" class=\"ghost big\" data-act=\"other\">Other</button></div>")}</div>
@@ -3754,6 +3824,7 @@ window.APP_START = () => {
     return `${LL(`<label class="f">Голос тренера</label><div class="pick vp">`, `<label class="f">Coach voice</label><div class="pick vp">`)}${list.map((x) => `<button type="button" class="rst${x.id === cur ? ' on' : ''}" data-act="vpack" data-id="${x.id}"><b>${esc(packLabel(x))}</b></button>`).join('')}
 </div>
       ${voiceInfo.mode ? `<div class="note small ${voiceInfo.mode === 'pack' ? 'ok' : 'w'}">${voiceInfo.mode === 'pack' ? LL('Зараз говорить записаний голос.', "The recorded voice is speaking now.") : LL('Остання фраза прозвучала системним голосом: ', "The last phrase was spoken in the system voice: ") + esc(voiceInfo.why) + '.'}</div>` : ''}
+      ${voiceInfo.skip ? `<div class="note small w">${LL('Останню пропущену фразу пропущено, бо ', "The last skipped phrase was skipped because ")}${esc(voiceInfo.skip)} (${new Date(voiceInfo.skipAt).toLocaleTimeString(I18N.lang === 'en' ? 'en-US' : 'uk-UA', { hour: '2-digit', minute: '2-digit' })}).</div>` : ''}
       ${cur ? `${LL(`<p class="small muted" id="vpState">Перевіряю, чи збережено в телефоні…</p><button type="button" class="wide" data-act="vdl" style="display:none">Зберегти голос у телефоні (для роботи без інтернету)</button>`, `<p class="small muted" id="vpState">Checking whether it’s saved on this phone…</p><button type="button" class="wide" data-act="vdl" style="display:none">Save the voice on this phone (works offline)</button>`)}` : ''}`;
   }
   async function packState() {
@@ -3826,6 +3897,7 @@ window.APP_START = () => {
       <h2>Music</h2><div class="card"><div class="sp"><div><b>Workout radio</b><div class="small muted">`)}${RADIO.cur ? esc(RADIO.cur.name) + ' · ' + ({ playing: LL('грає', "playing"), loading: LL('підключаюся', "connecting"), paused: LL('пауза', "paused"), error: LL('не відповідає', "not responding") }[RADIO.state] || '') : RADIO.STATIONS.length + LL(' станцій: денс, хіти, українські, рок, метал, драм-н-бейс', " stations: dance, hits, Ukrainian, rock, metal, drum and bass")}${LL(`</div></div><button type="button" class="sm pri" data-act="radio">Відкрити</button></div></div>
       <h2>Тренування</h2><div class="card" id="mWork"><label class="f">Екран тренування</label>`, `</div></div><button type="button" class="sm pri" data-act="radio">Open</button></div></div>
       <h2>Workout</h2><div class="card" id="mWork"><label class="f">Workout screen</label>`)}${seg('mode', [['coach', LL('Тренер · крок за кроком', "Coach · step by step")], ['list', LL('Список вправ', "Exercise list")]], S().mode)}
+        <label class="f" style="margin-top:10px">${LL('Розтяжка в кінці тренування', 'Stretching at the end of a workout')}</label>${seg('stretch', [['full', LL('Повний набір', 'Full set')], ['short', LL('Коротка', 'Short')], ['off', LL('Вимкнути', 'Off')]], stMode(), LL('Останній блок тренування: таймер, 3D і голос. Вправи, які не підходять за вашими обмеженнями здоровʼя, прибрано.', 'The last part of your workout: timer, 3D and voice. Stretches that don’t suit your health limits are left out.'))}<p class="tiny muted" style="margin:6px 0 10px">${((a, c) => LL(`Повний набір ≈ ${a} хв, коротка ≈ ${c} хв; 30 с на кожен бік.`, `Full set ≈ ${a} min, short ≈ ${c} min; 30 s each side.`))(STRETCH.mins(STRETCH.pick('full', stLim())), STRETCH.mins(STRETCH.pick('short', stLim())))}</p>
         ${sw('sound', LL('Звук таймера', "Timer sound"), LL('сигнал, коли відпочинок скінчився', "a beep when rest is over"))}${sw('haptics', LL('Вібровідгук', "Haptics"), TX(LL('на iPhone з iOS 18+, якщо підтримується', "on iPhone with iOS 18+, if supported"), LL('коротка вібрація на дотиках, помітна — коли скінчився відпочинок', "a short vibration on taps, a stronger one when rest is over")))}${sw('awake', LL('Не гасити екран', "Keep screen on"), LL('під час тренування', "during workouts"))}${sw('guide', LL('Вести за руку', "Hands-on guidance"), LL('3 тренування: тренер каже й підсвічує, що натиснути', "3 workouts: the coach tells you what to tap and highlights it"))}${LL(`</div>
       <h2>Програма</h2><div class="card">`, `</div>
       <h2>Program</h2><div class="card">`)}${progCard()}
@@ -3833,7 +3905,7 @@ window.APP_START = () => {
         <label class="f">Наступне тренування — тиждень</label><select id="weekSel"`, `</button>
         <label class="f">Next workout — week</label><select id="weekSel"`)}${p.draft ? ' disabled' : ''}>${wks.map((w) => `<option value="${w}"${w === curWeek ? ' selected' : ''}>${w}${cp.cycle > 1 ? LL(' · цикл ', " · cycle ") + cp.cycle : ''}</option>`).join('')}${LL(`</select>
         <label class="f">Дні тренувань</label><div class="row">`, `</select>
-        <label class="f">Workout days</label><div class="row">`)}${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${p.draft ? LL('<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>', "<p class=\"tiny muted\">Questionnaire, days, and week can be changed after you finish the workout.</p>") : ''}</div>
+        <label class="f">Workout days</label><div class="row">`)}${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${DB.custom ? adjacentNote(p.days) : ''}${p.draft ? LL('<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>', "<p class=\"tiny muted\">Questionnaire, days, and week can be changed after you finish the workout.</p>") : ''}</div>
       ${eqCard(p)}
       ${hasDb ? `${isLb() ? KG(LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`)) : LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, г</label><input inputmode="numeric" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, g</label><input inputmode="numeric" id="handleIn" value="`)}${fmt(isLb() ? p.handle : p.handle * 1000)}${LL(`">
         <label class="f">`, `">
@@ -3981,7 +4053,7 @@ window.APP_START = () => {
   function doLater(i) {
     const d = P().draft; if (!d || !laterOk(d, i)) return;
     const name = G().ex[d.items[i].ex].name, [a, n] = laterBlock(d, i), block = d.items.splice(a, n);
-    d.items.push(...block); save(); closeSheet(); rWorkout();
+    d.items.push(...block); if (T.id && T.kind === 'rest') { T.next = nextLabel(d); T.view = ''; } save(); closeSheet(); rWorkout();
     toast(LL('«', '“') + TR(name) + LL('» — у кінці тренування', '” — moved to the end'));
   }
   function doSwap(i, to) {
@@ -3991,7 +4063,9 @@ window.APP_START = () => {
     /* повернули на вправу з програми — це вже не заміна (раніше писало «Замість „Присідання до крісла“» про саму себе) */
     const from = old.from || old.ex;
     const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: from === to ? null : from, myo, where: d.place, back: d.back || null });
-    nw.skipped = false; d.items[i] = nw; save(); closeSheet(); rWorkout();
+    /* у старої вправи був розминковий підхід — і в нової (заміна на відпочинку з 3.27.11 часто припадає саме на першу базову) */
+    if (old.sets.some((s) => s.type === 'W')) { const ex = prog.ex[to], fw = nw.sets.find((s) => s.type !== 'W'); nw.sets = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), prog.warm, isMach(ex) ? loadStep(ex, to, d.place) : 0).map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(nw.sets); }
+    nw.skipped = false; d.items[i] = nw; if (T.id && T.kind === 'rest') { T.next = nextLabel(d); T.view = ''; } save(); closeSheet(); rWorkout();
     talk(LL('Заміна. ', "Switching to ") + prog.ex[to].name + '.');
   }
   function sayWhat(b) {
@@ -4001,13 +4075,13 @@ window.APP_START = () => {
     if (w === 'test') { say1(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout.")); return; }
     if (!d) return;
     if (w === 'warm') { const wl = warmList(); say1(wl.title + '.\n' + wl.items.join('\n')); return; }
-    const cs = curStep(d); if (!cs) { say1(coolText() ? LL('Заминка: ', "Cool-down: ") + coolText() : LL('Усі підходи зроблено.', "All sets done.")); return; }
+    const cs = curStep(d); if (!cs) { const sx = stCur(d); say1(sx ? TR(sx.name) + '. ' + TR(sx.how) : LL('Усі підходи зроблено.', "All sets done.")); return; }
     if (w === 'tip') { const id = d.items[cs.i].ex, sc = script(id); say1(G().ex[id].name + '. ' + (sc ? COACH.howText(sc) + ' ' + COACH.dontText(sc) : G().ex[id].tip)); return; }
     say1((T.id && T.kind === 'rest' ? LL('Далі. ', "Next up. ") : '') + setSpeech(d, cs, true));
   }
   function say1(t) {
     if (!S().voice.on) { toast(LL('Голос вимкнено: «Більше» → «Голосовий тренер»', "Voice is off: “More” → “Voice coach”")); return; }
-    if (!talk(t, true)) toast(VOICE.supported ? LL('Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»', "No English voice found on this phone — see “More” → “Voice coach”") : LL('Цей браузер не вміє озвучувати текст', "This browser can’t read text aloud"));
+    if (!talk(t, true)) toast(Date.now() - voiceInfo.skipAt < 100 ? LL('Зараз без голосу: ', "No voice right now: ") + voiceInfo.skip : VOICE.supported ? LL('Українського голосу в телефоні не знайдено — див. «Більше» → «Голосовий тренер»', "No English voice found on this phone — see “More” → “Voice coach”") : LL('Цей браузер не вміє озвучувати текст', "This browser can’t read text aloud"));
   }
   function sheetAct(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -4130,6 +4204,7 @@ window.APP_START = () => {
     /* головна */
     /* питання про спину — лише там, де від нього щось залежить */
     if (act === 'start') { ui.shortNext = false; VOICE.unlock(); return beginWorkout(null); }
+    if (act === 'restGo') { closeSheet(); ui.restOk = true; if (b.dataset.short) ui.shortNext = true; VOICE.unlock(); return beginWorkout(b.dataset.w || null, b.dataset.p || undefined); }  // з 3.27.11
     if (act === 'startShort') { closeSheet(); ui.shortNext = true; VOICE.unlock(); return beginWorkout(null); }  // з 3.25.0 — коротка версія (пункт 15)
     if (act === 'place') { closeSheet(); return beginWorkout(b.dataset.w || null, b.dataset.v); }
     if (act === 'go') { closeSheet(); return startWorkout(b.dataset.w || null, b.dataset.r, b.dataset.p || undefined); }
@@ -4151,6 +4226,8 @@ window.APP_START = () => {
     if (act === 'kp') return openKp(i, j, b.dataset.f);
     if (act === 'stype') { if (p.draft.items[i].sets[j].done) return toast(LL('Підхід уже позначено ✓ — спершу зніміть позначку', "Set already checked off ✓ — uncheck it first")); return typeSheet(i, j); }
     if (act === 'stypeSet') { const s = p.draft.items[i].sets[j]; s.type = b.dataset.t; save(); haptic(); closeSheet(); return rWorkout(); }
+    if (act === 'stGo') { const d = p.draft; if (!d) return; const x = stCur(d); if (!x) return; d.sb.side = 0; save(); talk(LL('Правий бік.', 'Right side.')); startTimer(STRETCH.HOLD, TR(x.name), 'hold'); rWorkout(); return; }
+    if (act === 'stNext') { if (p.draft) stNext(p.draft); return; }
     if (act === 'mode') { if (!p.draft) return; p.draft.mode = wMode() === 'list' ? 'coach' : 'list'; if (p.draft.mode === 'coach' && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }  // лише це тренування (з 3.27.7)
     if (act === 'cdone') return coachDone();
     if (act === 'cwarm') { p.draft.coach.warm = true; save(); const cs = curStep(p.draft), gs = cs ? gSay(p.draft, 'card') : ''; rWorkout(); window.scrollTo(0, 0); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || LL('Добре. ', "Good. ")) + LL('Перша вправа. ', "First exercise. ") + setSpeech(p.draft, cs) + gs); return; }
@@ -4348,7 +4425,7 @@ window.APP_START = () => {
       save(); closeSheet(); toast(LL('Пульс збережено', 'Pulse saved')); return rBody();
     }
     /* більше */
-    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'mode') { S().mode = v; if (p && p.draft) delete p.draft.mode; } else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
+    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'stretch') S().stretch = v; else if (k === 'mode') { S().mode = v; if (p && p.draft) delete p.draft.mode; } else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
     if (act === 'vpack') { ensureAudio(); S().voice.packs[DB.active] = b.dataset.id; S().voice.packsManual = S().voice.packsManual || {}; S().voice.packsManual[DB.active] = true; save(); const id = b.dataset.id;
       if (id) VOICEPACK.load(id).then(() => { rMore(); talk(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout."), true); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast(LL('Не вдалося завантажити голос — перевірте інтернет', "Couldn’t download the voice — check your internet")));
       else { rMore(); talk(LL('Так звучить системний голос.', "This is the system voice."), true); }
@@ -4363,7 +4440,7 @@ window.APP_START = () => {
       /* програма за анкетою — від 2 до 6 днів, як в анкеті (5–6 — «верх / низ», з 3.27.0); дні йдуть і в програму (скільки тренувань на тиждень) */
       const mx = DB.custom ? GEN.maxDays(DB.custom.answers) : 6;  // 55+ і тиск / серце — до 4 (з 3.27.0)
       if (DB.custom && (nd.length < 2 || nd.length > mx)) { toast(mx === 4 ? LL('Для 55+ і з тиском чи серцем — від 2 до 4 днів', "For 55+ and with blood pressure or heart issues — 2 to 4 days") : LL('Від 2 до 6 днів на тиждень', "2 to 6 days a week")); return; }
-      p.days = nd; syncAnswers({ days: nd }); save(); badgeSync(); remindSync(false); return rMore();  // нові дні — і в нагадування
+      p.days = nd; syncAnswers({ days: nd }); save(); badgeSync(); remindSync(false); if (DB.custom) daysToast(nd.length); return rMore();  // нові дні — і в нагадування
     }
     if (act === 'backup') return backup();
     if (act === 'csv') return csv();

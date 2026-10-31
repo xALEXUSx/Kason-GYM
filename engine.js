@@ -594,6 +594,25 @@ var ENGINE = (function () {
     Object.keys(last).forEach(function (m) { var h = Math.max(0, (nowMs - last[m]) / 36e5); out[m] = { h: Math.floor(h), rest: h < REST_H, left: Math.max(0, Math.ceil(REST_H - h)) }; });
     return out;
   }
+  /* Попередження про відхилення (з 3.27.11; слова Alexа 31.10: «тренер має надавати рекомендації та попередження в разі якщо я відклоняюсь від затвердженої програми у додатку»; «Так, додай»).
+     Перед стартом: ті самі великі групи мʼязів (основний мʼяз вправи — SHORT_GROUPS, як у сторожі основи) уже тренувались сьогодні або вчора — ACSM 2011 радить щонайменше 48 год. Дні за календарем, а не годинник:
+     пн 18:00 → ср 16:00 — це «через день», його радить сам застосунок. Вчора й сьогодні обидва в розкладі людини — це її план, про нього сказано при виборі днів (adjacentDays), тож без вікна; друге тренування за день — завжди.
+     План не змінюється, рішення — за людиною. items — id вправ тренування, days — дні розкладу (0 — неділя). → { muscles, h, today } або null */
+  function restWarn(prog, items, sessions, days, nowMs) {
+    var key = function (ms) { var d = new Date(ms); return noonKey(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12)); };
+    var todayK = key(nowMs), yest = new Date(nowMs - 864e5), yestK = key(yest.getTime()), dows = days || [], now = new Date(nowMs);
+    var big = []; Object.keys(SHORT_GROUPS).forEach(function (g) { big = big.concat(SHORT_GROUPS[g]); });
+    var mine = {}; (items || []).forEach(function (id) { var e = prog.ex[id]; ((e && e.m && e.m.p) || []).forEach(function (m) { if (big.indexOf(m) >= 0) mine[m] = 1; }); });
+    var both = dows.indexOf(now.getDay()) >= 0 && dows.indexOf(yest.getDay()) >= 0, hit = {}, today = false;
+    (sessions || []).forEach(function (s) {
+      if (!s || (s.date !== todayK && (s.date !== yestK || both))) return;
+      var t = sessTime(s); if (t > nowMs) return;
+      (s.sets || []).forEach(function (x) { if (!(x.reps > 0) || x.type === 'W') return; var e = prog.ex[x.ex]; ((e && e.m && e.m.p) || []).forEach(function (m) { if (mine[m]) { hit[m] = !hit[m] || hit[m] < t ? t : hit[m]; if (s.date === todayK) today = true; } }); });
+    });
+    var ms = Object.keys(hit); if (!ms.length) return null;
+    var last = Math.max.apply(null, ms.map(function (m) { return hit[m]; }));
+    return { muscles: ms, h: Math.max(0, Math.floor((nowMs - last) / 36e5)), today: today };
+  }
   /* Виклик місяця (пункт 4) з власної історії — як щомісячні виклики Apple Fitness (за спільнотою Apple — під історію людини), але не більше
      за план: ціль = минулий місяць + 1 (минулого не було — половина запланованого), не більше запланованих днів місяця (від першого
      тренування, якщо воно цього місяця). Подарований старт (пункт 18; Nunes, Drèze 2006: 34 % проти 19 %): тренування, зроблені цього місяця до появи виклику, —
@@ -1035,7 +1054,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { restWarn: restWarn, homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
            KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };

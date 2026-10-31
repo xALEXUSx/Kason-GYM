@@ -5,6 +5,13 @@ var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L :
    поки звучить голос, радіо притишується. Файл голосу зберігається в кеші телефону — працює без інтернету. */
 var VOICEPACK = (function () {
   var lastError = '', packs = {}, bins = {}, loading = {}, ctx = null, gen = 0, playing = false, sources = [], onSpeak = null, buffers = {};
+  /* тиша (з 3.27.11; слово Alexа 31.10: «це точно баг, бо навіть коли я натискав кнопки повторити голосом вправу то тренер мовчав. а коли я перезапустив додаток і тренер заговорив»):
+     файл голосу вантажився без межі часу, а всі фрази файлу чекали те саме завантаження — зависло на слабкому інтернеті, і вони мовчали, без голосу телефона, до перезапуску.
+     Тепер: запис не готовий за READY_MS — фраза звучить голосом телефона, файл вантажиться далі; нових даних немає STALL_MS — завантаження обривається, наступна фраза пробує знову.
+     Web Audio «працює», а час не йде (WATCH_MS) — той самий запис через <audio> */
+  var READY_MS = 4000, STALL_MS = 20000, WHOLE_MS = 120000, WATCH_MS = 700;
+  function within(p, ms, what) { return new Promise(function (ok, bad) { var t = setTimeout(function () { bad(new Error(what)); }, ms); p.then(function (v) { clearTimeout(t); ok(v); }, function (e) { clearTimeout(t); bad(e); }); }); }
+  function notReady() { return LL('запис ще завантажується', "the recording is still loading"); }
   /* швидкість голосу (з 3.27.4; слово Alexа 26.10: «потрібно в налаштуваннях у блок з Голосовий тренер додати зміну швидкості говоріння тренера х1.2, х1.5, х2»):
      Web Audio прискорює запис лише разом із тоном (playbackRate — «мультяшний» голос), тож запис стискаємо в часі без зміни тону — WSOLA:
      вікна Ганна ≈ 25 мс з кроком виходу в пів вікна, кожне наступне вікно входу береться там, де воно найсхожіше на природне продовження попереднього
@@ -70,13 +77,18 @@ var VOICEPACK = (function () {
   async function binLoad(id, k, progress) {
     var url = binUrl(id, k), c = null;
     try { c = window.caches ? await caches.open(CACHE) : null; if (c) { var hit = await c.match(url); if (hit) return await hit.arrayBuffer(); } } catch (e) { c = null; }
-    var res = await fetch(url); if (!res.ok) throw new Error(LL('немає файлу голосу', "no voice file"));
-    var total = Number(res.headers.get('content-length')) || 0, data;
-    if (progress && res.body && res.body.getReader) {
-      var rd = res.body.getReader(), parts = [], got = 0;
-      for (;;) { var x = await rd.read(); if (x.done) break; parts.push(x.value); got += x.value.length; progress(got, total); }
-      var all = new Uint8Array(got), o = 0; parts.forEach(function (u) { all.set(u, o); o += u.length; }); data = all.buffer;
-    } else data = await res.arrayBuffer();
+    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, st = null, data;
+    var arm = function (ms) { clearTimeout(st); st = setTimeout(function () { if (ctl) ctl.abort(); }, ms); };
+    try {
+      arm(STALL_MS);
+      var res = await fetch(url, ctl ? { signal: ctl.signal } : undefined); if (!res.ok) throw new Error(LL('немає файлу голосу', "no voice file"));
+      var total = Number(res.headers.get('content-length')) || 0;
+      if (res.body && res.body.getReader) {
+        var rd = res.body.getReader(), parts = [], got = 0;
+        for (;;) { arm(STALL_MS); var x = await rd.read(); if (x.done) break; parts.push(x.value); got += x.value.length; if (progress) progress(got, total); }
+        var all = new Uint8Array(got), o = 0; parts.forEach(function (u) { all.set(u, o); o += u.length; }); data = all.buffer;
+      } else { arm(WHOLE_MS); data = await res.arrayBuffer(); }
+    } finally { clearTimeout(st); }
     try { if (c) await c.put(url, new Response(data.slice(0), { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* без кешу */ }
     return data;
   }
@@ -133,16 +145,22 @@ var VOICEPACK = (function () {
     try {
       for (var i = 0; i < segs.length; i++) {
         if (my !== gen) return true;
-        var at = packs[id].clips[segs[i]], all = await bin(id, at[2] || 0);
+        var at = packs[id].clips[segs[i]], all = await within(bin(id, at[2] || 0), READY_MS, notReady());
+        if (my !== gen) return true;
         var url = URL.createObjectURL(new Blob([all.slice(at[0], at[0] + at[1])], { type: 'audio/mp4' }));
         var done = new Promise(function (ok) { m.onended = ok; m.onerror = ok; });
-        m.src = url; m.playbackRate = rate; m.preservesPitch = true; await m.play(); await done; m.onended = m.onerror = null;
+        m.src = url; m.playbackRate = rate; m.preservesPitch = true; await within(m.play(), READY_MS, notReady()); await done; m.onended = m.onerror = null;
         URL.revokeObjectURL(url);
         if (i < segs.length - 1) await new Promise(function (ok) { setTimeout(ok, 120 / rate); });
       }
       if (my === gen) setPlaying(false);
       return true;
-    } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+    } catch (e) {
+      /* накладання (з 3.27.11; слово Alexа 31.10: «чи не накладаються та смішуються голоси різних вправ»): нова фраза перебила цю на старті — браузер відхиляє її play() (AbortError).
+         Це не збій: без цієї умови застосунок проговорював стару фразу голосом телефона поверх нового запису */
+      if (my !== gen) return true;
+      lastError = String(e && (e.message || e.name) || e); try { m.pause(); } catch (x) { /* немає */ } setPlaying(false); return false;
+    }
   }
   /* Програти речення підряд. actx — спільний AudioContext застосунку (розблокований дотиком). */
   async function play(id, segs, actx) {
@@ -155,17 +173,24 @@ var VOICEPACK = (function () {
     setPlaying(true);
     try {
       var bufs = [];
-      for (var i = 0; i < segs.length; i++) { var key = id + '|' + segs[i] + '|' + rate, b0 = stretched[key] || (stretched[key] = stretchBuf(await buffer(id, segs[i]))); bufs.push(b0); }
+      for (var i = 0; i < segs.length; i++) { var key = id + '|' + segs[i] + '|' + rate, b0 = stretched[key] || (stretched[key] = stretchBuf(await within(buffer(id, segs[i]), READY_MS, notReady()))); bufs.push(b0); }
       if (Object.keys(stretched).length > 300) stretched = {};
       if (my !== gen) return true;
-      var t = ctx.currentTime + 0.05;
+      var t0 = ctx.currentTime, t = t0 + 0.05;
       bufs.forEach(function (b, k) {
         var src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(t); sources.push(src);
         t += b.duration + 0.12 / rate;
         if (k === bufs.length - 1) src.onended = function () { if (my === gen) { sources = []; setPlaying(false); } };
       });
+      await new Promise(function (ok) { setTimeout(ok, WATCH_MS); });
+      /* час Web Audio стоїть — звуку немає (після дзвінка чи іншого звуку iPhone може лишити його таким до перезапуску) */
+      if (my === gen && playing && !ctx.startRendering && ctx.currentTime === t0) {
+        lastError = LL('Web Audio не грає — граю через <audio>', "Web Audio isn’t playing — playing via <audio>");
+        sources.forEach(function (s) { s.onended = null; try { s.stop(); } catch (e) { /* уже */ } }); sources = [];
+        return playMedia(id, segs, my);
+      }
       return true;
-    } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+    } catch (e) { if (my !== gen) return true; lastError = String(e && (e.message || e.name) || e); setPlaying(false); return false; }
   }
   /* Готовий запис цілком (відповідь тренера-співрозмовника, WAV із сервера): той самий шлях, що й фрази, —
      Web Audio або <audio>; «говорить» (onSpeaking) так само притишує радіо, stop() так само зупиняє. */
@@ -178,10 +203,10 @@ var VOICEPACK = (function () {
       try {
         var url = URL.createObjectURL(new Blob([bytes], { type: type || 'audio/wav' }));
         var done = new Promise(function (ok) { m.onended = ok; m.onerror = ok; });
-        m.src = url; m.playbackRate = rate; m.preservesPitch = true; await m.play(); await done; m.onended = m.onerror = null; URL.revokeObjectURL(url);
+        m.src = url; m.playbackRate = rate; m.preservesPitch = true; await within(m.play(), READY_MS, notReady()); await done; m.onended = m.onerror = null; URL.revokeObjectURL(url);
         if (my === gen) setPlaying(false);
         return true;
-      } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+      } catch (e) { if (my !== gen) return true; lastError = String(e && (e.message || e.name) || e); try { m.pause(); } catch (x) { /* немає */ } setPlaying(false); return false; }
     }
     setPlaying(true);
     try {
@@ -190,7 +215,7 @@ var VOICEPACK = (function () {
       var src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(ctx.currentTime + 0.05); sources.push(src);
       src.onended = function () { if (my === gen) { sources = []; setPlaying(false); } };
       return true;
-    } catch (e) { lastError = String(e && (e.message || e.name) || e); if (my === gen) setPlaying(false); return false; }
+    } catch (e) { if (my !== gen) return true; lastError = String(e && (e.message || e.name) || e); setPlaying(false); return false; }
   }
   /* Увесь голос у телефон: файли по черзі, прогрес — сумарний. */
   async function download(id, progress) {
@@ -211,6 +236,6 @@ var VOICEPACK = (function () {
     } catch (e) { return false; }
   }
   return { unlock: unlock, split: split, load: load, has: has, missing: missing, play: play, playData: playData, stop: stop, download: download, cached: cached, forget: forget, setRate: setRate, Stretch: Stretch, get rate() { return rate; },
-    get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
+    _limits: function (o) { READY_MS = o.ready || READY_MS; STALL_MS = o.stall || STALL_MS; WATCH_MS = o.watch || WATCH_MS; }, get busy() { return playing; }, get lastError() { return lastError; }, onSpeaking: function (f) { onSpeak = f; }, get packs() { return packs; } };
 })();
 if (typeof module !== 'undefined') module.exports = VOICEPACK;
