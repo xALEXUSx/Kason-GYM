@@ -39,6 +39,16 @@ function EX3D(E, Q) {
   const shS = (ax) => [V(ax - 0.455, 0.111, 0.205), V(ax - 0.455, 0.111, -0.205)];  // плечові суглоби лежачи на спині
   const kneesUp = (ax, d) => ({ ank: both(ax + (d || 0.5), 0.078, 0.14), foot: both(1, 0, 0.15).map((v) => v.normalize()), kneePole: eps(0, 1, 0.15) });
   const matK = (k, x) => Q.mat(k, { x: x === undefined ? AX - 0.1 : x });
+  /* стійка на одній нозі: тест форми t_bal і вправа рівноваги b_bal — та сама поза */
+  const balStand = (t, g) => {
+        /* правий бік: стоїмо на правій нозі, ліва — коліно вперед, стопа на 15 см над підлогою (видно спереду; позаду її ховала опорна нога); таз — над опорною стопою;
+           кисті — на поясі, лікті в сторони */
+        const P = stand({ py: lerp(0.95, 0.94, t), fw: 0.1, fa: 8 }); P.pelvis.z = lerp(0, -0.06, t);
+        P.ank = [V(0, 0.07, 0.1).lerp(V(0.22, 0.22, 0.08), t), V(0, 0.07, -0.1)];
+        P.foot = [V(1, 0, 0.08).normalize().lerp(V(1, -0.35, 0.05).normalize(), t).normalize(), V(1, 0, -0.08).normalize()]; P.kneePole = [V(1, 0, 0.1), V(1, 0.05, -0.1)];
+        if (g) P.side = -12 * t;
+        P.hand = [V(0, 0.08, 0.215).add(P.pelvis), V(0, 0.08, -0.215).add(P.pelvis)]; P.elbowPole = [V(-0.6, 0, 1).normalize(), V(-0.6, 0, -1).normalize()]; return P;
+  };
   /* гантель у кисті: вісь поперек тіла (z) чи вздовж (x) */
   const dbAt = (db, p, axis) => { db.g.position.copy(p); db.g.rotation.set(axis === 'x' ? 0 : Math.PI / 2, 0, axis === 'x' ? Math.PI / 2 : 0); };
   /* кут корпусу лежачи (у системі тіла: + — угору від килимка) і точка на ньому — для кистей, що рухаються з грудьми */
@@ -659,15 +669,7 @@ function EX3D(E, Q) {
     mk({ id: 't_bal', grp: 'test', name: 'Тест: стійка на одній нозі', work: { p: ['glutes', 'calves'], s: ['abs'] }, sides: true,
       t1: 1.6, t2: 1.6, c1: 'Підніми ногу — руки на поясі, погляд уперед', c2: 'Тримай до 60 с — і на іншу ногу', bad: '✕ Не завалюйся корпусом убік', ghost: TORSO,
       build() {},
-      pose(t, g) {
-        /* правий бік: стоїмо на правій нозі, ліва — коліно вперед, стопа на 15 см над підлогою (видно спереду; позаду її ховала опорна нога); таз — над опорною стопою;
-           кисті — на поясі, лікті в сторони */
-        const P = stand({ py: lerp(0.95, 0.94, t), fw: 0.1, fa: 8 }); P.pelvis.z = lerp(0, -0.06, t);
-        P.ank = [V(0, 0.07, 0.1).lerp(V(0.22, 0.22, 0.08), t), V(0, 0.07, -0.1)];
-        P.foot = [V(1, 0, 0.08).normalize().lerp(V(1, -0.35, 0.05).normalize(), t).normalize(), V(1, 0, -0.08).normalize()]; P.kneePole = [V(1, 0, 0.1), V(1, 0.05, -0.1)];
-        if (g) P.side = -12 * t;
-        P.hand = [V(0, 0.08, 0.215).add(P.pelvis), V(0, 0.08, -0.215).add(P.pelvis)]; P.elbowPole = [V(-0.6, 0, 1).normalize(), V(-0.6, 0, -1).normalize()]; return P;
-      } }),
+      pose(t, g) { return balStand(t, g); } }),
     mk({ id: 't_srt', grp: 'test', name: 'Тест: сісти й встати з підлоги', work: { p: ['quads', 'glutes'], s: ['abs', 'hams'] },
       t1: 2.2, t2: 2.2, c1: 'Схрести ноги й сідай на підлогу без опори', c2: 'Встань так само — без рук і колін', bad: '✕ Не спирайся рукою об підлогу', ghost: ['shoulderL', 'uaL', 'faL', 'elbowL', 'handL'],
       build(k) { Q.mat(k, { x: -0.2 }); },
@@ -767,6 +769,29 @@ function EX3D(E, Q) {
         const an = V(AX + 0.5, 0.078, -0.14).lerp(V(AX + 0.32, 0.437, -0.1), t), up = 0.2 * Math.sin(Math.PI * t);
         return world(P, { ank: [V(AX + 0.5, 0.078, 0.14), an], foot: [V(1, 0, 0.15).normalize(), V(1, 0, -0.15).normalize().lerp(V(0.4, 0.9, 0).normalize(), t).normalize()], kneePole: [V(0, 1, 0.15).normalize(), V(-0.7, 0.7, 0).normalize()],
           hand: [V(AX + 0.03, 0.06 + up, 0.27).lerp(V(AX - 0.06, 0.41, -0.02), t), V(AX + 0.03, 0.06 + up, -0.27).lerp(V(AX - 0.06, 0.41, -0.175), t)], elbowPole: eps(0, 0.7, 0.8) });
-      } })
+      } }),
+    /* без гантелі (з 3.27.13): коліна + удома без гантелей. Присідання — торкнутись сидіння й одразу вгору (на 3 см вище, ніж сісти повністю в тесті t_chair), руки перед собою */
+    mk({ id: 'chairsq', grp: 'test', name: 'Присідання до крісла без ваги', work: { p: ['quads', 'glutes'], s: ['abs'] },
+      t1: 1.4, t2: 1.1, c1: 'Таз назад — торкнись сидіння', c2: 'Одразу вгору, не сідаючи', bad: '✕ Не зводь коліна всередину', ghost: LEGS,
+      build(k) { this.ch = Q.chair(k, { x: -0.47 }); },
+      pose(t, g) {
+        const P = stand({ px: lerp(0, -0.3, t), py: lerp(0.95, 0.575, t), lumb: lerp(3, 16, t) + 20 * Math.sin(Math.PI * t), chest: lerp(3, 14, t) + 16 * Math.sin(Math.PI * t), head: lerp(0, 6, t), fw: 0.15, fa: 14 });
+        if (g) P.kneePole = eps(1, 0.1, -0.7 * t);
+        const sh = shOf(P);
+        P.hand = [sh[0].clone().add(V(0.5, -0.05, 0)), sh[1].clone().add(V(0.5, -0.05, 0))]; P.elbowPole = [V(0, -1, 0.3), V(0, -1, -0.3)]; return P;
+      } }),
+    mk({ id: 'bridgebw', grp: 'mat', name: 'Сідничний міст без ваги', work: { p: ['glutes'], s: ['hams'] },
+      t1: 1.3, t2: 2, c1: 'Підніми таз до лінії плечі — коліна', c2: 'Пауза, повільно вниз', bad: '✕ Не прогинай поперек угорі', ghost: ['pelvis', 'lumb', 'chest', 'thighL', 'thighR'],
+      build(k) { matK(k); },
+      pose(t, g) {
+        const h = lerp(BACK, 0.4 + (g ? 0.07 * t : 0), t), a = Math.asin((BACK - h) / 0.5) / RAD, px = AX;
+        const P = supine({ y: h, lumb: a + (g ? 16 * t : 0), chest: a - (g ? 6 * t : 0), head: 0 });
+        return world(P, { ank: both(px + 0.42, 0.078, 0.14), foot: both(1, 0, 0.15).map((v) => v.normalize()), kneePole: eps(0.3, 1, 0.15), hand: both(AX - 0.06, 0.06, 0.27), elbowPole: eps(0, 0.7, 0.8) });
+      } }),
+    /* рівновага 65+ (з 3.27.13): поза — як у тесті, підписи — вправа, а не тест */
+    mk({ id: 'b_bal', grp: 'test', name: 'Стійка на одній нозі', work: { p: ['glutes', 'calves'], s: ['abs'] }, sides: true,
+      t1: 1.6, t2: 1.6, c1: 'Підніми ногу — таз рівно, погляд уперед', c2: 'Тримай 5–10 с — і на іншу ногу', bad: '✕ Не завалюйся корпусом убік', ghost: TORSO,
+      build() {},
+      pose(t, g) { return balStand(t, g); } })
   ];
 }
