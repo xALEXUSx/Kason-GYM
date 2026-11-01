@@ -334,8 +334,8 @@ function VIZ3D(THREE) {
      ex.sides — цикл двічі: правий бік, потім лівий (дзеркало); ex.loop — безперервний рух (ходьба), t = 0…1 рівно за t1 с */
   function exScene(ex) {
     const st0 = stage(ex.span || 2.0), scene = st0.scene, camera = st0.camera, floor = st0.floor, ex1 = Object.create(ex);
-    let ghost, body, eq;
-    const build = () => { eq = new THREE.Group(); scene.add(eq); ex1.build(eqKit(eq)); ghost = makeBody(scene, 'ghost'); body = makeBody(scene, 'body'); };
+    let ghost, body, eq, occ, occNow, fadeM;
+    const build = () => { eq = new THREE.Group(); scene.add(eq); ex1.build(eqKit(eq)); ghost = makeBody(scene, 'ghost'); body = makeBody(scene, 'body'); occ = new Map(); occNow = null; fadeM = new Map(); };
     build();
     /* loop + sides (валізна прогулянка): t1 с одним боком, потім t1 с другим */
     const one = 0.5 + ex.t1 + 0.3 + ex.t2, cyc = ex.loop ? ex.t1 * (ex.sides ? 2 : 1) : ex.sides ? 2 * one : one;
@@ -401,8 +401,39 @@ function VIZ3D(THREE) {
       const u = (Math.max(-YAW_GRID, Math.min(YAW_GRID, yaw || 0)) + YAW_GRID) / YAW_STEP, i = Math.min(grid.length - 2, Math.floor(u)), k = u - i, a = grid[i], b = grid[i + 1];
       return { c: a.c.clone().lerp(b.c, k), pos: a.pos.clone().lerp(b.pos, k) };
     }
+    /* обладнання між камерою й людиною (з 3.27.15; слово Alexа 01.11 «виправляй»; замір: у 24 із 80 анімацій поворот пальцем закривав ≥ 30 % тіла, двері — усе тіло): для кожного кута сітки — промені від камери
+       до частин тіла в трьох фазах; закрито не менше OCC_T тіла — частини, що закривають не менше OCC_M, напівпрозорі. Менше — обладнання без змін (початковий кут ніде не досягає OCC_T: сторож у viz_unit). Рахується раз на кут */
+    const OCC_T = 0.25, OCC_M = 0.05, OCC_A = 0.16, rc = new THREE.Raycaster();
+    function occOf(i, sd) {
+      const key = i * 2 + (sd ? 1 : 0); if (occ.has(key)) return occ.get(key);
+      const pos = grid[i].pos.clone(), parts = [], hits = new Map(), to = V(0, 0, 0); let tot = 0, blk = 0;
+      if (ex.camFlip && sd) pos.z = -pos.z;
+      eq.traverse((m) => { if (m.isMesh && !m.userData.held) parts.push(m); });
+      [0.1, 0.5, 0.9].forEach((t) => {
+        const P = poseAt(t, false, sd), J = poseBody(body, P); if (ex1.after) ex1.after(P, J);
+        body.root.updateMatrixWorld(true); eq.updateMatrixWorld(true);
+        const near = parts.map((m) => { if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere(); return m.geometry.boundingSphere.clone().applyMatrix4(m.matrixWorld); });
+        body.all.forEach((b) => {
+          if (!b.geometry.boundingSphere) b.geometry.computeBoundingSphere();
+          to.copy(b.geometry.boundingSphere.center).applyMatrix4(b.matrixWorld).sub(pos); const L = to.length(); rc.set(pos, to.normalize()); rc.far = L - 0.02; tot++;
+          /* спершу кулі: точний промінь лише по тому, що поруч (новий кут на Mac: медіана 1,6 мс, найгірша вправа 7 мс; рахується раз на кут) */
+          let any = false; parts.forEach((m, j) => { if (rc.ray.intersectsSphere(near[j]) && rc.intersectObject(m, false).length) { any = true; hits.set(m, (hits.get(m) || 0) + 1); } }); if (any) blk++;
+        });
+      });
+      const out = new Set(); if (blk / tot >= OCC_T) hits.forEach((n, m) => { if (n / tot >= OCC_M) out.add(m); });
+      occ.set(key, out); return out;
+    }
+    function occShow(set) {
+      if (set === occNow) return; occNow = set;
+      eq.traverse((m) => { if (!m.isMesh) return; const u = m.userData; if (set.has(m)) {
+        if (!u.solid) u.solid = m.material;
+        if (!fadeM.has(u.solid)) { const c = u.solid.clone(); c.transparent = true; c.opacity = OCC_A; c.depthWrite = false; fadeM.set(u.solid, c); }
+        m.material = fadeM.get(u.solid);
+      } else if (u.solid) m.material = u.solid; });
+    }
     function draw(sec, v, style, yaw) {
       const f = tAt(sec);
+      occShow(occOf(Math.round((Math.max(-YAW_GRID, Math.min(YAW_GRID, yaw || 0)) + YAW_GRID) / YAW_STEP), f.side));
       styleBody(body, style, v === 'mus', ex.work);
       /* помилка — лише та частина тіла, де вона є (інакше червоне перекриває правильну позу); другий бік — дзеркальні частини.
          Спершу «помилка», потім правильна поза: тренажер, який рухає поза, лишається в правильному положенні */
