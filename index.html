@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="FORTES">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no">
-<meta name="app-version" content="3.27.13">
+<meta name="app-version" content="3.27.14">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preload" href="fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -305,6 +305,8 @@ button.chip{min-height:40px;border:0;padding:4px 14px;font:inherit;font-size:.76
 button.pri.cdone{box-shadow:var(--glow),var(--pri-hl)}
 .ccue{margin-top:10px;color:var(--muted)} .ccue p{margin:0}
 .cacts{margin-top:10px} .cacts button{padding:8px 6px;font-size:.86rem}
+/* низькі екрани (з 3.27.14; замір: «⋯ Ще» 623–682 px, на 360 × 640 і 375 × 667 ряд виходив за край): ряд лишається видимим */
+@media (max-height:700px){.cacts{position:sticky;bottom:calc(6px + env(safe-area-inset-bottom));z-index:3;background:var(--card);padding:6px 0;border-radius:var(--r-sm)}}
 .crest{text-align:center}
 .cring{position:relative;width:min(220px,62vw);margin:8px auto 14px} .cring svg{width:100%;height:auto;display:block}
 .ctime{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -434,7 +436,7 @@ button.mic.busy{opacity:.55}
 </style>
 </head>
 <body>
-<main id="app"><p class="muted">Завантаження…</p></main>
+<main id="app"><p class="muted" id="bootMsg">Завантаження…</p></main>
 <div id="sheetBg"></div><div id="sheet"></div>
 <div id="timer"></div>
 <div id="rbar"></div>
@@ -448,24 +450,37 @@ button.mic.busy{opacity:.55}
   <button type="button" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Більше</button>
 </nav>
 <input type="checkbox" switch id="hapIn" class="hap" aria-hidden="true" tabindex="-1"><label for="hapIn" id="hapLb" class="hap" aria-hidden="true"></label>
-<script src="i18n.js?v=3.27.13"></script>
-<script src="i18n_en.js?v=3.27.13"></script>
-<script src="program.js?v=3.27.13"></script>
-<script src="engine.js?v=3.27.13"></script>
-<script src="voice.js?v=3.27.13"></script>
-<script src="coach.js?v=3.27.13"></script>
-<script src="radio.js?v=3.27.13"></script>
-<script src="voicepack.js?v=3.27.13"></script>
-<script src="tips.js?v=3.27.13"></script>
-<script src="charts.js?v=3.27.13"></script>
-<script src="store.js?v=3.27.13"></script>
-<script src="generator.js?v=3.27.13"></script>
-<script src="food_db.js?v=3.27.13"></script>
-<script src="kitchen.js?v=3.27.13"></script>
-<script src="coachctx.js?v=3.27.13"></script>
-<script src="viz.js?v=3.27.13"></script>
-<script src="stretch.js?v=3.27.13"></script>
-<script src="app.js?v=3.27.13"></script>
-<script src="accounts.js?v=3.27.13"></script>
+<script>/* збій файла на старті (з 3.27.14; наживо 01.11: store.js — 503, вічне «Завантаження…»): сказати людині й дати кнопку; екран застосунку прибирає bootMsg */
+(function () {
+  var bad = false;
+  addEventListener('error', function () { bad = true; }, true);
+  addEventListener('load', function () {
+    setTimeout(function () {
+      var b = document.getElementById('bootMsg'); if (!b) return;
+      var en = false; try { en = localStorage.getItem('trening-lang') === 'en'; } catch (e) { /* немає сховища */ }
+      b.parentNode.innerHTML = '<div class="card"><p>' + (en ? 'The app didn’t load completely. Your data is still on this phone.' : 'Застосунок не завантажився повністю. Ваші дані лишились у телефоні.') + '</p><button type="button" class="pri wide" onclick="location.reload()">' + (en ? 'Reload' : 'Оновити') + '</button></div>';
+    }, bad ? 500 : 8000);
+  });
+})();
+</script>
+<script src="i18n.js?v=3.27.14"></script>
+<script src="i18n_en.js?v=3.27.14"></script>
+<script src="program.js?v=3.27.14"></script>
+<script src="engine.js?v=3.27.14"></script>
+<script src="voice.js?v=3.27.14"></script>
+<script src="coach.js?v=3.27.14"></script>
+<script src="radio.js?v=3.27.14"></script>
+<script src="voicepack.js?v=3.27.14"></script>
+<script src="tips.js?v=3.27.14"></script>
+<script src="charts.js?v=3.27.14"></script>
+<script src="store.js?v=3.27.14"></script>
+<script src="generator.js?v=3.27.14"></script>
+<script src="food_db.js?v=3.27.14"></script>
+<script src="kitchen.js?v=3.27.14"></script>
+<script src="coachctx.js?v=3.27.14"></script>
+<script src="viz.js?v=3.27.14"></script>
+<script src="stretch.js?v=3.27.14"></script>
+<script src="app.js?v=3.27.14"></script>
+<script src="accounts.js?v=3.27.14"></script>
 </body>
 </html>

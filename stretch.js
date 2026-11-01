@@ -15,16 +15,21 @@ var STRETCH = (function () {
     { id: 'calf', key: 's_calf', skip: [], name: 'Розтяжка литки', how: 'Обличчям до стіни, руки на стіні, одна нога пряма позаду. Пʼята на підлозі, нахиляйтесь уперед до натягу в литці.' },
     { id: 'hipflex', key: 's_hipflex', skip: ['knees'], name: 'Розтяжка згиначів стегна', how: 'Напівшпагат, коліно на подушці чи рушнику. Таз уперед, сідниця напружена, поперек не прогинайте.' },
     { id: 'ham', key: 's_ham', skip: [], name: 'Розтяжка задньої поверхні стегна', how: 'Лежачи на спині, обидві ноги зігнуті. Одну підніміть, візьміться за стегно й повільно випряміть до легкого натягу; віддає в ногу чи поперек — опустіть.' },
+    /* фітнес-гумка (з 3.27.14; слово Alexа 01.11: «саме такого формату фітнес резинки потрібні в програмі, як мінімум в кінці тренування в рамках розтяжки тіла»): та сама вправа, гумка замість рук на стегні. Перевагу над звичайною розтяжкою дослідження не показали (мале порівняння з ременем — без різниці); зручно, бо тягне рівно */
+    { id: 'ham_b', key: 's_ham_b', instead: 'ham', gear: 'miniband', skip: [], name: 'Розтяжка задньої поверхні стегна з гумкою', how: 'Лежачи на спині, другу ногу зігніть. Найслабша гумка — на передню частину стопи піднятої ноги, другий кінець — у руках. Повільно випряміть ногу до легкого натягу; віддає в ногу чи поперек — опустіть.' },
+    { id: 'calf_b', key: 's_calf_b', instead: 'calf', gear: 'miniband', skip: [], name: 'Розтяжка литки з гумкою', how: 'Лежачи на спині, другу ногу зігніть. Найслабша гумка — на передню частину стопи піднятої прямої ноги, другий кінець — у руках. Тягніть носок на себе до легкого натягу в литці.' },
     { id: 'glute', key: 's_glute', skip: ['back'], name: 'Розтяжка сідниць', how: 'Лежачи на спині, другу ногу зігніть. Тягніть одне коліно до грудей за стегно, а не за коліно; поперек на підлозі.' }
   ];
   var RULE = 'До легкого натягу, без болю й ривків; дихайте рівно.', END = 'Розтяжку зроблено. Вставайте повільно.', WALK = 'За бажанням спершу 5 хв повільної ходьби.';
   function byId(id) { return LIST.filter(function (x) { return x.id === id; })[0] || null; }
   /* mode: 'full' — усе, що дозволяють обмеження; 'short' — те саме, що було в заминці (груди, задня поверхня стегна, литки); плечі — рука через груди замість одвірка; 'off' — нічого */
-  function pick(mode, limits) {
+  function pick(mode, limits, gear) {
     if (mode === 'off') return [];
-    var lim = limits || [], ok = LIST.filter(function (x) { return !x.skip.some(function (s) { return lim.indexOf(s) >= 0; }); }).map(function (x) { return x.id; });
-    if (mode !== 'short') return ok;
-    return [ok.indexOf('chest') >= 0 ? 'chest' : 'shoulder', 'calf', 'ham'];
+    var lim = limits || [], has = gear || [], ok = LIST.filter(function (x) { return !x.gear && !x.skip.some(function (s) { return lim.indexOf(s) >= 0; }); }).map(function (x) { return x.id; });
+    /* гумка є — ті самі мʼязи, той самий час */
+    var swap = function (ids) { return ids.map(function (id) { var b = LIST.filter(function (x) { return x.instead === id && has.indexOf(x.gear) >= 0; })[0]; return b ? b.id : id; }); };
+    if (mode !== 'short') return swap(ok);
+    return swap([ok.indexOf('chest') >= 0 ? 'chest' : 'shoulder', 'calf', 'ham']);
   }
   /* скільки хвилин (ціле, угору): обидва боки кожної вправи + зміна боку + перехід */
   function mins(ids) { return ids.length ? Math.ceil((ids.length * (2 * HOLD + SWITCH) + (ids.length - 1) * MOVE) / 60) : 0; }

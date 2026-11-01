@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.13';
+  const VERSION = '3.27.14';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -129,7 +129,7 @@ window.APP_START = () => {
      у кг-профілі поле — у грамах (як на кухонних вагах), зберігається в кг (рушій: у руках = гантелей × (гриф + диски));
      0 — без грифа, інакше 50–10 000 г: «0,5» чи «2» — це кілограми в полі грамів, тож помилка, а не гриф на пів грама. У фунтах — lb, 0–25. */
   const gripOk = (g) => g !== null && g !== undefined && isFinite(g) && Math.abs(g - Math.round(g)) < 1e-6 && (Math.round(g) === 0 || (g >= 50 && g <= 10000));
-  const gripTo = (h, toLb) => (toLb ? Math.round((Number(h) || 0) * ENGINE.LB * 2) / 2 : Math.round((Number(h) || 0) / ENGINE.LB * 100) / 100);  // кг → lb до 0,5; lb → кг до 10 г
+  const gripTo = (h, toLb) => (toLb ? Math.round((Number(h) || 0) * ENGINE.LB * 10) / 10 : Math.round((Number(h) || 0) / ENGINE.LB * 100) / 100);  // кг → lb до 0,1 (з 3.27.14: до 0,5 гриф 1 кг ставав 0,91 кг); lb → кг до 10 г
   const GRIP_ERR = () => LL('Вага грифа — у грамах: 0 або від 50 до 10 000 (0,5 кг — це 500)', 'Handle weight is in grams: 0 or 50 to 10,000 (0.5 kg is 500)');
   const QINV = (lb) => (lb ? ['qIL0', 'qIL1', 'qIL2'] : ['qI5', 'qI25', 'qI125']);  // поля дисків анкети: у кг — колишні id (їхні підказки в tips.js)
   /* поле зросту в «Харчуванні» у фунтах: підпис і підказка — дюйми (у кг — як було, підказка з tips.js) */
@@ -382,6 +382,7 @@ window.APP_START = () => {
   }
 
   /* ---------- знайомство: анкета (усі поля обовʼязкові) ---------- */
+  const BAND_NOTE = () => `<p class="tiny muted">${LL('Які гумки взяти: набір із 3–5 кілець різного опору, по колу ≈ 60 см, ширина ≈ 5 см; для розтяжки — найслабша. Є тріщина чи надрив — замініть. Алергія на латекс — лише без латексу (читайте склад: тканинні теж бувають із латексом).', 'Which bands to get: a set of 3–5 loops of different resistance, about 60 cm around and 5 cm wide; use the lightest for stretching. Replace any band with a crack or tear. Latex allergy — latex-free only (check the label: fabric bands can contain latex too).')}</p>`;  // порада про фітнес-гумки: кроки «Обладнання» і «Де тренуєтесь?» (зал)
   const QALL = ['who', 'body', 'goal', 'level', 'place', 'equip', 'limits', 'days', 'agree'];
   /* лише зал — без кроку «Що є вдома» */
   const qSteps = (a) => QALL.filter((x) => x !== 'equip' || a.place !== 'gym');
@@ -445,13 +446,13 @@ window.APP_START = () => {
       `, `<h1>About you</h1><p class="muted small">We need this to calculate your training load and nutrition.</p>
       `)}<div class="seg" style="margin:4px 0 10px"><button type="button" class="${a.units !== 'lb' ? 'on' : ''}" data-act="qUnits" data-v="kg">${LL('кг · см', 'kg · cm')}</button><button type="button" class="${a.units === 'lb' ? 'on' : ''}" data-act="qUnits" data-v="lb">${LL('фунти · дюйми', 'lb · in')}</button></div>${unitsLogNote(a)}${numIn('qage', LL('Вік, років', "Age, years"), a.age)}${err('age')}${numIn('qheight', a.units === 'lb' ? LL('Зріст, дюймів', 'Height, in') : LL('Зріст, см', "Height, cm"), HD(a.height, a.units === 'lb'), undefined, a.units === 'lb' ? LL('Зріст у дюймах — для норми калорій.', 'Height in inches — for your calorie target.') : '')}${err('height')}${numIn('qweight', a.units === 'lb' ? LL('Вага, lb', 'Weight, lb') : LL('Вага, кг', "Weight, kg"), BW(a.weight, a.units === 'lb'), 'decimal', a.units === 'lb' ? LL('Вага у фунтах — для навантаження й норми білка.', 'Weight in pounds — for your training load and protein target.') : '')}${err('weight')}`;
     else if (step === 'goal') { const gs = GEN.goalsOf(a), why = (v) => (gs.indexOf(v) >= 0 || !GEN.GOAL_CLASH[v].some((x) => gs.indexOf(x) >= 0) ? '' : v === 'health' ? LL('не поєднується зі схудненням і набором мʼязів', "can’t be combined with losing weight or building muscle") : LL('не поєднується з «Сила й здоровʼя»', "can’t be combined with “Strength and health”"));
-      body = `${LL(`<h1>Ваша мета</h1><p class="muted small">Можна кілька. «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів; «Сильна спина й осанка» — з будь-якою.</p><div class="pick">`, `<h1>Your goals</h1><p class="muted small">You can pick more than one. “Lose weight” and “Build muscle” together means less fat and more muscle; “Strong back and posture” goes with any goal.</p><div class="pick">`)}${[['loss', LL('Схуднути', "Lose weight"), LL('менше жиру, більше сил', "less fat, more energy")], ['muscle', LL('Набрати мʼязи', "Build muscle"), LL('більше обʼєму й сили', "more size and strength")], ['health', LL('Сила й здоровʼя', "Strength and health"), LL('міцне тіло без крайнощів', "a strong body, no extremes")], ['posture', LL('Сильна спина й осанка', "Strong back and posture"), LL('рівна спина, менше болю від сидіння', "a straight back, less pain from sitting")]].map(([v, l, d]) => opt('qGoal', v, l, d, gs.indexOf(v) >= 0, why(v))).join('')}</div>${err('goal')}`; }
+      body = `${LL(`<h1>Ваша мета</h1><p class="muted small">Можна кілька. «Схуднути» й «Набрати мʼязи» разом — менше жиру й більше мʼязів; «Сильна спина й осанка» — з будь-якою.</p><div class="pick">`, `<h1>Your goals</h1><p class="muted small">You can pick more than one. “Lose weight” and “Build muscle” together means less fat and more muscle; “Strong back and posture” goes with any goal.</p><div class="pick">`)}${[['loss', LL('Схуднути', "Lose weight"), LL('менше жиру, більше сил; це і є сушка: мʼязи бережемо силовими й білком, без зневоднення', "less fat, more energy; this is what “cutting” means: strength training and protein protect muscle, no dehydration")], ['muscle', LL('Набрати мʼязи', "Build muscle"), LL('більше обʼєму й сили', "more size and strength")], ['health', LL('Сила й здоровʼя', "Strength and health"), LL('міцне тіло без крайнощів', "a strong body, no extremes")], ['posture', LL('Сильна спина й осанка', "Strong back and posture"), LL('рівна спина, менше болю від сидіння', "a straight back, less pain from sitting")]].map(([v, l, d]) => opt('qGoal', v, l, d, gs.indexOf(v) >= 0, why(v))).join('')}</div>${err('goal')}`; }
     else if (step === 'level') body = `${LL(`<h1>Досвід тренувань</h1><div class="pick">`, `<h1>Training experience</h1><div class="pick">`)}${opt('qLevel', 'new', LL('Новачок', "Beginner"), LL('або перерва понад пів року', "or a break of more than six months"), a.level === 'new')}${opt('qLevel', 'exp', LL('Тренуюсь регулярно', "I train regularly"), LL('пів року й більше без перерв', "six months or more without a break"), a.level === 'exp')}</div>${err('level')}`;
     else if (step === 'equip') {
       const db = a.equip.indexOf('db') >= 0, mk = Object.keys(GEN.MACH), allM = mk.every((k) => a.equip.indexOf(k) >= 0);
       body = `${LL(`<h1>Що є вдома</h1><p class="muted small">Можна обрати кілька. Для тяг (спина) потрібні гантелі, петля або блок.</p>
       <div class="pick">`, `<h1>What you have at home</h1><p class="muted small">Pick all that apply. For rows (back), you need dumbbells, a resistance band, or a cable machine.</p>
-      <div class="pick">`)}${opt('qEquip', 'db', LL('Гантелі з дисками', "Plate-loaded dumbbells"), LL('розбірні: гриф + диски', "adjustable: handle + plates"), db)}${opt('qEquip', 'band', LL('Петля-еспандер', "Resistance band"), LL('резинка з кріпленням до дверей', "band with a door anchor"), a.equip.indexOf('band') >= 0)}</div>${err('equip')}
+      <div class="pick">`)}${opt('qEquip', 'db', LL('Гантелі з дисками', "Plate-loaded dumbbells"), LL('розбірні: гриф + диски', "adjustable: handle + plates"), db)}${opt('qEquip', 'band', LL('Петля-еспандер', "Resistance band"), LL('резинка з кріпленням до дверей', "band with a door anchor"), a.equip.indexOf('band') >= 0)}${opt('qEquip', 'bench', LL('Лава для жиму', "Weight bench"), LL('для жиму з повною амплітудою, з гантелями', "for a full-range press, with dumbbells"), a.equip.indexOf('bench') >= 0)}${opt('qEquip', 'miniband', LL('Фітнес-гумки (кільця)', "Mini loop bands"), LL('для розтяжки наприкінці тренування', "for stretching at the end of a workout"), a.equip.indexOf('miniband') >= 0)}</div>${BAND_NOTE()}${err('equip')}
       ${db ? `${LL(`<div class="card"><b>Ваші гантелі</b>`, `<div class="card"><b>Your dumbbells</b>`)}${(a.units === 'lb' ? numIn('qHandle', LL('Вага одного грифа без дисків, lb', 'Weight of one handle without plates, lb'), a.handle, 'decimal') : numIn('qHandle', LL('Вага одного грифа без дисків, г', 'Weight of one handle without plates, g'), a.handle === null || a.handle === undefined ? a.handle : a.handle * 1000, 'numeric'))}${err('handle')}${LL(`
         <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>`, `
         <label class="f">Total plates for both dumbbells</label><div class="grid3"><div>`)}${PLATES(a.units === 'lb').map((k, i) => numIn(QINV(a.units === 'lb')[i], fmt(k) + ' ' + MU('weight', a.units === 'lb'), a.inv[k], undefined, a.units === 'lb' ? invTip(k, i) : '')).join('</div><div>')}</div></div>${err('inv')}</div>` : ''}${LL(`
@@ -463,7 +464,7 @@ window.APP_START = () => {
       <div class="grid2">`)}${mk.map((k) => opt('qEquip', k, TR(GEN.MACH[k][0]), TR(GEN.MACH[k][1]), a.equip.indexOf(k) >= 0)).join('')}</div>`;
     } else if (step === 'place') body = `${LL(`<h1>Де тренуєтесь?</h1><p class="muted small">Програма підбере вправи під місце. «І вдома, і в залі» — перед кожним тренуванням застосунок спитає, де ви сьогодні.</p>
       <div class="pick">`, `<h1>Where do you train?</h1><p class="muted small">The program picks exercises for your location. With “Both home and gym,” the app will ask where you are before each workout.</p>
-      <div class="pick">`)}${[['home', LL('Вдома', "At home"), LL('гантелі, петля або тренажери', "dumbbells, band, or machines")], ['gym', LL('У тренажерному залі', "At the gym"), LL('тренажери й блоки', "machines and cables")], ['both', LL('І вдома, і в залі', "Both home and gym"), LL('програма для обох місць', "a program for both places")]].map(([v, l, d]) => opt('qPlace', v, l, d, a.place === v)).join('')}</div>${err('place')}`;
+      <div class="pick">`)}${[['home', LL('Вдома', "At home"), LL('гантелі, петля або тренажери', "dumbbells, band, or machines")], ['gym', LL('У тренажерному залі', "At the gym"), LL('тренажери й блоки', "machines and cables")], ['both', LL('І вдома, і в залі', "Both home and gym"), LL('програма для обох місць', "a program for both places")]].map(([v, l, d]) => opt('qPlace', v, l, d, a.place === v)).join('')}</div>${a.place === 'gym' ? `<div class="pick" style="margin-top:10px">${opt('qEquip', 'miniband', LL('Є фітнес-гумки (кільця)', "I have mini loop bands"), LL('для розтяжки наприкінці тренування', "for stretching at the end of a workout"), a.equip.indexOf('miniband') >= 0)}</div>${BAND_NOTE()}` : ''}${err('place')}`;
     else if (step === 'limits') body = `${LL(`<h1>Здоровʼя</h1><p class="muted small">Позначте все, що у вас є. Програма прибере або полегшить вправи, які можуть зашкодити.</p>
       <div class="pick">`, `<h1>Health</h1><p class="muted small">Check everything that applies to you. The program will remove exercises that could hurt you or make them easier.</p>
       <div class="pick">`)}${[['back', LL('Грижа або біль у спині', "Herniated disc or back pain"), LL('грижа, протрузія, часто болить поперек', "herniated or bulging disc, frequent lower back pain")], ['knees', LL('Коліна', "Knees"), LL('біль або травма коліна', "knee pain or injury")], ['shoulders', LL('Плечі', "Shoulders"), LL('біль або травма плеча', "shoulder pain or injury")], ['heart', LL('Тиск або серце', "Blood pressure or heart"), LL('гіпертонія, хвороби серця', "hypertension, heart disease")], ['pregnant', LL('Вагітність', "Pregnancy"), ''], ['none', LL('Нічого з цього', "None of these"), '']].filter(([v]) => v !== 'pregnant' || a.sex !== 'm').map(([v, l, d]) => opt('qLimit', v, l, d, a.limits.indexOf(v) >= 0)).join('')}</div>${err('limits')}`;
@@ -1287,7 +1288,8 @@ window.APP_START = () => {
   /* розтяжка — останній блок тренування (з 3.27.11; слова Alexа 31.10: «розтяжка має бути частиною тренування», «Так, останнім блоком»; дані — app/stretch.js): «Більше» → «Тренування» — повний набір, коротка чи вимкнути. Стан — у чернетці (d.sb), набір фіксується, коли підходи скінчились; підходи, рекорди й калорії блок не чіпає */
   const stMode = () => S().stretch || 'short';
   const stLim = () => { const l = (((DB.custom || {}).answers || {}).limits || []).slice(); if (G().backCare && l.indexOf('back') < 0) l.push('back'); return l; };
-  const stBox = (d) => d.sb || (d.sb = { ids: STRETCH.pick(stMode(), stLim()), i: 0, side: 0 });
+  const stGear = () => ((DB.custom || {}).answers || {}).equip || [];  // фітнес-гумки (з 3.27.14)
+  const stBox = (d) => d.sb || (d.sb = { ids: STRETCH.pick(stMode(), stLim(), stGear()), i: 0, side: 0 });
   const stCur = (d) => { const b = stBox(d); return b.i < b.ids.length ? STRETCH.byId(b.ids[b.i]) : null; };
   const stSay = (x) => TR(x.name) + '. ' + (vAuto() === 'part' ? '' : TR(x.how));
   function stNext(d) {
@@ -1316,7 +1318,7 @@ window.APP_START = () => {
   }
   /* екран «Список»: що входить і перехід до таймера (той самий блок на екрані «Тренер»; лише на це тренування) */
   function stListNote() {
-    const ids = STRETCH.pick(stMode(), stLim()); if (!ids.length) return '';
+    const ids = STRETCH.pick(stMode(), stLim(), stGear()); if (!ids.length) return '';
     return `<div class="note ok small"><b>${LL('Розтяжка', 'Stretching')} · ≈ ${STRETCH.mins(ids)} ${LL('хв', 'min')}:</b> ${esc(ids.map((id) => TR(STRETCH.byId(id).name)).join(' · '))}. ${LL('По 30 с на кожен бік.', '30 s each side.')} <button type="button" class="sm" data-act="mode" style="margin-top:6px" data-tip="${esc(LL('Перейти на екран «Тренер»: таймер, 3D і голос. Лише на це тренування.', 'Switch to the Coach screen: timer, 3D and voice. For this workout only.'))}">${LL('▶ З таймером і 3D', '▶ With timer and 3D')}</button></div>`;
   }
   function coolCard() {
@@ -2442,7 +2444,7 @@ window.APP_START = () => {
     const fsk = d ? null : ENGINE.freshStart(p.sessions, trainDays(), today());  // з 3.24.0 — «новий старт» (пункт 3)
     const ym = today().slice(0, 7), mprs = p.sessions.filter((s) => s.date.slice(0, 7) === ym).reduce((a, s) => a + (s.prs || 0), 0);
     const pv = buildDraft(null, 'g'), est = ENGINE.estimateMins(prog, pv.items), nEx = pv.items.filter((x) => !x.skipped).length;
-    const warmMin = (warmList().title.match(/(\d+)\s*(?:хв|min)/) || [])[1], stMin = STRETCH.mins(STRETCH.pick(stMode(), stLim()));
+    const warmMin = (warmList().title.match(/(\d+)\s*(?:хв|min)/) || [])[1], stMin = STRETCH.mins(STRETCH.pick(stMode(), stLim(), stGear()));
     const nd = nextDayText(p.days);
     /* порядок головної (з 3.27.1; слово Alexа 25.10: «Так, роби в 3.27.1 як радиш: порядок Тренування → Кухня → Як ви сьогодні → Завдання дня → Щодня → Урок дня,
        вода першим рядком у картці кухні…»; «Завдання дня» прибрано — «Прибери картку «Завдання дня» з головної в 3.27.1»: усі її пункти вже мають свої картки поруч): найчастіше застосунок відкривають відмітити воду — «+ склянка» на першому екрані (замір 390 × 844: було 2 047 px, стало ≈ 570) */
@@ -2628,8 +2630,12 @@ window.APP_START = () => {
   const CHAIR_CDC = [[60, 14, 12], [65, 12, 11], [70, 12, 10], [75, 11, 10], [80, 10, 9], [85, 8, 8], [90, 7, 4]];
   const chairThr = (age, f) => { if (!(age >= 60 && age <= 94)) return null; const r = CHAIR_CDC.filter((x) => age >= x[0]).pop(); return { from: r[0], to: r[0] + 4, n: f ? r[2] : r[1] }; };
   /* що означає число: віджимання — Yang 2019 (лише чоловіки); крісло — CDC; одна нога — Araújo 2022, BJSM (51–75 років); підлога — Brito 2014 (51–80 років);
-     ходьба — Kodama 2009, JAMA (витривалість); формули VO₂max (UKK) і норми 6 хв (Enright 1998) не показуємо — першоджерело формули UKK платне, а відкрита стаття
-     застосовує «жіночу» формулу до вибірки з 16 чоловіків; до норм 6 хв у 2020 вийшла поправка, зміст якої не вдалося звірити (CLAUDE.md §11) */
+     ходьба — Kodama 2009, JAMA (витривалість); оцінка VO₂max за 2 км і норма 6 хв (з 3.27.14) — ENGINE.walkVO2, ENGINE.walk6Norm */
+  /* вага на день тесту: ENGINE.weightAt, інакше анкета (кг, як ІМТ у «Тілі») */
+  const testKg = (d) => ENGINE.weightAt(P(), d) || Number(((DB.custom || {}).answers || {}).weight);
+  /* оцінка для запису 2 км; тиск / серце — без оцінки: ліки змінюють пульс, а тест такій людині й не призначено */
+  const walkEst = (r) => { const me = P().me || {}, hgt = Number(me.height), kg = testKg(r.d), lim = ((DB.custom || {}).answers || {}).limits || [];
+    return lim.indexOf('heart') >= 0 || !hgt || !kg ? null : ENGINE.walkVO2(G().sex, Number(me.age), Number(r.walkT), Number(r.walkHR), kg / Math.pow(hgt / 100, 2)); };
   const testNorm = (k) => {
     const age = Number((P().me || {}).age), f = G().sex === 'f';
     if (k === 'push') return f ? LL('Для вас це особистий показник: дослідження звʼязку віджимань із серцем проводили лише на чоловіках.', 'This is your personal marker: the study linking push-ups to heart health included only men.')
@@ -2674,13 +2680,18 @@ window.APP_START = () => {
     }
     if (f === 'spL' || f === 'spR') { const v = best(f, (t) => (t.spV || 'f') === tv.spV); return rec(v, fmt(v) + sec, LL('Перевіреної норми бічної планки немає.', 'There’s no verified side-plank norm.'), tv.spV === 'k' ? LL(' з колін', ' from the knees') : LL(' з ніг', ' from the feet')); }
     if (f === 'carL' || f === 'carR') { const v = best(f); return rec(v, fmt(v) + sec, LL('Перевіреної норми немає: вага в кожного своя.', 'There’s no verified norm: everyone uses their own weight.')); }
-    if (f === 'walkM') { const v = best('walkT', null, true); return rec(v, v === null ? '' : mmss(v), LL('Норму часу не показуємо: формулу оцінки не вдалося звірити з першоджерелом.', 'We don’t show a time norm: the estimation formula couldn’t be checked against its original source.')); }
+    if (f === 'walkM') { const v = best('walkT', null, true); return rec(v, v === null ? '' : mmss(v), LL('Окремої норми часу немає: він залежить від пульсу, віку й статури. Коли є час і пульс, у картці зʼявляється оцінка VO₂max.', 'There’s no separate time norm: it depends on your pulse, age, and build. Once you have both time and pulse, the card shows a VO₂max estimate.')); }
+    if (f === 'vo2') return { k: 'n', t: LL('оцінка', 'estimate'), tip: LL('Рахуємо за формулою Інституту UKK: час, пульс на фініші, вік, стать і ІМТ. Це оцінка, а не вимір і не діагноз: похибка ≈ 9–15 %. Формула — для 20–65 років, у дуже тренованих (понад годину 5 разів на тиждень) занижує. Ліки, що змінюють пульс, спотворюють результат. Перший прохід вважайте пробним. Йдіть по рівному, не в спеку понад 25 °C і не в мороз; пульс міряйте якнайточніше: помилка в 10 ударів помітно змінює результат.', 'Calculated with the UKK Institute formula: time, pulse at the finish, age, sex, and BMI. It’s an estimate, not a measurement or a diagnosis: the error is about 9–15%. The formula is for ages 20–65 and reads low in very fit people (over an hour, 5 times a week). Medications that change your pulse distort the result. Treat your first attempt as practice. Walk on level ground, not in heat over 25 °C or in freezing weather; measure your pulse as accurately as you can: an error of 10 beats noticeably changes the result.') };
     if (f === 'walkHR') {
       const l = tl.filter((t) => t.walkT && t.walkHR).sort((a, b) => (a.d < b.d ? -1 : 1)).pop();
       const why = LL('Норми пульсу після ходьби немає: порівнюйте з собою — той самий маршрут швидше при тому самому чи нижчому пульсі.', 'There’s no norm for pulse after walking: compare with yourself — the same route faster at the same or a lower pulse.');
       return l ? { k: 'r', t: LL('було ', 'last ') + l.walkHR, tip: why + LL(' Тут — пульс минулого разу.', ' Here is last time’s pulse.') } : { k: 'z', t: LL('без норми', 'no norm'), tip: why };
     }
-    if (f === 'w6') { const v = best('w6'); return rec(v, fmt(v) + LL(' м', ' m'), LL('Норму 6 хв не показуємо: до неї вийшла поправка, яку не вдалося звірити.', 'We don’t show a 6-minute norm: a correction to it was published that couldn’t be checked.')); }
+    if (f === 'w6') {
+      const n = ENGINE.walk6Norm(G().sex, age, Number((P().me || {}).height), testKg('9999'));
+      if (n) return { k: 'n', t: LL('норма ≈ ', 'norm ≈ ') + fmt(n) + LL(' м', ' m'), tip: LL('Орієнтир для вашого віку, зросту, ваги й статі: формула Enright, Sherrill 1998 (290 здорових людей 40–80 років). Вона пояснює лише ≈ 40 % різниці між людьми, тож це не межа норми й не діагноз. Точніша для першого проходження; далі дивіться на власний ріст.', 'A guide for your age, height, weight, and sex: the Enright, Sherrill 1998 formula (290 healthy people aged 40–80). It explains only about 40% of the differences between people, so it isn’t a cutoff or a diagnosis. It’s most accurate for your first attempt; after that, watch your own progress.') };
+      const v = best('w6'); return rec(v, fmt(v) + LL(' м', ' m'), LL('Норма 6 хв — для 40–80 років.', 'The 6-minute norm is for ages 40–80.'));
+    }
     return null;
   };
   const tChip = (f) => { const c = testChip(f); return c ? `<button type="button" class="tch ${c.k}" id="tc_${f}" data-act="tNorm" data-f="${f}" data-tip="${esc(c.tip)}">${esc(c.t)}</button>` : ''; };
@@ -2842,7 +2853,7 @@ window.APP_START = () => {
     const yd = iso(new Date(tms(d) - 864e5)), yday = kday(yd);
     const copy = yday.items.length && !day.items.length ? `<button type="button" class="wide" data-act="kCopy">${LL('Як учора', 'Same as yesterday')} (${KITCHEN.dayTotals(yday, sx, kctx()).kcal}${LL(' ккал)', ' kcal)')}</button>` : '';
     const gap = nu && isToday && day.items.length ? KITCHEN.proteinGap(tot, nu.pLo, kctx(), 3) : null;
-    const gapCard = gap && gap.need > 0 ? `<div class="card"><b>${LL('Чим добрати білок', 'How to reach your protein')}</b><p class="small muted">${LL('Бракує ', 'You need ')}${gap.need}${LL(' г до норми. Одне з:', ' g more. One of:')}</p>
+    const gapCard = gap && gap.need > 0 ? `<div class="card"><b>${LL('Чим добрати білок', 'How to reach your protein')}</b><p class="small muted">${LL('Бракує ', 'You need ')}${gap.need}${gap.list.length && gap.list[0].p < gap.need ? LL(' г до норми. Найбільше за раз:', ' g more. The most in one go:') : LL(' г до норми. Одне з:', ' g more. One of:')}</p>
       ${gap.list.map((x, j) => `<div class="krow"><div style="flex:1;min-width:0"><div class="small">${esc(kName(x.e))}</div><div class="tiny muted">${x.mine ? `<span class="kq exact">${LL('з ваших', 'yours')}</span> · ` : ''}${fmt(x.e.g)}${LL(' г · ', ' g · ')}${x.kcal}${LL(' ккал · білок ', ' kcal · protein ')}${fmt(x.p)}${LL(' г', ' g')}</div></div>
         <button type="button" class="sm" data-act="kGapAdd" data-j="${j}">+</button></div>`).join('')}<p class="tiny muted">${LL('Спершу — те, що ви вже їсте. Склад — з баз USDA і BLS чи ваших етикеток.', 'What you already eat comes first. Composition comes from the USDA and BLS databases or your own labels.')}</p></div>` : '';
     /* вода одним числом (огляд 24.10, слово Alexа: «вода одним числом»): кількість — лише в заголовку (рядок «Випито … · залишилось …» її повторював — тепер лише «Норму виконано ✓»),
@@ -2850,6 +2861,7 @@ window.APP_START = () => {
     const wPlan = `${LL('Ваш план: ', 'Your plan: ')}${fmt(KITCHEN.waterTarget(sx, false, k.set.vol, kWRec()) / 1000)}${LL(' л на день', ' L a day')}${k.set.vol ? LL(' (своє', ' (your own') + (kWRec() ? LL('; рекомендовано ', '; recommended ') + fmt(kWRec() / 1000) + LL(' л', ' L') : '') + ')' : kWRec() ? LL(' (рекомендовано за вагою, статтю й віком)', ' (recommended for your weight, sex and age)') : LL(' (норма програми)', ' (program target)')}${LL(', у день тренування — +0,5 л', ', +0.5 L on training days')}${wTrain ? LL(' (сьогодні)', ' (today)') : ''}; ${kIntakesTxt(glass, wTrain, k.set.per).txt} ${LL('(склянка — ', '(a glass is ')}${glass}${LL(' мл), з ', ' ml), from ')}${k.set.first}${LL(' до ', ' to ')}${k.set.last}. ${LL('Випили раніше чи пізніше — час наступних прийомів рахується від вашої відмітки; більше — прийомів менше; менше чи пропустили — наступні більші, до обраного за раз; не вміщається — додатковий прийом; останній перед сном — не більший за попередній, а що не вміщається, не надолужуємо. Змінити — «Налаштування кухні».', 'Drank earlier or later — the next drinks are timed from when you logged it; drank more — fewer drinks left; drank less or missed one — the next ones get bigger, up to what you chose at a time; if it doesn’t fit, an extra drink is added; the last one before bed is never bigger than the one before it, and whatever doesn’t fit isn’t made up. Change it in “Kitchen settings.”')}`;
     const water = `<div class="card kwat"><div class="sp" data-tip="${esc(wPlan)}"><b>${LL('Вода', 'Water')}</b><span class="small muted">${fmt((wday.water || 0) / 1000)} ${LL('з', 'of')} ${fmt(wTarget / 1000)}${LL(' л', ' L')}</span></div>
       ${wg.icons}${(wday.water || 0) >= wTarget ? `<p class="tiny muted" style="margin:0 0 8px">${wg.line}</p>` : ''}${tu ? `<p class="small" style="margin:0 0 8px">${kTurnTxt(tu)}</p>` : dp && (wday.water || 0) < wTarget ? `<p class="small" style="margin:0 0 8px">${W_NOMORE()}</p>` : ''}${dp && dp.items.length ? `<p class="tiny muted" style="margin:0 0 8px">${LL('Сьогодні: ', 'Today: ')}${kPlanTxt(dp.items)}</p>` : ''}
+      ${isToday && ui.kDrink ? `<button type="button" class="sm ghost wide" style="margin-bottom:8px" data-act="kDrinkWater" data-tip="${esc(LL('Усе питво зараховується до норми, крім алкоголю. Сама кнопка нічого не додасть, поки не натиснете.', 'All drinks count toward your target except alcohol. Nothing is added until you tap.'))}">${esc(LL('До води: ', 'Add to water: ') + ui.kDrink.nm + ' · ' + ui.kDrink.ml + LL(' мл', ' ml'))}</button>` : ''}
       <div class="row"><button type="button" class="pri" style="flex:1" data-act="kWater" data-v="1">+ ${tu ? kGlW(tu.p) : LL('склянка', 'glass')}</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="0.5" aria-label="${LL('пів склянки', 'half a glass')}">+ ½</button><button type="button" class="ghost" style="min-width:48px" data-act="kWater" data-v="-1" aria-label="${LL('прибрати останню відмітку', 'remove the last entry')}">−</button></div>
       ${wd !== d ? `<p class="tiny muted">${LL('Нічна зміна: вода рахується від першої склянки о ', 'Night shift: water counts from your first glass at ')}${k.set.first}.</p>` : ''}${kHeartNote()}${kWaterRemindHtml()}</div>`;
     /* вага для норми (з 3.21.0, слово Alexа 23.10: «Прибери поле ваги з «Кухні»: лиши рядок, від якої ваги рахується норма (із «Замірів»), і пораду за темпом»):
@@ -3144,6 +3156,8 @@ window.APP_START = () => {
     e.at = a.mode === 'edit' ? (day.items[a.i] || {}).at || Date.now() : Date.now();
     if (a.mode === 'edit') day.items[a.i] = e; else day.items.push(e);
     if (e.t === 'food') { const k = kit(); k.recent = [{ t: 'food', id: e.id, s: e.s }].concat(k.recent.filter((r) => !(r.t === 'food' && r.id === e.id))).slice(0, 30); }
+    /* напій у норму води (з 3.27.14): лише кнопкою, сама не додає — склянку людина могла вже відмітити */
+    if (a.mode === 'new' && !ui.kDate && e.t === 'food') { const ml = KITCHEN.drinkMl(e.id, e.s, e.g); ui.kDrink = ml ? { ml, nm: kName(e) } : ui.kDrink; }
     save(); haptic(); rKitchen();
     if (a.mode === 'new') {  // з 3.27.6 — шторка лишається: наступний продукт у той самий прийом (фото тарілки — далі його продукти)
       if (a.ph && a.ph.st === 'ok' && a.phj !== undefined && a.ph.items[a.phj]) a.ph.items[a.phj].done = true;
@@ -3760,6 +3774,12 @@ window.APP_START = () => {
         : k === 'bal' || k === 'car' ? plot(name, TEST_KEYS[k].map((f, i) => ({ pts: pts(f), color: i ? 'var(--d)' : 'var(--accent)' })), LR)
         : k === 'walk' ? plot(name, [{ pts: pts('walkT', (v) => Math.round(v / 6) / 10), color: 'var(--accent)' }], `<p class="tiny muted" style="margin:4px 0 0">${LL('Графік — хвилини на 2 км.', 'Chart — minutes for 2 km.')}</p>`)
         : plot(name, [{ pts: pts(TEST_KEYS[k][0]), color: 'var(--accent)' }]));
+      /* оцінка VO₂max під формою 2 км (з 3.27.14): за останнім записом */
+      const walkLine = () => { const r = lastOf('walk'), e = r ? walkEst(r) : null; if (!e) return '';
+        const txt = e.need === 'hr' ? LL('Додайте пульс одразу після фінішу — зʼявиться оцінка VO₂max.', 'Add your pulse right after the finish to get a VO₂max estimate.')
+          : e.need === 'pace' ? LL('Пульс на фініші занизький: ходьба була недостатньо швидка, тож оцінку VO₂max не показуємо — вона була б занижена.', 'Your finish pulse is too low: the walk wasn’t brisk enough, so we don’t show a VO₂max estimate — it would read too low.')
+          : `<b>VO₂max ≈ ${fmt(e.v)}</b> ${LL('мл/кг/хв', 'ml/kg/min')} · ${LL('середнє у вашому віці', 'average at your age')} ${fmt(e.avg)}`;
+        return `<div class="sp" style="margin-top:10px"><span class="small">${txt}</span>${tChip('vo2')}</div>`; };
       const cards = TEST_HOW().filter(([k]) => testOn(k) || lastOf(k)).map(([k, name, line, v3]) => {
         const nm = testNorm(k), on = testOn(k);
         const viz = typeof VIZ === 'undefined' || !VIZ.has(v3) ? (nm ? `<p class="tiny muted" style="margin:8px 0 0">${nm}</p>` : '')
@@ -3767,7 +3787,7 @@ window.APP_START = () => {
         const form = !on ? `<p class="tiny muted" style="margin:8px 0 0">${LL('Цього тесту вже немає у вашій програмі — лишилась історія.', 'This test is no longer in your program — your history stays.')}</p>`
           : `<div class="tfs">${k === 'push' ? seg('pushV', [['k', LL('з колін', 'from the knees')], ['t', LL('з носків', 'from the toes')]]) : k === 'sp' ? seg('spV', [['k', LL('з колін', 'from the knees')], ['f', LL('з ніг', 'from the feet')]]) : ''}${TESTS.filter(([f]) => TEST_IN[k].indexOf(f) >= 0).map(field).join('')}</div>`
           + `<button type="button" class="pri wide" data-act="saveTest" data-t="${k}" data-tip="${esc(LL('Зберегти результат лише цього тесту за сьогодні; інші — коли зробите.', 'Save the result of this test only for today; the others whenever you do them.'))}">${LL('Зберегти', 'Save')}</button>`;
-        return `<div class="card tcard" data-t="${k}"><div class="sp"><b>${name}</b><span class="small muted">${lastTxt(k, lastOf(k))}</span></div><p class="small muted" style="margin:4px 0 0">${line}</p>${viz}${form}${chartOf(k, name)}</div>`;
+        return `<div class="card tcard" data-t="${k}"><div class="sp"><b>${name}</b><span class="small muted">${lastTxt(k, lastOf(k))}</span></div><p class="small muted" style="margin:4px 0 0">${line}</p>${viz}${form}${k === 'walk' ? walkLine() : ''}${chartOf(k, name)}</div>`;
       }).join('') + (testOn('bal') ? `<div class="card"><b>${LL('Фото осанки збоку', 'Side posture photo')}</b><p class="small muted" style="margin:4px 0 0">${LL('Вухо, плече, таз і кісточка — чи на одній лінії; однакове світло й місце («Тіло» → «Фото» → «Збоку»).', 'Ear, shoulder, hip and ankle — are they in one line; same light and spot (“Body” → “Photos” → “Side”).')}</p></div>` : '');
       /* без дня тестів: пульс у спокої (Zhang 2016, CMAJ: 46 досліджень, 1 246 203 людини — +10 ударів за хвилину, на 9 % вища смертність) і талія / зріст
          (NICE NG246: 0,4–0,49 — здорово, 0,5–0,59 — підвищений ризик, від 0,6 — високий; для ІМТ до 35) — з «Замірів» і анкети, без нового заміру */
@@ -4343,6 +4363,7 @@ window.APP_START = () => {
       kdayW(d).items.push(e); save(); toast(LL('Додано', 'Added')); return rKitchen();
     }
     if (act === 'kWater') return kWater(Number(b.dataset.v));
+    if (act === 'kDrinkWater') { const x = ui.kDrink; ui.kDrink = null; if (x) { kWaterLog(kWaterDay(), x.ml); save(); haptic(); if (kit().set.water) remindSync(false); } return rKitchen(); }
     if (act === 'kWaterHome') { const tu = kTurn(); kWaterLog(kWaterDay(), tu ? tu.ml : kit().set.glass); save(); haptic(); rHome(); if (kit().set.water) remindSync(false); return; }
     if (act === 'kWaterRemind') return kWaterRemind();
     if (act === 'goMeas') { view = 'body'; ui.bodyTab = 'm'; render(); window.scrollTo(0, 0); return; }  // з «Кухні» — у «Тіло → Заміри» (з 3.21.0)
@@ -4409,7 +4430,7 @@ window.APP_START = () => {
     if (act === 'photoDel') { if (!confirm(LL('Видалити фото?', "Delete photo?"))) return; STORE.delPhoto(Number(b.dataset.id)).then(() => { closeSheet(); rBody(); }); return; }
     if (act === 'tVar') { TV()[b.dataset.k] = b.dataset.v; b.parentNode.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));  // без перемальовування — введене лишається
       TEST_IN[b.dataset.k === 'pushV' ? 'push' : 'sp'].forEach((f) => { const el = document.getElementById('tc_' + f); if (el) el.outerHTML = tChip(f); }); return; }  // плашка — свого варіанта (з 3.27.7)
-    if (act === 'tNorm') { const f = b.dataset.f, c = testChip(f), tk = Object.keys(TEST_IN).find((x) => TEST_IN[x].indexOf(f) >= 0), nm = (TEST_HOW().find((x) => x[0] === tk) || [])[1] || '';
+    if (act === 'tNorm') { const f = b.dataset.f, c = testChip(f), tk = f === 'vo2' ? 'walk' : Object.keys(TEST_IN).find((x) => TEST_IN[x].indexOf(f) >= 0), nm = (TEST_HOW().find((x) => x[0] === tk) || [])[1] || '';
       if (c) openSheet(`<h2>${esc(nm)} · ${esc(c.t)}</h2><p class="small">${esc(c.tip)}</p><button type="button" class="ghost wide" data-act="closeSheet">${LL('Зрозуміло', 'Got it')}</button>`); return; }
     if (act === 'saveTest') {
       /* один тест — своя кнопка (з 3.27.4): читаємо лише поля цього тесту; той самий день — доповнюємо (інші тести можуть бути окремо): порожнє поле не стирає вже записане */

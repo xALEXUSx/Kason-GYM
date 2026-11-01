@@ -422,6 +422,22 @@ var ENGINE = (function () {
      але не вище ваги для ІМТ 30 (огляд Amsterdam UMC «Protein requirement in obesity»: надлишок жиру понад ІМТ 30 у розрахунку білка не враховують).
      До 3.20.0 без цільової ваги брали вагу для ІМТ 27,5 — без джерела, і людям зі звичайною вагою білок виходив більшим, ніж від власної ваги
      (жінка 170 см і 60 кг — від 79,5 кг). */
+  /* оцінка VO₂max за 2 км ходьби (з 3.27.14): формула й межі — посібник UKK Institute (UKK Walk Test, Tester's guide, с. 13–14, 17; Oja 1991): 20–65 років;
+     кінцевий пульс нижче 120 (до 40 років) чи 110 (від 40) посібник вважає недостатнім зусиллям — оцінка була б занижена, тож її немає. avg — таблиця 5 посібника (середнє для віку й статі) */
+  function walkVO2(sex, age, sec, hr, bmi) {
+    if (!(age >= 20 && age <= 65) || !(sec > 0) || !(bmi > 0)) return null;
+    var f = sex === 'f', avg = Math.round((f ? 44.9 - 0.28 * age : 57 - 0.34 * age) * 10) / 10;
+    if (!(hr > 0)) return { need: 'hr', avg: avg };
+    if (hr < (age < 40 ? 120 : 110)) return { need: 'pace', avg: avg };
+    var m = sec / 60, v = f ? 116.2 - 2.98 * m - 0.11 * hr - 0.14 * age - 0.39 * bmi : 184.9 - 4.65 * m - 0.22 * hr - 0.26 * age - 1.05 * bmi;
+    return v > 0 ? { v: Math.round(v * 10) / 10, avg: avg } : null;
+  }
+  /* орієнтир за 6 хв ходьби (з 3.27.14): Enright, Sherrill 1998, AJRCCM 158:1384; 290 здорових людей 40–80 років; поправка 2020 (AJRCCM 201:393) стосується лише рисунків, формули автори підтвердили */
+  function walk6Norm(sex, age, height, kg) {
+    if (!(age >= 40 && age <= 80) || !(height > 0) || !(kg > 0)) return null;
+    var v = sex === 'f' ? 2.11 * height - 2.29 * kg - 5.78 * age + 667 : 7.57 * height - 5.02 * age - 1.76 * kg - 309;
+    return v > 0 ? Math.round(v) : null;
+  }
   function nutrition(food, me, weight) {
     if (!food || !me || !(me.age > 0) || !(me.height > 0) || !(weight > 0)) return null;
     var bmr = 10 * weight + 6.25 * me.height - 5 * me.age + (me.sex === 'f' ? -161 : 5);
@@ -1054,7 +1070,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { restWarn: restWarn, homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { walkVO2: walkVO2, walk6Norm: walk6Norm, restWarn: restWarn, homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
            KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };

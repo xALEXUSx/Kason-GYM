@@ -165,6 +165,15 @@ var KITCHEN = (function () {
      з білкових груп. Лише готове до їжі: готове, без стану, сирі фрукти й овочі; грами — щоб закрити нестачу (вгору до 10 г, не більше 400 г).
      ctx: { products, dishes, recent: [{ id, s }] }. У списку mine — «з ваших». */
   var ready = function (it, v) { return v.s === 'cooked' || v.s === '' || (v.s === 'raw' && (it.g === 'fruit' || it.g === 'veg')); };
+  /* що радити зі спільної бази (з 3.27.14; наживо 01.11: першими йшли желатин 150 г і сушена солона риба): звичайна їжа, яку зʼїдають порцією; без добавок, копченого й солоного, субпродуктів. Свої продукти, страви й нещодавнє — як і були */
+  var GAP_EVERYDAY = ['chicken_breast', 'chicken_fillet_fried', 'chicken_thigh', 'turkey_breast', 'turkey_thigh', 'beef_lean', 'beef_mince_5', 'pork_tender', 'pork_loin', 'cod', 'pollock', 'hake', 'salmon', 'pink_salmon', 'mackerel', 'tuna_can', 'egg', 'cottage_0', 'cottage_1', 'cottage_2', 'quark_02', 'quark_2', 'quark_5', 'greek_yogurt_0', 'greek_yogurt_2', 'tofu'];
+  /* чи йде напій у норму води (з 3.27.14; ідея 01.11): усе питво, крім алкоголю (тренер про це каже: «кава зараховується») і сухого порошку (обʼєм води невідомий) */
+  var NOT_WATER = ['beer', 'beer_wheat', 'beer_dark', 'wine_red', 'wine_white_dry', 'wine_white_semisweet', 'wine_red_semisweet', 'sparkling_brut', 'sparkling_semidry', 'port', 'mulled_wine', 'cider', 'vodka', 'cognac', 'whisky', 'rum', 'gin', 'tequila', 'liqueur_cream', 'coffee_instant', 'coffee_3in1'];
+  function drinkMl(id, s, g) {
+    var it = BY[id]; if (!it || it.g !== 'drink' || NOT_WATER.indexOf(id) >= 0 || !(g > 0)) return 0;
+    var v = variant(id, s) || it.v[0];
+    return Math.round(g / ((v && v.gml) || 1));
+  }
   function proteinGap(totals, pLo, ctx, limit) {
     var need = Math.round((pLo || 0) - ((totals && totals.p) || 0));
     if (need <= 0) return { need: 0, list: [] };
@@ -180,15 +189,16 @@ var KITCHEN = (function () {
     var Dd = ctx.dishes || {};
     Object.keys(Dd).forEach(function (k) { if (Dd[k].per100 && Dd[k].per100.p > 0) cand.push({ t: 'dish', did: k, x: Dd[k].per100, mine: true }); });
     DB.items.forEach(function (it) {
-      if ((it.g !== 'protein' && it.g !== 'dairy') || seen[it.id]) return;
+      if (GAP_EVERYDAY.indexOf(it.id) < 0 || seen[it.id]) return;
       it.v.forEach(function (v) { if (!ready(it, v) || !(v.p > 0)) return; cand.push({ t: 'food', id: it.id, s: v.s, x: v }); });
     });
-    var list = cand.map(function (c) {
-      var g = Math.ceil(need / c.x.p * 100 / 10) * 10;
-      if (g > 400) return null;
+    var gr = function (c) { return Math.ceil(need / c.x.p * 100 / 10) * 10; }, fit = cand.filter(function (c) { return gr(c) <= 400; });
+    /* велика нестача (з 3.27.14): жодна порція до 400 г її не закриває — найбільша порція зі спільної бази, а не порожня картка */
+    var list = (fit.length ? fit : cand.filter(function (c) { return !c.mine; })).map(function (c) {
+      var g = Math.min(400, gr(c));
       var e = { t: c.t, g: g, how: 'g' }; if (c.id) { e.id = c.id; e.s = c.s; } if (c.pid) e.pid = c.pid; if (c.did) e.did = c.did;
       return { e: e, kcal: Math.round(c.x.kcal * g / 100), p: r1(c.x.p * g / 100), dens: c.x.p / Math.max(1, c.x.kcal), mine: !!c.mine };
-    }).filter(Boolean).sort(function (a, b) { return (b.mine - a.mine) || b.dens - a.dens || a.kcal - b.kcal; });
+    }).sort(function (a, b) { return (b.mine - a.mine) || b.dens - a.dens || a.kcal - b.kcal; });
     return { need: need, list: list.slice(0, limit || 4) };
   }
 
@@ -482,6 +492,6 @@ var KITCHEN = (function () {
   }
 
   return { DB: DB, HANDS: HANDS, HAND_KEYS: HAND_KEYS, WATER: WATER, item: item, variant: variant, needsState: needsState, macros: macros, dayTotals: dayTotals,
-    plate: plate, recipe: recipe, proteinGap: proteinGap, MI_KEYS: MI_KEYS, microNorm: microNorm, microsOf: microsOf, dayMicros: dayMicros, BURN: BURN, realBurn: realBurn, offLabel: offLabel, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterMarkFor: waterMarkFor, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
+    plate: plate, recipe: recipe, proteinGap: proteinGap, GAP_EVERYDAY: GAP_EVERYDAY, drinkMl: drinkMl, NOT_WATER: NOT_WATER, MI_KEYS: MI_KEYS, microNorm: microNorm, microsOf: microsOf, dayMicros: dayMicros, BURN: BURN, realBurn: realBurn, offLabel: offLabel, waterTarget: waterTarget, waterNeed: waterNeed, waterTurnover: waterTurnover, WATER_PAL: WATER_PAL, WATER_MIN: WATER_MIN, waterTimes: waterTimes, waterPlan: waterPlan, waterTurn: waterTurn, waterDayPlan: waterDayPlan, waterMarkFor: waterMarkFor, waterIntakes: waterIntakes, WATER_RATE: WATER_RATE, search: search, worse: worse };
 })();
 if (typeof module !== 'undefined') module.exports = KITCHEN;
