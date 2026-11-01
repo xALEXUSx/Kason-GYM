@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.11';
+  const VERSION = '3.27.12';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -2049,7 +2049,7 @@ window.APP_START = () => {
   }
   function askErr(j) {
     if (!j) return navigator.onLine === false ? LL('Немає інтернету — тренер відповідає лише онлайн.', "No internet — the coach only answers online.") : LL('Тренер не відповів — спробуйте ще раз.', "The coach didn’t answer — try again.");
-    return ({ empty: LL('Не почув питання — скажіть ще раз.', "Didn’t catch the question — say it again."), busy: LL('Тренер зараз зайнятий — спробуйте за хвилину.', "The coach is busy right now — try again in a minute."), big: LL('Запис задовгий — до 30 секунд.', "Recording too long — 30 seconds max.") })[j.error] || LL('Тренер не відповів — спробуйте ще раз.', "The coach didn’t answer — try again.");
+    return ({ empty: LL('Не почув питання — скажіть ще раз.', "Didn’t catch the question — say it again."), busy: LL('Тренер зараз зайнятий — спробуйте за хвилину.', "The coach is busy right now — try again in a minute."), big: LL('Запис задовгий — до 30 секунд.', "Recording too long — 30 seconds max."), hear: LL('Голос зараз не розпізнається — напишіть питання текстом.', "Voice recognition isn’t available right now — please type your question.") })[j.error] || LL('Тренер не відповів — спробуйте ще раз.', "The coach didn’t answer — try again.");
   }
   /* Одне питання. Головний шлях — Gemini Live: голос тренера йде потоком. Немає звуку за 5 с (слово Alexа 23.10: «має бути 5 сек») —
      запасний шлях: текстова відповідь сервера (кожна модель — до 5 с) і голос телефона. */
