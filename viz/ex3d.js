@@ -39,6 +39,9 @@ function EX3D(E, Q) {
   const shS = (ax) => [V(ax - 0.455, 0.111, 0.205), V(ax - 0.455, 0.111, -0.205)];  // плечові суглоби лежачи на спині
   const kneesUp = (ax, d) => ({ ank: both(ax + (d || 0.5), 0.078, 0.14), foot: both(1, 0, 0.15).map((v) => v.normalize()), kneePole: eps(0, 1, 0.15) });
   const matK = (k, x) => Q.mat(k, { x: x === undefined ? AX - 0.1 : x });
+  /* кисті на відрізку плечі → стопа (0,55 — довжина рук); гумка: два кінці від передньої частини стопи до кистей (з 3.27.14) */
+  const handsToFoot = (an) => [0.12, -0.24].map((z, i) => { const s = shS(AX)[i], d = an.clone().sub(s); d.z = 0; return s.clone().addScaledVector(d.normalize(), 0.55).setZ(z); });
+  const bandFoot = (w, J) => { const a = J.ank.map((x) => J.w(x)).sort((p, q) => q.y - p.y)[0].add(V(-0.09, 0.08, 0)); w.forEach((o, i) => o.set(a, J.w(J.hand[i]))); };
   /* стійка на одній нозі: тест форми t_bal і вправа рівноваги b_bal — та сама поза */
   const balStand = (t, g) => {
         /* правий бік: стоїмо на правій нозі, ліва — коліно вперед, стопа на 15 см над підлогою (видно спереду; позаду її ховала опорна нога); таз — над опорною стопою;
@@ -144,6 +147,16 @@ function EX3D(E, Q) {
         const sh = shS(AX), P = Object.assign(supine({}), {});
         const top = sh.map((s, i) => V(s.x + 0.02, 0.64, (i ? -1 : 1) * 0.19)), bot = sh.map((s, i) => V(s.x + (g ? 0 : 0.07), 0.3, (i ? -1 : 1) * (g ? 0.46 : 0.33)));
         return world(P, Object.assign(kneesUp(AX), { hand: top.map((v, i) => v.clone().lerp(bot[i], t)), elbowPole: g ? eps(0, -0.3, 1) : eps(0.5, -1, 0.8) }));
+      },
+      after(P, J) { this.db.forEach((d, i) => dbAt(d, J.w(J.hand[i]), 'z')); } }),
+    mk({ id: 'dbbench', grp: 'db', name: 'Жим гантелей лежачи на лаві', work: { p: ['chest'], s: ['triceps', 'delts'] },
+      t1: 2.4, t2: 1.2, c1: 'Опускай гантелі до рівня грудей', c2: 'Пауза — і вичавлюй угору', bad: '✕ Не розводь лікті під прямим кутом', ghost: ARMS,
+      build(k) { Q.bench(k, { x: 0.08 }); this.db = [Q.dumbbell(k), Q.dumbbell(k)]; },
+      pose(t, g) {
+        /* лава на 0,412 вище за підлогу: таз і плечі там само, що в жимі на підлозі, стопи — на підлозі */
+        const dy = 0.412, sh = shS(AX), P = Object.assign(supine({ y: BACK + dy }), {});
+        const top = sh.map((s, i) => V(s.x + 0.02, 0.64 + dy, (i ? -1 : 1) * 0.19)), bot = sh.map((s, i) => V(s.x + (g ? 0 : 0.07), 0.2 + dy, (i ? -1 : 1) * (g ? 0.46 : 0.33)));
+        return world(P, { ank: both(AX + 0.58, 0.078, 0.2), foot: both(1, 0, 0.15).map((v) => v.normalize()), kneePole: eps(0, 1, 0.15), hand: top.map((v, i) => v.clone().lerp(bot[i], t)), elbowPole: g ? eps(0, -0.3, 1) : eps(0.5, -1, 0.8) });
       },
       after(P, J) { this.db.forEach((d, i) => dbAt(d, J.w(J.hand[i]), 'z')); } }),
     mk({ id: 'floorfly', grp: 'mat', name: 'Розведення лежачи на підлозі', work: { p: ['chest'], s: ['delts'] },
@@ -437,6 +450,30 @@ function EX3D(E, Q) {
       },
       after(P, J) { this.mg.scale.z = P.mirror ? -1 : 1; dbAt(this.db, J.hand[P.mirror ? 0 : 1], 'x'); } }),
     /* ===================== резинка з кріпленням до дверей ===================== */
+    mk({ id: 'bandpress', grp: 'band', name: 'Жим еспандера вгору сидячи', work: { p: ['delts'], s: ['triceps'] },
+      t1: 1.3, t2: 2.2, c1: 'Вичавлюй угору й трохи вперед', c2: 'Повільно вниз до плечей', bad: '✕ Не прогинай поперек', ghost: TORSO.concat(ARMS),
+      build(k) { this.ch = Q.chair(k, { x: 0 }); this.b = Q.band(k, [V(0.47, 0.02, 0.2), V(0.47, 0.02, -0.2)], 2); },
+      pose(t, g) {
+        const P = seat({ x: -0.06, top: 0.4625, lumb: -3 - (g ? 12 * t : 0), chest: -4 - (g ? 22 * t : 0), head: 0 }), sh = shOf(P);
+        P.hand = sh.map((s, i) => V(s.x + lerp(0.09, 0.05, t), s.y + lerp(0.06, 0.5, t), (i ? -1 : 1) * lerp(0.37, 0.215, t))); P.elbowPole = eps(0.35, -1, 0.9); return P;
+      },
+      after(P, J) { this.b.set([J.hand[0], J.hand[1]]); } }),
+    mk({ id: 'bandcurl', grp: 'band', name: 'Згинання рук з еспандером сидячи', work: { p: ['biceps'], s: ['forearms'] },
+      t1: 1.3, t2: 2.2, c1: 'Згинай лікті, не відводячи їх уперед', c2: 'Угорі пауза — вниз дві-три секунди', bad: '✕ Не розгойдуй корпус', ghost: TORSO.concat(ARMS),
+      build(k) { this.ch = Q.chair(k, { x: -0.06 }); this.b = Q.band(k, [V(0.46, 0.02, 0.2), V(0.46, 0.02, -0.2)], 2); },
+      pose(t, g) { return curlPose(seat({ x: -0.07, top: 0.4625, lumb: g ? -14 * sw1(t) : 2, chest: g ? -20 * sw1(t) : 2, head: 0 }), t, -58, 62, 0.235, 0.295); },
+      after(P, J) { this.b.set([J.hand[0], J.hand[1]]); } }),
+    mk({ id: 'bandext', grp: 'band', name: 'Розгинання рук з еспандером сидячи', work: { p: ['triceps'], s: [] }, dir: SIDEV, zoom: 0.85,
+      t1: 1.2, t2: 2, c1: 'Випрямляй руки донизу, лікті на місці', c2: 'Повертай до грудей дві-три секунди', bad: '✕ Не відводь лікті від боків', ghost: ARMS,
+      build(k) { this.ch = Q.chair(k, { x: 0.5 }); this.b = Q.band(k, Q.door(k, { x: 1.25, h: 1.98 }).anchor, 2); },
+      pose(t, g) {
+        const P = seat({ x: 0.49, top: 0.4625, lumb: 4, chest: 6, head: 2, feetX: 0.93 }), sh = shOf(P);
+        const elb = sh.map((s, i) => s.clone().add(V(0.04 + (g ? 0.16 : 0), -0.28 + (g ? 0.06 : 0), (i ? -1 : 1) * 0.07)));
+        const a = lerp(35, -62, t) * RAD;
+        P.hand = elb.map((e, i) => e.clone().add(V(0.26 * Math.cos(a), 0.26 * Math.sin(a), (i ? -1 : 1) * 0.05)));  // кисті назовні від стегон: ручки їх не зачіпають
+        P.elbowPole = g ? eps(0.3, -0.5, 1) : eps(-1, -0.2, 0.55); return P;
+      },
+      after(P, J) { this.b.set([J.hand[0], J.hand[1]]); } }),
     mk({ id: 'bandrow', grp: 'band', name: 'Тяга еспандера до пояса сидячи', work: { p: ['lats', 'reardelts'], s: ['biceps', 'traps'] }, dir: SIDEV, zoom: 0.85,
       t1: 1.3, t2: 2.2, c1: 'Зведи лопатки й тягни лікті назад до пояса', c2: 'Пауза — повернення дві-три секунди', bad: '✕ Не відхиляйся назад', ghost: TORSO,
       build(k) { this.ch = Q.chair(k, { x: -0.06 }); this.b = Q.band(k, Q.door(k, { x: 1.25, h: 1.1 }).anchor, 2); },
@@ -759,6 +796,27 @@ function EX3D(E, Q) {
         const an = kn.clone().add(V(Math.cos(a), Math.sin(a), 0).multiplyScalar(0.425));
         return world(P, { ank: [V(AX + 0.5, 0.078, 0.14), an], foot: [V(1, 0, 0.15).normalize(), V(-Math.sin(a), Math.cos(a), 0)], kneePole: [V(0, 1, 0.15).normalize(), V(-0.6, 0.8, 0)],
           hand: [V(AX - 0.02, 0.31, 0.015), V(AX - 0.02, 0.31, -0.19)], elbowPole: eps(0, 0.1, 1) });
+      } }),
+    /* розтяжка з фітнес-гумкою (з 3.27.14): гумка від передньої частини стопи до кистей; кисті — на відрізку плече → стопа, на довжині рук */
+    mk({ id: 's_ham_b', grp: 'stretch', name: 'Розтяжка задньої поверхні стегна з гумкою', work: { p: ['hams'], s: [] }, sides: true, dir: [1, 0.5, -1.15], camFlip: true,
+      t1: 2, t2: 1.4, c1: 'Гумка на стопі — випрями ногу до легкого натягу', c2: 'Тримай 30 с — поперек і таз на підлозі', bad: '✕ Не відривай таз', ghost: ['pelvis', 'lumb'],
+      build(k) { matK(k); this.w = [Q.wire(k, 0.009, k.band), Q.wire(k, 0.009, k.band)]; },
+      after(P, J) { bandFoot(this.w, J); },
+      pose(t, g) {
+        const P = supine({ y: BACK + (g ? 0.06 * t : 0), lumb: g ? 12 * t : 0, chest: g ? -6 * t : 0 });
+        const hip = V(AX + 0.02, BACK, -0.1), th = 88 * RAD, a = lerp(-10, 87, t) * RAD, kn = hip.clone().add(V(Math.cos(th), Math.sin(th), 0).multiplyScalar(0.44));
+        const an = kn.clone().add(V(Math.cos(a), Math.sin(a), 0).multiplyScalar(0.425));
+        return world(P, { ank: [V(AX + 0.5, 0.078, 0.14), an], foot: [V(1, 0, 0.15).normalize(), V(-Math.sin(a), Math.cos(a), 0)], kneePole: [V(0, 1, 0.15).normalize(), V(-0.6, 0.8, 0)], hand: handsToFoot(an), elbowPole: eps(0, 0.1, 1) });
+      } }),
+    mk({ id: 's_calf_b', grp: 'stretch', name: 'Розтяжка литки з гумкою', work: { p: ['calves'], s: ['hams'] }, sides: true, dir: [1, 0.5, -1.15], camFlip: true,
+      t1: 2, t2: 1.4, c1: 'Нога пряма, гумка на стопі — тягни носок на себе', c2: 'Тримай 30 с — без болю й ривків', bad: '✕ Не згинай коліно', ghost: ['shinL', 'shinR'],
+      build(k) { matK(k); this.w = [Q.wire(k, 0.009, k.band), Q.wire(k, 0.009, k.band)]; },
+      after(P, J) { bandFoot(this.w, J); },
+      pose(t, g) {
+        /* нога пряма й майже вертикальна; носок від відтягнутого до себе; помилка — коліно згинається */
+        const P = supine({}), hip = V(AX + 0.02, BACK, -0.1), th = 84 * RAD, kn = hip.clone().add(V(Math.cos(th), Math.sin(th), 0).multiplyScalar(0.44));
+        const a = (g ? lerp(84, 55, t) : 84) * RAD, an = kn.clone().add(V(Math.cos(a), Math.sin(a), 0).multiplyScalar(0.425)), f = lerp(35, -5, t) * RAD;
+        return world(P, { ank: [V(AX + 0.5, 0.078, 0.14), an], foot: [V(1, 0, 0.15).normalize(), V(-Math.sin(a + f), Math.cos(a + f), 0)], kneePole: [V(0, 1, 0.15).normalize(), V(-0.6, 0.8, 0)], hand: handsToFoot(an), elbowPole: eps(0, 0.1, 1) });
       } }),
     mk({ id: 's_glute', grp: 'stretch', name: 'Розтяжка сідниць', work: { p: ['glutes'], s: ['lowback'] }, sides: true, dir: [1, 0.5, -1.15], camFlip: true,  // з боку піднятої ноги
       t1: 2, t2: 1.4, c1: 'Коліно до грудей — тягни за стегно', c2: 'Тримай 30 с — поперек на підлозі', bad: '✕ Не підіймай плечі й голову', ghost: ['chest', 'neck', 'head', 'girdle', 'shoulderL', 'shoulderR'],

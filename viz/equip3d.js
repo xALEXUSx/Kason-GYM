@@ -56,11 +56,12 @@ function EQUIP3D(E) {
     return { g: s.g, anchor: a };
   }
   /* резинка з двома ручками (або одною): set(точки кистей) — тягнеться від кріплення до кожної кисті */
+  /* anchor — одна точка або масив: своя точка на кожну руку (петля під двома стопами, з 3.27.14) */
   function band(k, anchor, n) {
-    const ws = [], hs = [];
+    const ws = [], hs = [], at = (i) => (Array.isArray(anchor) ? anchor[i] : anchor);
     for (let i = 0; i < (n || 2); i++) { ws.push(wire(k, 0.0065, k.band)); const h = k.sub(); h.cyl(0.016, 0.12, h.soft, 'z'); h.torus(0.06, 0.006, h.band, 'y').position.x = 0.055; k.held(h.g); hs.push(h); }
     /* ручка: хват — у кисті, кільце — до кріплення (+x ручки дивиться на кріплення) */
-    return { set(pts) { pts.forEach((p, i) => { if (!ws[i]) return; const h = hs[i].g; h.position.copy(p); h.lookAt(anchor); h.rotateY(-Math.PI / 2); ws[i].set(h.localToWorld(V(0.115, 0, 0)), anchor); }); } };
+    return { set(pts) { pts.forEach((p, i) => { if (!ws[i]) return; const h = hs[i].g; h.position.copy(p); h.lookAt(at(i)); h.rotateY(-Math.PI / 2); ws[i].set(h.localToWorld(V(0.115, 0, 0)), at(i)); }); } };
   }
   /* сходинка-поріг біля стіни (підйом на носок): верх 10 см */
   function step(k, o) { o = o || {}; const s = k.sub(); s.box(0.32, 0.1, 0.5, s.md, o.x || 0.05, 0.05, o.z || 0); if (o.wall !== false) s.box(0.1, 2.4, 2.4, s.wall, (o.wx || 0.75) + 0.05, 1.2, 0); return { g: s.g, top: 0.1 }; }  // wall: false — без стіни (поріг у дверній рамі)
@@ -94,6 +95,11 @@ function EQUIP3D(E) {
     const bar = k.held(k.cyl(0.017, 1.0, k.m, 'z')), grips = [k.held(k.cyl(0.024, 0.12, k.soft, 'z')), k.held(k.cyl(0.024, 0.12, k.soft, 'z'))];
     const set = (bx, y) => { bar.position.set(bx, y, 0); grips[0].position.set(bx, y, 0.4); grips[1].position.set(bx, y, -0.4); cable.set(V(bx, 2.11, 0), V(bx, y, 0)); tw.lift((1.95 - y) * 0.5); c3.set(V(-0.86, 2.15, 0), tw.top()); };
     return { set, move(t) { set(0.17, 1.49 - 0.5 * t); } };  // гриф: руки вгорі майже прямі (1,49) → верх грудей (0,99)
+  }
+  /* лава для жиму (з 3.27.14): верх 0,42; ноги не заважають стопам */
+  function bench(k, o) {
+    o = o || {}; const x = o.x || 0;
+    k.pad(1.15, 0.07, 0.3, x, 0.385, 0); [-0.42, 0.42].forEach((d) => { post(k, x + d, 0, 0.012, 0.35, 0.06); base(k, x + d - 0.05, x + d + 0.05, -0.2, 0.2); });
   }
   /* нижній блок сидячи: довга лава, упор для стоп під кутом, шків між стопами, V-ручка; set(точка ручки) */
   function cableRow(k) {
@@ -257,5 +263,5 @@ function EQUIP3D(E) {
     return { set, a0, a1, el: a.el, move(t) { return set(a0 + (a1 - a0) * t); } };
   }
 
-  return { ARM, wire, tower, chair, dumbbell, mat, door, band, step, legPress, latPull, cableRow, chestPress, shoulderPress, abduction, legCurl, legExt, cable, pecDeck, chestRow, preacher, tricepsExt };
+  return { ARM, wire, tower, chair, dumbbell, mat, door, band, step, bench, legPress, latPull, cableRow, chestPress, shoulderPress, abduction, legCurl, legExt, cable, pecDeck, chestRow, preacher, tricepsExt };
 }
