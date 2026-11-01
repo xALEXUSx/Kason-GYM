@@ -16,7 +16,8 @@ var VIZ = (function () {
     'abduct', 'g_legpress', 'g_latpull', 'g_cablerow', 'g_chestpress', 'g_shpress', 'g_abduct', 'g_legcurl', 'g_legext', 'g_pecdeck', 'g_revfly', 'g_machrow',
     'g_machcurl', 'g_triext', 'g_cablelat', 'g_facepull', 'g_pushdown', 'g_cablecurl', 'g_pallof',
     't_chair', 't_bal', 't_srt', 't_walk',  // тести форми (з 3.27.3): «Тіло» → «Тести» → «Як виконувати тести»
-    's_chest', 's_shoulder', 's_quad', 's_calf', 's_hipflex', 's_ham', 's_glute'];  // розтяжка (з 3.27.11): останній блок тренування, app/stretch.js
+    's_chest', 's_shoulder', 's_quad', 's_calf', 's_hipflex', 's_ham', 's_glute',  // розтяжка (з 3.27.11): останній блок тренування, app/stretch.js
+    'chairsq', 'bridgebw', 'b_bal'];  // з 3.27.13: без гантелі при колінах; рівновага 65+ (порадник «Рівновага»)
   /* вправа програми → анімація. raw — опис вправи з програми мовою оригіналу (до перекладу): тяга зверху в жіночій програмі — на колінах (той самий id) */
   function keyFor(id, variant, raw) {
     raw = raw || {};

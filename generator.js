@@ -105,9 +105,9 @@ var GEN = (function () {
      присідання до крісла (обмеження «коліна» прибирає розщеплений присід, і квадрицепс лишався лише в А); у залі — жим ногами
      (квадрицепс і сідниці, як розщеплений присід удома; з розгинанням ніг сідниці в Б не працювали) */
   var FULL = {
-    A: [['squat', ['goblet', 'splitsquat']], ['push', ['floorpress', 'pushup']], ['row', ['row1', 'bandrow']], ['vpull', ['pulldown', 'pullover']],
-      ['press', ['seatedpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['curl', 'hammer']]],
-    B: [['hinge', ['rdl', 'bridge', 'abduct']], ['single', ['splitsquat', 'goblet', 'calf']], ['row', ['row1', 'bandrow']], ['side', ['lateral', 'extrot', 'facepull']],
+    A: [['squat', ['goblet', 'splitsquat', 'chairsq']], ['push', ['floorpress', 'pushup']], ['row', ['row1', 'bandrow']], ['vpull', ['pulldown', 'pullover']],
+      ['press', ['seatedpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'bridgebw', 'abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['curl', 'hammer']]],
+    B: [['hinge', ['rdl', 'bridge', 'bridgebw', 'abduct']], ['single', ['splitsquat', 'goblet', 'chairsq', 'calf']], ['row', ['row1', 'bandrow']], ['side', ['lateral', 'extrot', 'facepull']],
       ['rear', ['facepull', 'reardelt', 'extrot']], ['chest', ['floorfly', 'pushup']], ['tri', ['ohext', 'closegrip']], ['core', ['pallof', 'sideplank', 'deadbug']]]
   };
   var PAIRS = { A: [['push', 'row'], ['press', 'vpull'], ['glute', 'arms']], B: [['side', 'rear'], ['chest', 'tri'], ['single', 'core']],
@@ -216,6 +216,7 @@ var GEN = (function () {
       Object.keys(PROGRAMS[p].ex).forEach(function (id) {
         var e = PROGRAMS[p].ex[id], n = needs(e);
         if (avoid[id] || (n && !has[n]) || badDef(p, id)) return;
+        if (e.kneesNoKit && !(home && !has.db && lim.indexOf('knees') >= 0)) return;  // без гантелі — лише там, де інакше ноги не тренуються (з 3.27.13)
         if (ex[id] && mainArms(p, id)) return;
         /* обережність «поперек: запас 2, без міо й дропів» — лише для тих, хто позначив спину */
         var e2 = (!back && e.spine) ? Object.assign({}, e, { spine: false }) : e;
@@ -227,6 +228,9 @@ var GEN = (function () {
       });
     });
     Object.keys(ex).forEach(function (id) { T[id] = coachFrom[id] === src ? (ts[id] || ta[id]) : (ta[id] || ts[id]); });
+    /* вправи без гантелі (з 3.27.13) — у затверджених тренуваннях їх немає, тож шаблон тут: вага тіла легша за гоблет (10–15), тому більше повторень; будь-яке навантаження від 30 % максимуму дає ріст мʼязів, коли підхід близько до відмови (ACSM 2026) */
+    if (ex.chairsq) T.chairsq = { ex: 'chairsq', sets: 3, min: 12, max: 20, rest: 90 };
+    if (ex.bridgebw) T.bridgebw = { ex: 'bridgebw', sets: 3, min: 12, max: 20, rest: 60 };
     /* тренажери залу: стартова вага для жінок — 60 % (униз до кроку тренажера) */
     if (has.gym || has.mach) Object.keys(GYM.ex).forEach(function (id) {
       if (avoid[id] || (!has.gym && !homeMach[id])) return;
@@ -335,10 +339,22 @@ var GEN = (function () {
     /* до 3.23.0 досвідченим із гантелями й петлею (3 дні, без обмежень) з тижня 5 був спліт Д1–Д3: ноги й руки — 1 день на тиждень.
        Знято (пункт 23; ВООЗ 2020, ACSM 2026 — кожна велика група мʼязів щонайменше 2 дні): усім — усе тіло А / Б, обʼєм для мети «мʼязи» — пункт 24 */
     else { markPlus(workouts); if (gymWorkouts) markPlus(gymWorkouts); }
+    /* «Сила й здоровʼя» (з 3.27.13; перевірка 01.11, слово Alexа «Пункти 1–5 і 7»): сила росте від навантаження ≥ 80 % максимуму, 2–3 підходи, на початку тренування (ACSM 2026, Currier 2023);
+       80 % — ≈ 8,8 повторення до відмови на жимі (Nuzzo 2024), тож із запасом — 6–8. Лише в залі: важкі гантелі вдома без страхування незручно піднімати, а для ніг вага впирається в межу набору.
+       Лише досвідченим (AHA 2023: > 80 % — після 6 місяців, без протипоказань), до 55, без спини й серця; суглоб позначено — вправи на нього лишаються 12–15. Перші 3 базові тренажери кожного тренування; підходи — як і були */
+    var heavyGym = !!gymWorkouts && hasG('health') && !novice && !older && !heart && !back;
+    if (heavyGym) Object.keys(gymWorkouts).forEach(function (w) {
+      var k = 0, knees = lim.indexOf('knees') >= 0, sh = lim.indexOf('shoulders') >= 0;
+      gymWorkouts[w].items.forEach(function (it) { var e = ex[it.ex];
+        if (k >= 3 || !(e.main || e.big) || e.type !== 'mach' || (knees && it.ex === 'g_legpress') || (sh && (it.ex === 'g_chestpress' || it.ex === 'g_latpull'))) return;
+        it.min = 6; it.max = 8; it.rest = 120; k++; });
+    });
 
     var goalTxt = goalText(a);
     var dayTxt = (a.days || []).slice().sort(function (x, y) { return ((x + 6) % 7) - ((y + 6) % 7); }).map(function (d) { return (DAYS.filter(function (x) { return x[0] === d; })[0] || [0, ''])[1].toLowerCase(); }).join(' / ');
-    var rirHard = heart ? 'запас 3' : (back ? 'запас 2' : 'запас 1–2');
+    /* запас (з 3.27.13; слово Alexа «Пункти 1–5 і 7»): як у затвердженій him — тижні 6–7 і 9–11 запас 1, при позначеній спині поперекові — 2 (ближче до відмови — трохи більше росту мʼязів: Robinson 2024; сама відмова не обовʼязкова: ACSM 2026);
+       55+ — як було (2 і 1–2; спина — 2), тиск / серце — 3 */
+    var rirHard = heart ? 'запас 3' : older ? (back ? 'запас 2' : 'запас 1–2') : (back ? 'запас 1 (поперекові — 2)' : 'запас 1');
     var prog = {
       id: 'me', custom: true, ver: VER, title: 'Моя програма', sub: goalTxt + ' · ' + dayTxt + (place === 'gym' ? ' · зал' : place === 'both' ? ' · дім і зал' : ''), backCare: back,
       cap: has.db ? 20 : 0, ex: ex, coachFrom: coachFrom, perWeek: perWeek, deload: [8, 12],
@@ -391,14 +407,14 @@ var GEN = (function () {
         if (wk <= 4) return { phase: 'Фаза 1 · техніка', rir: heart ? 'запас 3' : 'запас 2', text: 'Спершу більше повторень, потім вага.' + ss };
         if (wk === 8) return { phase: 'Легкий тиждень', rir: 'запас 3–4', text: 'Підходів удвічі менше, вага та сама або на крок нижча. Без міо-підходів.' };
         if (wk === 12) return { phase: 'Легкий тиждень і заміри', rir: 'запас 3–4', text: 'Підходів удвічі менше. Заміри: вага, талія, фото — розділ «Тіло».' };
-        if (wk <= 7) return { phase: 'Фаза 2 · обʼєм', rir: heart ? 'запас 3' : 'запас 2', text: (this.myoFrom ? 'Нове — міо-підходи в останньому підході ізоляції. ' : '') + 'Не затримуйте дихання: видих на зусиллі.' + ss };
+        if (wk <= 7) return { phase: 'Фаза 2 · обʼєм', rir: heart ? 'запас 3' : (older || wk === 5) ? 'запас 2' : (back ? 'запас 1 (поперекові — 2)' : 'запас 1'), text: (this.myoFrom ? 'Нове — міо-підходи в останньому підході ізоляції. ' : '') + 'Не затримуйте дихання: видих на зусиллі.' + ss };
         return { phase: 'Фаза 3 · інтенсивність', rir: rirHard, text: 'Опускання 3–4 с, пауза внизу. Техніка важливіша за вагу.' + (this.myoFrom ? ' Дроп-сет за бажанням — у базових вправах (в ізоляції вже є міо-підхід): після останнього підходу «⋯ Ще» → «Дроп-сет»' + (back ? ', не для вправ на поперек' : '') + '.' : '') + ss };
       },
       /* осанка щодня: без еспандера — без розведення петлі (решта вправ — без обладнання) */
-      daily: [].concat(back ? [PROGRAMS.him.daily[0]] : [], hasG('posture') ? [has.band ? PROGRAMS.her.daily[0] : Object.assign({}, PROGRAMS.her.daily[0], { label: 'Осанка 5 хв (підборіддя, ангел, розтяжки)' })] : [], [{ id: 'walk', label: 'Ходьба 30–45 хв або 7–10 тис. кроків' }]),
+      daily: [].concat(back ? [PROGRAMS.him.daily[0]] : [], hasG('posture') ? [has.band ? PROGRAMS.her.daily[0] : Object.assign({}, PROGRAMS.her.daily[0], { label: 'Осанка 5 хв (підборіддя, ангел, розтяжки)' })] : [], age >= 65 ? [{ id: 'balance', label: 'Рівновага 3 хв: стійка на одній нозі біля стіни', how: 'balance' }] : [], [{ id: 'walk', label: 'Ходьба 30–45 хв або 7–10 тис. кроків' }]),
       posture: PROGRAMS.her.posture.filter(function (r) { return has.band || !/петл/i.test(r[0] + r[2]); }),
       food: food(a),
-      guide: guides(has, back, hasG('posture'), sex, ex, !(heart || older), [workouts, gymWorkouts || {}], home, shortWarm)
+      guide: guides(has, back, hasG('posture'), sex, ex, !(heart || older), [workouts, gymWorkouts || {}], home, shortWarm, age >= 65, heavyGym)
     };
     return prog;
   }
@@ -497,7 +513,19 @@ var GEN = (function () {
       .concat(['Вправи, що найбільше навантажують поперек чи згинають хребет під вагою (румунська тяга, шраги, фермерська прогулянка, тяга в нахилі, пуловер, скручування), у програму не входять.'])
       .concat(src.slice(src.indexOf('#Правило болю'))) };
   }
-  function guides(has, back, posture, sex, ex, myo, lists, home, shortWarm) {
+  /* рівновага (з 3.27.13; слово Alexа «Пункти 1–5 і 7»): ВООЗ 2020 — 65+ щонайменше 3 дні на тиждень рівновага й сила, сильна рекомендація; вправи на рівновагу зменшують падіння: RaR 0,76, 39 досліджень, 7 920 людей, висока певність (Sherrington 2020, BJSM);
+     вправи й доза — NHS «Balance exercises»: стійка на одній нозі обличчям до стіни 5–10 с, 3 рази на кожну ногу; пʼята до носка — щонайменше 5 кроків; боком — 10 кроків у кожен бік */
+  var BALANCE = { id: 'balance', title: 'Рівновага', items: [
+    'Навіщо: вправи на рівновагу зменшують кількість падінь приблизно на чверть. Після 65 років ВООЗ радить їх щонайменше 3 дні на тиждень, краще щодня.',
+    '#Стійка на одній нозі',
+    'Обличчям до стіни, кінчики пальців на стіні. Підніміть одну ногу, таз рівно, коліно опорної ноги злегка зігнуте. Тримайте 5–10 с, по 3 рази на кожну ногу.',
+    'Упевнено — торкайтесь стіни лише за потреби, потім руки на поясі, як на 3D. Поступово довше.',
+    '#Ходьба',
+    'Пʼята до носка: ставте пʼяту прямо перед носком іншої ноги, щонайменше 5 кроків, погляд уперед.',
+    'Боком: 10 кроків в один бік і 10 назад, коліна злегка зігнуті.',
+    'Завжди поруч зі стіною чи міцним кріслом. Запаморочення або біль — зупиніться.'
+  ] };
+  function guides(has, back, posture, sex, ex, myo, lists, home, shortWarm, balance, heavyGym) {
     /* пункти про грижі й питання про спину — лише тим, хто позначив спину */
     var clean = function (g) {
       if (!g) return g;
@@ -532,8 +560,10 @@ var GEN = (function () {
     if (has.band) { var g = pick('her', 'gear'); if (g && !has.db) out.push(g); else if (g) out.push({ id: 'gear2', title: g.title, items: g.items }); }
     if (has.gym || has.mach) out.push({ id: 'gymgear', title: 'Тренажери й блоки', items: GYM_GEAR.slice() });
     if (posture) out.push(pick('her', 'posture'));
+    if (balance) out.push(BALANCE);
     var pr = pick(has.db || noKit ? 'him' : 'her', 'prog');
     if (noKit) pr = { id: 'prog', title: pr.title, items: pr.items.map(function (x) { return Object.prototype.hasOwnProperty.call(GYM_PROG, x) ? GYM_PROG[x] : x; }).filter(function (x) { return x !== null; }) };
+    if (heavyGym && pr) pr = { id: pr.id, title: pr.title, items: ['У залі перші базові тренажери — по 6–8 повторень із відпочинком 2 хв: сила найбільше росте від важкої ваги. Вагу підбирайте так, щоб лишався запас 1–2.'].concat(pr.items) };
     out.push(pr);
     return out.filter(Boolean);
   }

@@ -201,7 +201,7 @@ var ENGINE = (function () {
       if (startLoad !== null && (ex.type === 'db' || ex.type === 'mach' || ex.type === 'time')) startLoad = Math.max(0, Math.floor(Math.min(startLoad, cap) / STEP + 1e-9) * STEP);
       fill(startLoad, max);
       var aim = ex.type === 'time' ? max + LL(' с', " sec") : max + LL(' повторень', " reps");
-      out.note = startLoad === null ? LL('Перший раз: ', "First time: ") + aim + LL(' із запасом 2–3', " with 2–3 in reserve") + (ex.type === 'dbopt' ? LL(', без гантелі', ", no dumbbell") : '') + LL('; важко — легший варіант.', "; too hard — use an easier variation.")
+      out.note = startLoad === null ? LL('Перший раз: ', "First time: ") + aim + LL(' із запасом 2–3', " with 2–3 in reserve") + (ex.type === 'dbopt' ? LL(', без гантелі', ", no dumbbell") : '') + (ex.variants && ex.variants.length ? LL('; важко — легший варіант.', "; too hard — use an easier variation.") : LL('; важко — менше повторень.', "; too hard — do fewer reps."))
         : LL('Перший раз: підберіть ', "First time: pick a ") + (ex.type === 'band' ? LL('опір', "resistance") : LL('вагу', "weight")) + LL(', щоб ', " so ") + aim + LL(' давались із запасом 2–3.', " leave 2–3 in reserve.");
       return out;
     }

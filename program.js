@@ -80,7 +80,13 @@ var PROGRAMS = (function () {
       birddog:    { name: 'Птах-собака', type: 'bw', group: 'core', side: true,
                     tip: 'Навкарачки: долоні під плечима, коліна під тазом. Витягніть протилежні руку й ногу в лінію з корпусом, тримайте 8–10 с. Таз і поперек нерухомі — ніби на спині стоїть склянка води.' },
       suitcase:   { name: 'Валізна прогулянка', type: 'time', db: 1, load: true, group: 'core', side: true, spine: true, start: 15,
-                    tip: 'Одна гантель в одній руці, корпус рівно, плечі на одному рівні — не нахиляйтеся вбік. Тримає поперек проти бічного згинання.' }
+                    tip: 'Одна гантель в одній руці, корпус рівно, плечі на одному рівні — не нахиляйтеся вбік. Тримає поперек проти бічного згинання.' },
+      /* без гантелі (з 3.27.13) — лише коли позначено коліна, а гантелей удома немає (generator.js, kneesNoKit): розщеплений присід прибрано обмеженням, гоблет потребує гантелі,
+         тож у таких планах ноги не тренувались зовсім, а ВООЗ 2020 і ACSM 2026 — усі великі групи щонайменше 2 дні (перевірка 01.11; слово Alexа «Пункти 1–5 і 7») */
+      chairsq:    { name: 'Присідання до крісла без ваги', type: 'bw', group: 'legs', kneesNoKit: true,
+                    tip: 'Крісло позаду, руки перед собою. Торкніться сидіння сідницями й одразу вставайте, не сідаючи. Коліна йдуть у напрямку носків, пʼяти на підлозі. Болить коліно — менша глибина. Легко — опускання 3–4 с.' },
+      bridgebw:   { name: 'Сідничний міст без ваги', type: 'bw', group: 'legs', kneesNoKit: true,
+                    tip: 'Лежачи на спині, стопи на підлозі ближче до сідниць, руки вздовж тіла. Підніміть таз до лінії плечі — коліна, пауза 1–2 с, стисніть сідниці; поперек не прогинайте. Легко — пауза 3 с угорі й повільне опускання.' }
     },
     workouts: {
       A:  { title: 'Тренування А', items: [w('goblet',3,12,15,90), w('floorpress',3,12,15,90), w('row1',3,12,15,90),
@@ -229,7 +235,8 @@ var PROGRAMS = (function () {
     suitcase: { p: ['obliques', 'forearms'], s: ['traps'] }, abduct: { p: ['glutes'], s: [] },
     slrdl: { p: ['hams', 'glutes'], s: ['lowback'] }, extrot: { p: ['reardelts'], s: [] },
     sideplank: { p: ['obliques'], s: ['abs'] }, bandrow: { p: ['lats', 'reardelts'], s: ['biceps', 'traps'] },
-    deadbug: { p: ['abs'], s: ['obliques'] }, curlup: { p: ['abs'], s: [] }, birddog: { p: ['lowback', 'glutes'], s: ['abs'] }
+    deadbug: { p: ['abs'], s: ['obliques'] }, curlup: { p: ['abs'], s: [] }, birddog: { p: ['lowback', 'glutes'], s: ['abs'] },
+    chairsq: { p: ['quads', 'glutes'], s: ['abs'] }, bridgebw: { p: ['glutes'], s: ['hams'] }
   };
   [him, her].forEach(function (pr) { Object.keys(pr.ex).forEach(function (id) { pr.ex[id].m = M[id] || { p: [], s: [] }; }); });
   return { him: him, her: her };

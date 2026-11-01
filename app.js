@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.12';
+  const VERSION = '3.27.13';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -469,7 +469,7 @@ window.APP_START = () => {
       <div class="pick">`)}${[['back', LL('Грижа або біль у спині', "Herniated disc or back pain"), LL('грижа, протрузія, часто болить поперек', "herniated or bulging disc, frequent lower back pain")], ['knees', LL('Коліна', "Knees"), LL('біль або травма коліна', "knee pain or injury")], ['shoulders', LL('Плечі', "Shoulders"), LL('біль або травма плеча', "shoulder pain or injury")], ['heart', LL('Тиск або серце', "Blood pressure or heart"), LL('гіпертонія, хвороби серця', "hypertension, heart disease")], ['pregnant', LL('Вагітність', "Pregnancy"), ''], ['none', LL('Нічого з цього', "None of these"), '']].filter(([v]) => v !== 'pregnant' || a.sex !== 'm').map(([v, l, d]) => opt('qLimit', v, l, d, a.limits.indexOf(v) >= 0)).join('')}</div>${err('limits')}`;
     else if (step === 'days') body = `${LL(`<h1>Дні тренувань</h1><p class="muted small">${GEN.maxDays(a) === 4 ? 'Оберіть від 2 до 4 днів — усе тіло за тренування, краще з днем відпочинку між ними. Для 55+ і з тиском чи серцем 5–6 днів не пропонуємо: з обережними 3 підходами на вправу «верх / низ» дає менше роботи, ніж 3–4 дні, а поради для серця — про 2–3 силові тренування на тиждень.' : 'Оберіть від 2 до 6 днів. 2–4 дні — усе тіло за тренування, краще з днем відпочинку між ними; 5–6 — по черзі «верх» і «низ» тіла: тренування коротші, кожна група мʼязів 2–3 рази на тиждень.'}</p>
       <div class="qdays">`, `<h1>Workout days</h1><p class="muted small">${GEN.maxDays(a) === 4 ? 'Pick 2 to 4 days — full body each workout, ideally with a rest day in between. For 55+ and with blood pressure or heart issues we don’t offer 5–6 days: with careful 3 sets per exercise, upper/lower gives less work than 3–4 days, and heart guidance is about 2–3 strength workouts a week.' : 'Pick 2 to 6 days. 2–4 days — full body each workout, ideally with a rest day in between; 5–6 — upper and lower body in turn: shorter workouts, each muscle group 2–3 times a week.'}</p>
-      <div class="qdays">`)}${GEN.DAYS.map(([d, l]) => opt('qDay', d, TR(l), '', a.days.indexOf(d) >= 0)).join('')}</div>${adjacentNote(a.days)}${err('days')}`;
+      <div class="qdays">`)}${GEN.DAYS.map(([d, l]) => opt('qDay', d, TR(l), '', a.days.indexOf(d) >= 0)).join('')}</div>${adjacentNote(a.days)}${daysVolNote(a, a.days)}${err('days')}`;
     else {
       const blk = GEN.check(a).block, lim = a.limits.filter((x) => x !== 'none');
       /* підсумок відповідей: біля кожної — «Змінити» (з 3.27.0): відкриває цей крок, «Готово» повертає сюди */
@@ -798,6 +798,12 @@ window.APP_START = () => {
   function adjacentNote(days) {
     const pairs = GEN.adjacentDays(days); if (!pairs.length) return '';
     return `<p class="note w small" style="margin-top:8px">${LL('Дні поспіль: ', 'Back-to-back days: ')}${pairs.map(([x, y]) => DAYS[x] + LL(' і ', ' and ') + DAYS[y]).join(', ')}. ${LL('Усе тіло за тренування, тож ті самі мʼязи не встигнуть відпочити 48 год. Краще з днем між ними.', 'Each workout covers the whole body, so the same muscles won’t get 48 hours of rest. Better with a day between them.')}</p>`;
+  }
+  /* «мʼязи» на 2 дні (з 3.27.13; перевірка 01.11, слово Alexа «Пункти 1–5 і 7»): замір на всіх анкетах — медіана 7–8 підходів на групу за тиждень, а для росту орієнтир ≥ 10 (ACSM 2026);
+     час уже біля межі 55 хв, тож план не дописуємо, а чесно кажемо людині; вибір за нею */
+  function daysVolNote(a, days) {
+    if (!a || (days || []).length !== 2 || GEN.goalsOf(a).indexOf('muscle') < 0) return '';
+    return `<p class="note w small" style="margin-top:8px">${LL('Мета «Набрати мʼязи»: 2 дні дають приблизно 7–8 підходів на групу мʼязів за тиждень. Для росту орієнтир — від 10: це від 3 днів.', 'Build muscle goal: 2 days give about 7–8 sets per muscle group a week. The target for growth is 10 or more, which takes 3 days or more.')}</p>`;
   }
   /* що змінилось у програмі зі зміною кількості днів (тиждень і історія — ті самі: keepWeek) */
   function daysToast(n) {
@@ -1584,8 +1590,9 @@ window.APP_START = () => {
   function guideSheet(id) {
     const sec = (G().guide || []).find((g) => g.id === id); if (!sec) return;
     const mcg = id === 'back' && sec.items.some((x) => x === MCG_H || x === TR(MCG_H)) && typeof VIZ !== 'undefined';  /* G() — уже перекладений: англійською заголовок інший (огляд 27.10 спіймав) */
-    openSheet(`<div class="sp"><b>${esc(sec.title)}${LL(`</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>`, `</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>`)}${mcg ? mcgHtml(ui.mcg || MCG[0][0]) : ''}${guideBody(sec)}`);
-    if (mcg) mcgAttach();
+    const bal = id === 'balance' && typeof VIZ !== 'undefined';  // рівновага 65+ (з 3.27.13): та сама модель, що в тесті
+    openSheet(`<div class="sp"><b>${esc(sec.title)}${LL(`</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>`, `</b><button type="button" class="sm ghost" data-act="closeSheet">Close</button></div>`)}${mcg ? mcgHtml(ui.mcg || MCG[0][0]) : ''}${bal ? balHtml() : ''}${guideBody(sec)}`);
+    if (mcg || bal) mcgAttach();
   }
   /* «велика трійка» Макгілла — 3D над текстом (з 3.27.8; слово Alexа 26.10: «Натиснув як робити Макгіла - Чому не має 3д моделі? Має бути над текстом»):
      ті самі моделі, що на картці «Тренер» (бічна планка — з колін, як радить текст: «спершу з колін»); перемикач — яку з трьох показати, памʼятає до перезапуску */
@@ -1593,6 +1600,9 @@ window.APP_START = () => {
   function mcgHtml(k) {
     return `<div class="mcg"><details class="vz3" data-k="${k}" open><summary><b>${LL('«Велика трійка» Макгілла — 3D', 'McGill’s Big Three — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>
       <div class="seg mcgs">${MCG.map((x) => `<button type="button" class="${x[0] === k ? 'on' : ''}" data-act="mcg" data-k="${x[0]}" data-tip="${esc(LL('Показати в 3D: ', 'Show in 3D: ') + LL(x[1], x[2]).toLowerCase())}">${LL(x[1], x[2])}</button>`).join('')}</div>${vizInner()}</details></div>`;
+  }
+  function balHtml() {
+    return `<div class="mcg"><details class="vz3" data-k="b_bal" open><summary><b>${LL('Стійка на одній нозі — 3D', 'Single-leg stand — 3D')}</b><span class="small muted">${LL('Пальцем можна повернути вигляд', 'Drag to turn the view')}</span></summary>${vizInner()}</details></div>`;
   }
   function mcgAttach() {
     const det = sheetEl.querySelector('.mcg details.vz3'); if (!det) return;
@@ -3905,7 +3915,7 @@ window.APP_START = () => {
         <label class="f">Наступне тренування — тиждень</label><select id="weekSel"`, `</button>
         <label class="f">Next workout — week</label><select id="weekSel"`)}${p.draft ? ' disabled' : ''}>${wks.map((w) => `<option value="${w}"${w === curWeek ? ' selected' : ''}>${w}${cp.cycle > 1 ? LL(' · цикл ', " · cycle ") + cp.cycle : ''}</option>`).join('')}${LL(`</select>
         <label class="f">Дні тренувань</label><div class="row">`, `</select>
-        <label class="f">Workout days</label><div class="row">`)}${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${DB.custom ? adjacentNote(p.days) : ''}${p.draft ? LL('<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>', "<p class=\"tiny muted\">Questionnaire, days, and week can be changed after you finish the workout.</p>") : ''}</div>
+        <label class="f">Workout days</label><div class="row">`)}${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button type="button" class="sm${p.days.indexOf(d) >= 0 ? ' pri' : ''}" data-act="day" data-d="${d}"${p.draft ? ' disabled' : ''}>${DAYS[d]}</button>`).join('')}</div>${DB.custom ? adjacentNote(p.days) + daysVolNote(DB.custom.answers, p.days) : ''}${p.draft ? LL('<p class="tiny muted">Анкета, дні й тиждень — після завершення тренування.</p>', "<p class=\"tiny muted\">Questionnaire, days, and week can be changed after you finish the workout.</p>") : ''}</div>
       ${eqCard(p)}
       ${hasDb ? `${isLb() ? KG(LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`)) : LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, г</label><input inputmode="numeric" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, g</label><input inputmode="numeric" id="handleIn" value="`)}${fmt(isLb() ? p.handle : p.handle * 1000)}${LL(`">
         <label class="f">`, `">

@@ -1556,3 +1556,31 @@ I18N.add({
   "✕ Не підіймай плечі й голову": "✕ Don’t lift your shoulders and head",
   "✕ Не нахиляйся вперед": "✕ Don’t lean forward"
 });
+
+/* ---- 3.27.13: вправи без гантелі при колінах, рівновага 65+, важчі базові в залі ---- */
+I18N.add({
+  "Присідання до крісла без ваги": "Bodyweight Chair Squat",
+  "Сідничний міст без ваги": "Bodyweight Glute Bridge",
+  "Крісло позаду, руки перед собою. Торкніться сидіння сідницями й одразу вставайте, не сідаючи. Коліна йдуть у напрямку носків, пʼяти на підлозі. Болить коліно — менша глибина. Легко — опускання 3–4 с.": "Chair behind you, arms out in front. Touch the seat with your glutes and stand right back up without sitting down. Knees track over your toes, heels on the floor. If your knee hurts, go less deep. If it’s easy, lower for 3–4 sec.",
+  "Лежачи на спині, стопи на підлозі ближче до сідниць, руки вздовж тіла. Підніміть таз до лінії плечі — коліна, пауза 1–2 с, стисніть сідниці; поперек не прогинайте. Легко — пауза 3 с угорі й повільне опускання.": "Lie on your back, feet on the floor close to your glutes, arms at your sides. Lift your hips to a line from shoulders to knees, pause 1–2 sec, squeeze your glutes; don’t arch your lower back. If it’s easy, pause 3 sec at the top and lower slowly.",
+  "Головна вправа для ніг і сідниць, коли гантелі немає. Сильні ноги беруть на себе навантаження в житті.": "The main leg and glute exercise when you have no dumbbell. Strong legs take the load in everyday life.",
+  "Крісло позаду, стопи трохи ширше плечей, носки злегка назовні, руки перед собою.": "Chair behind you, feet a little wider than your shoulders, toes slightly out, arms out in front.",
+  "Таз назад і вниз, доки сідниці торкнуться сидіння, — і одразу вгору, не сідаючи. Коліна йдуть у напрямку носків.": "Hips back and down until your glutes touch the seat, then straight back up without sitting down. Knees track over your toes.",
+  "Лежачи на спині, стопи на підлозі ближче до сідниць, руки вздовж тіла.": "Lie on your back, feet on the floor close to your glutes, arms at your sides.",
+  "Таз назад — торкнись сидіння": "Hips back — touch the seat",
+  "Одразу вгору, не сідаючи": "Straight back up, don’t sit",
+  "Підніми ногу — таз рівно, погляд уперед": "Lift one leg — hips level, eyes forward",
+  "Тримай 5–10 с — і на іншу ногу": "Hold 5–10 sec — then the other leg",
+  "Стійка на одній нозі": "Single-Leg Stand",
+  "Рівновага 3 хв: стійка на одній нозі біля стіни": "Balance 3 min: single-leg stand by a wall",
+  "Рівновага": "Balance",
+  "Навіщо: вправи на рівновагу зменшують кількість падінь приблизно на чверть. Після 65 років ВООЗ радить їх щонайменше 3 дні на тиждень, краще щодня.": "Why: balance exercises cut the number of falls by about a quarter. After 65, the WHO recommends them at least 3 days a week; daily is even better.",
+  "#Стійка на одній нозі": "#Single-leg stand",
+  "Обличчям до стіни, кінчики пальців на стіні. Підніміть одну ногу, таз рівно, коліно опорної ноги злегка зігнуте. Тримайте 5–10 с, по 3 рази на кожну ногу.": "Face a wall with your fingertips on it. Lift one leg, hips level, standing knee slightly bent. Hold 5–10 sec, 3 times on each leg.",
+  "Упевнено — торкайтесь стіни лише за потреби, потім руки на поясі, як на 3D. Поступово довше.": "Once you feel steady, touch the wall only if needed, then put your hands on your hips, as in the 3D. Gradually hold longer.",
+  "#Ходьба": "#Walking",
+  "Пʼята до носка: ставте пʼяту прямо перед носком іншої ноги, щонайменше 5 кроків, погляд уперед.": "Heel to toe: place your heel right in front of the other foot’s toes, at least 5 steps, eyes forward.",
+  "Боком: 10 кроків в один бік і 10 назад, коліна злегка зігнуті.": "Sideways: 10 steps one way and 10 back, knees slightly bent.",
+  "Завжди поруч зі стіною чи міцним кріслом. Запаморочення або біль — зупиніться.": "Always next to a wall or a sturdy chair. If you feel dizzy or have pain, stop.",
+  "У залі перші базові тренажери — по 6–8 повторень із відпочинком 2 хв: сила найбільше росте від важкої ваги. Вагу підбирайте так, щоб лишався запас 1–2.": "At the gym, your first main machines are 6–8 reps with 2 min of rest: strength grows most from heavy weight. Pick a weight that leaves 1–2 reps in reserve."
+});
