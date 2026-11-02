@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.16';
+  const VERSION = '3.27.17';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -1719,6 +1719,10 @@ window.APP_START = () => {
     ov.addEventListener('click', (e) => { const b = e.target.closest('[data-tour]'); if (!b) { if (!e.target.closest('.tbx')) { ov.remove(); S().tour[id] = true; save(); } return; } if (b.dataset.tour === 'skip') { ov.remove(); S().tour[id] = true; save(); } else tour(id, k + 1); });
   }
   function whatsNew() {
+    /* 3.27.17: картка «Нове» зникає одразу; render закриває шторку, тому екран перемальовуємо до неї */
+    const had = !S().tour.v6;
+    S().tour.v3 = true; S().tour.v4 = true; S().tour.v5 = true; S().tour.v6 = true; save();
+    if (had && view === 'home') render();
     openSheet(`${LL(`<div class="sp"><b>Що вміє застосунок</b><button type="button" class="sm ghost" data-act="closeSheet">Закрити</button></div>
       <ul class="list">
         <li style="display:block"><b>🗣 Швидкість голосу тренера</b><div class="small muted">«Більше» → «Голосовий тренер» → «Швидкість голосу»: ×1, ×1,2, ×1,5 або ×2 — і фрази тренування, і відповіді тренера; тон голосу не змінюється.</div></li>
@@ -1800,7 +1804,6 @@ window.APP_START = () => {
         <li style="display:block"><b>🎨 New look</b><div class="small muted">Soft rounded shapes, light shadows, “glass” panels, and smooth transitions. Light and dark themes follow your phone’s setting.</div></li>
         <li style="display:block"><b>💡 Tips</b><div class="small muted">Press and hold any button or label for 1 second to see a plain-language explanation. Plus: “?” buttons next to terms, a tutorial on first launch, and a glossary in “More.”</div></li>
       </ul><button type="button" class="pri wide" data-act="closeSheet">Got it</button>`)}`);
-    S().tour.v3 = true; S().tour.v4 = true; S().tour.v5 = true; S().tour.v6 = true; save();
   }
   function readySheet(wid, place) {
     const her = DB.active === 'her', sw = G().ready && G().ready.swap && G().ready.swap.rdl && G().ex.rdl;
