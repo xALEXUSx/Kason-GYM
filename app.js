@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.17';
+  const VERSION = '3.27.18';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -703,6 +703,8 @@ window.APP_START = () => {
   const missedSegs = new Set();
   /* речення-вага з voice.target: «40 кілограмів.», «13 з половиною кілограма.», «6,8 кілограма.», «… дисків.» */
   const KG_SAY = /^\d+(,\d+)?( з половиною)? (кілограм|фунт)(а|и|ів)?( дисків)?\.$/, ON_SCREEN = LL('Вага — на екрані.', "The weight is on the screen.");
+  /* диски на кожен бік: у записі лише розкладки до 20 кг; важчої немає — речення пропускаємо, а не всю фразу голосом телефона (з 3.27.18: диски звучать у кожному обсязі мови) */
+  const SIDE_SAY = /^(На кожен бік|З кожного боку гантелі) — /;
   const packId = () => { const v = S().voice; return v.packs && DB.active ? v.packs[DB.active] || '' : ''; };
   /* Хто зараз говорить і чому — видно в «Більше» → «Голосовий тренер» (щоб не гадати, чому звучить системний голос). */
   const voiceInfo = { mode: '', why: '', skip: '', skipAt: 0 };
@@ -712,12 +714,15 @@ window.APP_START = () => {
      налаштування S().voice.auto — full (не вимикати, за замовчуванням) / part (лише головне: що робити, відпочинок, «Час!», рекорди — без техніки й жартів;
      застереження про поперек лишається) / off (сам не говорить). Кнопка з динаміком угорі тренування перемикає лише це тренування (d.vo),
      наступне — знову за налаштуванням. Натиснуте людиною («🔊 Як робити», «🔁 Повторити», перевірка голосу) звучить завжди — talk(t, true).
-     S().voice.on лишається загальним вимикачем (ним глушать голос перевірки в браузері, §5). */
+     S().voice.on лишається загальним вимикачем (ним глушать голос перевірки в браузері, §5).
+     З 3.27.18 (слово Alexа 02.11 «Один перемикач»): на екрані один перемикач «Скільки говорить тренер» — detail / short / part / off; у даних ті самі поля auto і level (saySel). */
   const vAuto = () => { const v = S().voice.auto || 'full', d = P() && P().draft; return d && d.vo ? (d.vo === 'off' ? 'off' : v === 'off' ? 'full' : v) : v; };
+  const saySel = (V) => (V.auto === 'off' || V.auto === 'part' ? V.auto : V.level === 'short' ? 'short' : 'detail');
   function autoTxt(m, db) {
     const w = db ? LL('вагу й диски', 'weight and plates') : LL('вагу', 'weight');
     return m === 'off' ? LL('Сам не говорить. «🔊 Як робити», «🔁 Повторити» і відповіді на питання звучать. Кнопка з динаміком угорі тренування вмикає голос на одне тренування.', 'Doesn’t speak on its own. “🔊 How to do it,” “🔁 Repeat,” and answers to your questions still play. The speaker button at the top of a workout turns the voice on for that workout.')
       : m === 'part' ? LL('Лише головне: вправа, підхід, ', 'Just the essentials: exercise, set, ') + w + LL(' й повторення, відпочинок, «10 секунд», «Час!», рекорди — без пояснень техніки й жартів. Кнопка з динаміком угорі тренування вимикає голос на одне тренування.', ' and reps, rest, “10 seconds,” “Time!,” PRs — no form explanations or jokes. The speaker button at the top of a workout turns the voice off for that workout.')
+      : m === 'short' ? LL('Що робити, ', 'What to do, ') + w + LL(', коротко техніку (як рухатись і одна помилка), відпочинок, «10 секунд», «Час!», рекорди. Кнопка з динаміком угорі тренування вимикає голос на одне тренування.', ', brief form cues (how to move and one mistake to avoid), rest, “10 seconds,” “Time!,” PRs. The speaker button at the top of a workout turns the voice off for that workout.')
       : LL('Говорить усе: що робити, ', 'Says everything: what to do, ') + w + LL(', техніку, відпочинок, «10 секунд», «Час!», рекорди. Кнопка з динаміком угорі тренування вимикає голос на одне тренування.', ', form cues, rest, “10 seconds,” “Time!,” PRs. The speaker button at the top of a workout turns the voice off for that workout.');
   }
   /* номер «тиші» (з 3.22.3): askHush його збільшує — фраза, що чекала на голос (завантаження, запасний голос), після тиші вже не звучить */
@@ -736,9 +741,9 @@ window.APP_START = () => {
     /* вага, якої немає в записі (крок тренажера вашого залу 4,5 чи 6,8 кг, своя вага цифрами), не переводить усю фразу
        на системний голос: число видно на екрані — тренер каже «Вага — на екрані.» (поки її немає в записі — пропускає) */
     const miss = VOICEPACK.missing(id, segs);
-    if (miss.length && miss.every((x) => KG_SAY.test(x))) {
+    if (miss.length && miss.every((x) => KG_SAY.test(x) || SIDE_SAY.test(x))) {
       const alt = VOICEPACK.has(id, [ON_SCREEN]) ? ON_SCREEN : null;
-      segs = segs.map((x) => (miss.indexOf(x) >= 0 ? alt : x)).filter((x, k, arr) => x && !(x === ON_SCREEN && arr[k - 1] === ON_SCREEN));
+      segs = segs.map((x) => (miss.indexOf(x) < 0 ? x : KG_SAY.test(x) ? alt : null)).filter((x, k, arr) => x && !(x === ON_SCREEN && arr[k - 1] === ON_SCREEN));
       if (!segs.length) return false;
     }
     if (!VOICEPACK.has(id, segs)) { VOICEPACK.missing(id, segs).forEach((x) => missedSegs.add(x)); VOICEPACK.stop(); return sysSay(text, LL('цієї фрази немає в записі', "this phrase isn’t in the recording")); }
@@ -877,7 +882,7 @@ window.APP_START = () => {
     const it = d.items[st.i]; return G().ex[it.ex].name + ' · ' + setName(it, st.j);
   }
   /* Тренер: характер (жорсткий з гумором або спокійний) і сценарій вправи. */
-  const hard = () => S().voice.tone !== 'calm' && vAuto() !== 'part';  // «Частково» — без жартів характеру
+  const hard = () => S().voice.tone !== 'calm' && vAuto() !== 'part';  // «Головне» — без жартів характеру
   const L = (kind, seed) => (hard() ? COACH.line(kind, G().sex, seed) + ' ' : '');
   /* «Перші 3 тренування — за руку» (з 3.21.7; слово Alexа 24.10: «для перших різних тренеровок потрібен повний голосовий супровід тренера та підсказки що де і як натискати і чому»):
      тренер каже, що натиснути, а кнопка світиться (підказка — і текстом, для тих, хто без голосу). Лише режим «Тренер»; перші 3 тренування
@@ -934,7 +939,7 @@ window.APP_START = () => {
   }
   function setSpeech(d, st, brief) {
     const it = d.items[st.i], ex = G().ex[it.ex], s = it.sets[st.j], full = S().voice.level !== 'short', sc = script(it.ex);
-    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + sideVoice(VOICE.target(ex, s, it, full ? plateSide(ex, it, s.load) : null));
+    let t = ex.name + '. ' + stepTitle(d, st) + '. ' + sideVoice(VOICE.target(ex, s, it, plateSide(ex, it, s.load)));  // диски на кожен бік — за будь-якого обсягу мови (з 3.27.18)
     if (s.type === 'M') t += LL(' Міо-підхід: до відмови, далі короткі паузи.', " Myo-rep set: go to failure, then short rests.");
     if (s.type === 'D') t += LL(' Одразу.', " No rest.");
     if (ex.spine && s.type !== 'W') t += LL(' Запас два.', " Two reps in reserve.");
@@ -943,7 +948,7 @@ window.APP_START = () => {
     if (brief) return sp(t);
     const doneN = it.sets.filter((x) => x.done).length, lastWork = s.type !== 'W' && !it.sets.slice(st.j + 1).some((x) => x.type !== 'W');
     if (ex.spine && s.type !== 'W' && !it.sets.some((x) => x.done && x.type !== 'W')) t += ' ' + COACH.line('spine', G().sex);
-    if (vAuto() === 'part') return sp(t);  // «Частково»: без техніки; застереження про поперек — лишається
+    if (vAuto() === 'part') return sp(t);  // «Головне»: без техніки; застереження про поперек — лишається
     if (doneN === 0) {
       if (sc) t += ' ' + (full ? COACH.howText(sc) : LL('Як: ', "How: ") + sc.move);
       else t += ' ' + VOICE.firstSentence(ex.tip);
@@ -3904,7 +3909,7 @@ window.APP_START = () => {
     /* після 12 тижнів — цикли з тижнів 5–12 (як у «Плані»): вибір тижня — у поточному циклі */
     const cp = ENGINE.planFor(prog, nextN()), curWeek = cp.week, wks = cp.cycle === 1 ? Array.from({ length: 12 }, (_, k) => k + 1) : Array.from({ length: 8 }, (_, k) => k + 5);
     const sw = (k, l, d) => `<label class="sw"><span>${l}<div class="tiny muted">${d}</div></span><input type="checkbox" data-set="${k}"${S()[k] ? ' checked' : ''}></label>`;
-    const seg = (key, opts, cur, tip) => `<div class="seg">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}"${tip ? ` data-tip="${esc(tip)}"` : ''}>${l}</button>`).join('')}</div>`;
+    const seg = (key, opts, cur, tip) => `<div class="seg${key === 'say' ? ' s4' : ''}">${opts.map(([v, l]) => `<button type="button" class="${String(cur) === String(v) ? 'on' : ''}" data-act="vset" data-k="${key}" data-v="${v}"${tip ? ` data-tip="${esc(tip)}"` : ''}>${l}</button>`).join('')}</div>`;
     const vl = VOICE.list();
     const voiceBox = !VOICE.supported ? LL('<div class="note w small">Цей браузер не вміє озвучувати текст. ', "<div class=\"note w small\">This browser can’t read text aloud. ") + TX(LL('На iPhone голос працює в Safari й у встановленому застосунку.', "On iPhone, the voice works in Safari and in the installed app."), LL('На Android голос працює в Chrome й у встановленому застосунку.', "On Android, the voice works in Chrome and in the installed app.")) + '</div>'
       : !vl.length ? LL('<div class="note w small"><b>Українського голосу не знайдено.</b> ', "<div class=\"note w small\"><b>No English voice found.</b> ") + TX(LL('На iPhone: Параметри → Доступність → розділ про озвучення вмісту (англ. Spoken Content) → Голоси → Українська — завантажте голос і перезапустіть застосунок.', "On iPhone: Settings → Accessibility → Spoken Content → Voices → English — download a voice and restart the app."), LL('На Android: «Налаштування» → «Спеціальні можливості» → «Синтез мовлення» (або «Перетворення тексту в мовлення») → система Google → встановіть українську й перезапустіть застосунок. Назви пунктів у різних телефонів трохи різні.', "On Android: “Settings” → “Accessibility” → “Text-to-speech output” (or “Text-to-speech”) → Google engine → install English and restart the app. Menu names vary slightly from phone to phone.")) + '</div>'
@@ -3914,16 +3919,14 @@ window.APP_START = () => {
       `)}${accountCard()}
       ${standalone ? '' : installNote(LL('Встановіть як застосунок', "Install as an app"))}
       ${langCard()}${unitsCard()}${remindCard()}${LL(`
-      <h2>Голосовий тренер</h2><div class="card" id="mVoice"><label class="f">Голос тренера під час тренування</label>`, `
-      <h2>Voice coach</h2><div class="card" id="mVoice"><label class="f">Coach voice during workouts</label>`)}${seg('auto', [['full', LL('Не вимикати', 'Always on')], ['part', LL('Частково', 'Partly')], ['off', LL('Вимкнути', 'Off')]], V.auto || 'full')}<p class="tiny muted" style="margin:6px 0 10px">${autoTxt(V.auto || 'full', hasDb)}</p>
+      <h2>Голосовий тренер</h2><div class="card" id="mVoice"><label class="f">Скільки говорить тренер</label>`, `
+      <h2>Voice coach</h2><div class="card" id="mVoice"><label class="f">How much the coach talks</label>`)}${seg('say', [['detail', LL('Детально', 'Detailed')], ['short', LL('Коротко', 'Brief')], ['part', LL('Головне', 'Essentials')], ['off', LL('Вимкнути', 'Off')]], saySel(V))}<p class="tiny muted" style="margin:6px 0 10px">${autoTxt(saySel(V), hasDb)}</p>
         ${I18N.lang === 'en' ? '<div class="note small">During workouts the coach speaks with your phone’s English voice — the recorded coach voices are in Ukrainian.</div>' : packBox()}
         ${packId() && I18N.lang !== 'en' ? '' : voiceBox}${LL(`
         <label class="sw"><span>Говорити й у беззвучному режимі<div class="tiny muted">вимкніть, якщо слухаєте музику в іншому застосунку і вона ставатиме на паузу</div></span><input type="checkbox" id="voiceSilent"`, `
         <label class="sw"><span>Speak even in silent mode<div class="tiny muted">turn this off if you listen to music in another app and it keeps pausing</div></span><input type="checkbox" id="voiceSilent"`)}${V.silent === false ? '' : ' checked'}${LL(`></label>
         <label class="f">Характер тренера</label>`, `></label>
-        <label class="f">Coach personality</label>`)}${seg('tone', [['hard', LL('Жорсткий з гумором', "Tough, with humor")], ['calm', LL('Спокійний', "Calm")]], V.tone || 'hard')}${LL(`
-        <label class="f">Скільки говорити</label>`, `
-        <label class="f">How much to talk</label>`)}${seg('level', [['full', LL('Детально', "Detailed")], ['short', LL('Коротко', "Brief")]], V.level)}
+        <label class="f">Coach personality</label>`)}${seg('tone', [['hard', LL('Жорсткий з гумором', "Tough, with humor")], ['calm', LL('Спокійний', "Calm")]], V.tone || 'hard')}
         ${LL('<label class="f">Швидкість голосу</label>', '<label class="f">Voice speed</label>')}${seg('rate', [[1, '×1'], [1.2, LL('×1,2', '×1.2')], [1.5, LL('×1,5', '×1.5')], [2, '×2']], V.rate || 1, LL('Як швидко говорить тренер: фрази тренування й відповіді. Тон голосу не змінюється.', 'How fast the coach speaks: workout phrases and answers. The pitch stays the same.'))}${LL(`
         <button type="button" class="wide" data-act="say" data-what="test">🔊 Перевірити голос</button>
         <p class="tiny muted">Голос звучить, коли застосунок відкритий і екран увімкнений («Не гасити екран» нижче). Не чути — перевірте гучність і перемикач беззвучного режиму.</p></div>
@@ -4462,7 +4465,7 @@ window.APP_START = () => {
       save(); closeSheet(); toast(LL('Пульс збережено', 'Pulse saved')); return rBody();
     }
     /* більше */
-    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'stretch') S().stretch = v; else if (k === 'mode') { S().mode = v; if (p && p.draft) delete p.draft.mode; } else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'auto') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(LL('Голос увімкнено.', 'Voice is on.'), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
+    if (act === 'vset') { const k = b.dataset.k, v = b.dataset.v; if (k === 'stretch') S().stretch = v; else if (k === 'mode') { S().mode = v; if (p && p.draft) delete p.draft.mode; } else if (k === 'say') { const V = S().voice; if (v === 'off' || v === 'part') V.auto = v; else { V.auto = 'full'; V.level = v === 'short' ? 'short' : 'full'; } } else S().voice[k] = k === 'rate' ? Number(v) : v; if (k === 'rate') VOICEPACK.setRate(S().voice.rate); save(); rMore(); if (k === 'say') { if (v === 'off') { VOICE.stop(); VOICEPACK.stop(); } else { VOICE.unlock(); talk(v === 'part' ? LL('Голос увімкнено.', 'Voice is on.') : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; } if (k !== 'mode') { VOICE.unlock(); talk(k === 'rate' ? LL('Такий темп.', "Speaking at this pace.") : k === 'tone' ? (v === 'calm' ? LL('Добре, говоритиму спокійно.', "Okay, I’ll keep it calm.") : LL('Жарти лишаються. Скінчилось лише філонство.', "The jokes stay. The slacking is over.")) : v === 'short' ? LL('Говоритиму коротко.', "I’ll keep it short.") : LL('Говоритиму детально.', "I’ll go into detail."), true); } return; }
     if (act === 'vpack') { ensureAudio(); S().voice.packs[DB.active] = b.dataset.id; S().voice.packsManual = S().voice.packsManual || {}; S().voice.packsManual[DB.active] = true; save(); const id = b.dataset.id;
       if (id) VOICEPACK.load(id).then(() => { rMore(); talk(LL('Привіт! Я твій тренер. Так звучатиме голос під час тренування.', "Hi! I’m your coach. This is how I’ll sound during your workout."), true); VOICEPACK.download(id).then(() => packState()).catch(() => {}); }).catch(() => toast(LL('Не вдалося завантажити голос — перевірте інтернет', "Couldn’t download the voice — check your internet")));
       else { rMore(); talk(LL('Так звучить системний голос.', "This is the system voice."), true); }
