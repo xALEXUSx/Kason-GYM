@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.20';
+  const VERSION = '3.27.21';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -2055,7 +2055,7 @@ window.APP_START = () => {
     mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     ASK.rec = { mr, stream, chunks, type: mr.mimeType || type };
     RADIO.hush(true);
-    mr.start(); ASK.st = 'rec'; ASK.msg = ''; ASK.t0 = Date.now(); ASK.wav = null; ASK.retryQ = null;
+    mr.start(); ASK.st = 'rec'; ASK.msg = ''; ASK.t0 = Date.now(); ASK.wav = ASK.wav16 = null; ASK.retryQ = null;
     ASK.tick = setInterval(() => { if (Date.now() - ASK.t0 >= 30000) askStop(); else askDraw(); }, 500);
     liveOpen().catch(() => {});  // поки людина говорить — розмова з Gemini Live уже налаштовується (≈ 1,5 с)
     askDraw();
@@ -2066,30 +2066,45 @@ window.APP_START = () => {
     const done = new Promise((ok) => { r.mr.onstop = ok; setTimeout(ok, 1500); });
     try { if (r.mr.state !== 'inactive') r.mr.stop(); } catch (e) { /* уже */ }
     await done; r.stream.getTracks().forEach((t) => t.stop()); ASK.mic = false; audioMode(); RADIO.hush(false);
-    return send ? new Blob(r.chunks, { type: r.type || 'audio/mp4' }) : null;
+    /* тип — після зупинки (з 3.27.21): кодек («;codecs=opus») Chrome дописує лише після запису, а за ним вирішуємо, чи слати запис самим */
+    return send ? new Blob(r.chunks, { type: r.mr.mimeType || r.type || 'audio/mp4' }) : null;
   }
   function askCancel() { askEnd(false); ASK.st = 'idle'; }
   async function askStop() {
     const g = ASK.gen;
     ASK.st = 'think'; askDraw();
     const blob = await askEnd(true);
-    let wav = null;
+    let wav = null, clip = null;
     try { wav = blob && blob.size ? await toWav16k(await blob.arrayBuffer()) : null; } catch (e) { wav = null; }
+    try { clip = wav && OPUS_DIRECT.test(blob.type) ? toB64(new Uint8Array(await blob.arrayBuffer())) : null; } catch (e) { clip = null; }
     if (g !== ASK.gen) return;
     if (!wav) { ASK.st = 'err'; ASK.msg = LL('Не почув — скажіть ще раз, ближче до телефону.', "Didn’t catch that — say it again, closer to the phone."); return askDraw(); }
-    ASK.wav = wav;
-    const j = await post('/hear', { audio: wav, lang: I18N.lang, kb: 'min' }, hearMs(wav));
+    /* з 3.27.21 запис Opus (Chrome, Android) іде на сервер сам — удвічі менший за WAV, а Whisper чує його так само; WAV лишається запасним (wav16) */
+    ASK.wav = clip || wav; ASK.wav16 = clip ? wav : null; ASK.fmt = clip ? blob.type.match(/mp4|webm/)[0] : '';
+    const j = await hearSend(g);
     if (g !== ASK.gen) return;
     askHeard(j);
   }
   /* запис на сервер (з 3.27.20): 9.11 з повільного інтернету (на знімку — «E») запит за 8 с до сервера не дійшов (журнал сервера: 0 запитів) —
      чекаємо за розміром запису (від ≈ 12 кБ/с), до 45 с; не дійшов — запис лишається, «↻ Надіслати ще раз» без перезапису */
   const hearMs = (wav) => Math.min(45000, 8000 + Math.round(wav.length / 12));
+  /* замір 09.11 (_archive/plan_32721_2026-11-09/, 50 фраз із шумом залу, Whisper на Cloudflare): Opus (Chrome) напряму проти WAV — гірше 2, краще 3;
+     AAC iPhone напряму — гірше 3, краще 0, тож iPhone шле WAV, як і було; обмеження бітрейту Safari не тримає (32 000 — як без нього) */
+  const OPUS_DIRECT = /^audio\/(mp4|webm);\s*codecs=opus/;
+  /* з 3.27.21: сервер не розпізнав стислий запис (Whisper не взяв формат) — той самий запис ще раз, у WAV */
+  async function hearSend(g) {
+    let j = await post('/hear', { audio: ASK.wav, fmt: ASK.fmt || undefined, lang: I18N.lang, kb: 'min' }, hearMs(ASK.wav));
+    if (g === ASK.gen && j && j.error === 'hear' && ASK.wav16) {
+      ASK.wav = ASK.wav16; ASK.wav16 = null; ASK.fmt = '';
+      j = await post('/hear', { audio: ASK.wav, lang: I18N.lang, kb: 'min' }, hearMs(ASK.wav));
+    }
+    return j;
+  }
   /* розпізнано буквами, яких немає ні в українській, ні в англійській («jakt það með», знімок 9.11) — тренеру не шлемо, просимо сказати ще раз */
   const oddText = (q) => I18N.lang !== 'en' && /[ðþæøåäöüßñçéèêëìíîïòóôõùúûýÿœ]/i.test(q);
   function askHeard(j) {
     if (!j || !j.q) { if (j && (j.error === 'empty' || j.error === 'big')) ASK.wav = null; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
-    ASK.wav = null;
+    ASK.wav = ASK.wav16 = null;
     if (oddText(j.q)) { ASK.st = 'err'; ASK.msg = LL('Не розібрав: «', 'Couldn’t make it out: “') + j.q.replace(/[\s.!?…]+$/, '') + LL('». Скажіть ще раз, ближче до телефону, або напишіть.', '.” Say it again, closer to the phone, or type it.'); return askDraw(); }
     askTurn(j.q, Array.isArray(j.kb) ? j.kb : []);
   }
@@ -2097,8 +2112,8 @@ window.APP_START = () => {
     if (ASK.st === 'think' || ASK.st === 'rec' || ASK.st === 'mic') return;
     ensureAudio(); VOICEPACK.unlock();
     if (!ASK.wav) { const q = ASK.retryQ; ASK.retryQ = null; return q ? askTurn(q) : undefined; }
-    const g = ASK.gen, wav = ASK.wav; ASK.st = 'think'; ASK.msg = ''; askDraw();
-    const j = await post('/hear', { audio: wav, lang: I18N.lang, kb: 'min' }, hearMs(wav));
+    const g = ASK.gen; ASK.st = 'think'; ASK.msg = ''; askDraw();
+    const j = await hearSend(g);
     if (g !== ASK.gen) return;
     askHeard(j);
   }
@@ -2116,7 +2131,11 @@ window.APP_START = () => {
     w(0, 'RIFF'); dv.setUint32(4, 36 + x.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
     dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, x.length * 2, true);
     for (let k = 0; k < x.length; k++) dv.setInt16(44 + k * 2, Math.max(-32768, Math.min(32767, Math.round(x[k] * g * 32767))), true);
-    const u = new Uint8Array(dv.buffer); let bin = '';
+    return toB64(new Uint8Array(dv.buffer));
+  }
+  /* байти → base64 шматками (увесь запис одним викликом String.fromCharCode переповнює стек) */
+  function toB64(u) {
+    let bin = '';
     for (let k = 0; k < u.length; k += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(k, k + 0x8000));
     return btoa(bin);
   }
@@ -2154,7 +2173,7 @@ window.APP_START = () => {
     if (ok || g !== ASK.gen) return;
     liveClose(); t.a = ''; t.pcm = [];
     const prog = G();
-    const j = await post('/ask', { text: q, lang: I18N.lang, kb: 'min', image: t.img ? t.img.b64 : undefined, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: qText(x), a: x.a })) }, 32000);
+    const j = await post('/ask', { text: q, why: t.why || 'other', lang: I18N.lang, kb: 'min', image: t.img ? t.img.b64 : undefined, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: qText(x), a: x.a })) }, 32000);
     if (g !== ASK.gen) return;
     if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); if (t.img && !ASK.photo) ASK.photo = t.img; if (!t.img) ASK.retryQ = q; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
     t.a = j.a; t.done = true; ASK.st = 'idle'; askDraw();
@@ -2201,13 +2220,16 @@ window.APP_START = () => {
       (tip.length ? (sec.length ? '\n\n' : '') + LL('Підказки до кнопок застосунку:\n', "App button tips:\n") + tip.join('\n') : '');
   }
   function liveClose() { const ws = LIVE.ws; LIVE.ws = null; LIVE.ready = null; LIVE.turn = null; if (ws) try { ws.close(); } catch (e) { /* уже */ } }
-  /* true — тренер заговорив (звук прийшов за 5 с); false — ні: тоді запасний шлях */
+  /* true — тренер заговорив (звук прийшов за 5 с); false — ні: тоді запасний шлях, а t.why (з 3.27.21) каже серверу чому —
+     'open' не підключився, 'silent' підключився, але 5 с без звуку, 'empty' відповів без звуку, 'drop' розмова обірвалась */
   function liveTurn(t, g) {
     return new Promise((resolve) => {
-      let settled = false, got = false;
+      let settled = false, got = false, up = false;
       const fin = (v) => { if (!settled) { settled = true; resolve(v); } };
-      const wait = setTimeout(() => { if (!got) { if (LIVE.turn && LIVE.turn.t === t) LIVE.turn = null; fin(false); } }, 5000);
+      const miss = (why) => { if (!settled) t.why = why; fin(false); };
+      const wait = setTimeout(() => { if (!got) { if (LIVE.turn && LIVE.turn.t === t) LIVE.turn = null; miss(up ? 'silent' : 'open'); } }, 5000);
       Promise.race([liveOpen().then((ws) => (LIVE.kb ? t.kbP.then((kb) => [ws, kb]) : [ws, []])), new Promise((no, bad) => setTimeout(() => bad(new Error(LL('5 с', "5 sec"))), 5000))]).then(([ws, kb]) => {
+        up = true;
         if (settled || g !== ASK.gen) return fin(false);
         const turns = [], prog = coachProgram();
         /* програма — у першому питанні розмови й щоразу, як змінилась (зроблені підходи, інший тиждень) */
@@ -2230,11 +2252,11 @@ window.APP_START = () => {
             if (g === ASK.gen && livePlay(b64, t)) t.heard = true;
           },
           text(s) { t.a += s; if (g === ASK.gen) askDraw(); },
-          done() { clearTimeout(wait); LIVE.turn = null; if (g === ASK.gen) liveFlush(t); t.a = String(t.a).replace(/\s+/g, ' ').trim(); t.done = true; askDraw(); if (got) liveEnded(k(), g); else fin(false); },
-          fail() { clearTimeout(wait); LIVE.turn = null; if (g === ASK.gen) liveFlush(t); t.done = !!t.a; askDraw(); if (got) liveEnded(k(), g); else fin(false); }
+          done() { clearTimeout(wait); LIVE.turn = null; if (g === ASK.gen) liveFlush(t); t.a = String(t.a).replace(/\s+/g, ' ').trim(); t.done = true; askDraw(); if (got) liveEnded(k(), g); else miss('empty'); },
+          fail() { clearTimeout(wait); LIVE.turn = null; if (g === ASK.gen) liveFlush(t); t.done = !!t.a; askDraw(); if (got) liveEnded(k(), g); else miss('drop'); }
         };
         try { ws.send(JSON.stringify({ clientContent: { turns, turnComplete: true } })); } catch (e) { LIVE.turn.fail(); }
-      }, () => { clearTimeout(wait); fin(false); });
+      }, () => { clearTimeout(wait); miss('open'); });
     });
   }
   /* потоковий звук: шматки PCM 24 кГц стають у чергу Web Audio один за одним; true — шматок поставлено */
