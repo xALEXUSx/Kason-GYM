@@ -4,10 +4,17 @@
    ACSM 2011 (Garber): кожна велика група мʼязів, 10–30 с, разом 60 с на вправу, ≥ 2 дні на тиждень; Warneke та ін. 2025: у розминці не обовʼязкова, для відновлення не радять.
    Груди біля одвірка й згиначі стегна — затверджені вправи «Осанки» (program.js). 30 с — єдине число, що входить і в ACSM (10–30), і в AAOS (30–60).
    Без скручувань і нахилів спини вперед: при «Грижа або біль у спині» прибрано й коліно до грудей (згинає поперек).
-   Обмеження: плечі — без одвірка (у програмі AAOS для плеча його немає), коліна — без напівшпагату (вага на коліні), спина — без коліна до грудей. */
+   Обмеження: плечі — без одвірка (у програмі AAOS для плеча його немає), коліна — без напівшпагату (вага на коліні), спина — без коліна до грудей.
+   З 3.27.22 (слово Alexа 09.11 «виконуй обидва кроки по черзі»; знімок Alexа: «В мене сьогодні вправи на низ, навіщо розтяжка плеча? … щоб на шпагат сідати»):
+   коротка — під мʼязи цього тренування (day); «Гнучкість» — привідні, задня й передня поверхня стегна, згиначі стегна, 2 підходи по 60 с.
+   Джерела (звірено 09.11): Thomas та ін. 2018 (Int J Sports Med, PMID 29506306) — для амплітуди важить час на тиждень (≥ 5 хв на мʼяз) і частота, а не довжина
+   одного заняття; статична краща за балістичну й PNF; Warneke та ін. 2025 (консенсус) — надовго 2–3 підходи по 30–120 с на мʼяз. Привідні — NHS «Inner thigh stretch»
+   (стопи разом, коліна до підлоги) — лежачи, щоб поперек не згинався; найширший — ACE «Kneeling Lat Stretch» (на колінах, руки прямі на лаві, таз назад, спина рівна).
+   Двобічні вправи (both) — обидва боки разом, без зміни боку. */
 var STRETCH = (function () {
   'use strict';
   var HOLD = 30, SWITCH = 5, MOVE = 15;  // с на бік, зміна боку, перехід до наступної вправи
+  var FLEX = { hold: 60, rounds: 2, ids: ['ham', 'adduct', 'hipflex', 'quad'] };  // «Гнучкість» (з 3.27.22): шпагат — задня поверхня й згиначі стегна, привідні
   var LIST = [
     { id: 'chest', key: 's_chest', skip: ['shoulders'], name: 'Розтяжка грудей', how: 'Передпліччя на одвірку чи стійці, лікоть на рівні плеча. Крок уперед до легкого натягу в грудях.' },
     { id: 'shoulder', key: 's_shoulder', skip: [], name: 'Розтяжка плеча', how: 'Рука через груди, плечі опущені. Другою рукою притисніть її вище ліктя, на сам лікоть не тисніть.' },
@@ -18,21 +25,47 @@ var STRETCH = (function () {
     /* фітнес-гумка (з 3.27.14; слово Alexа 01.11: «саме такого формату фітнес резинки потрібні в програмі, як мінімум в кінці тренування в рамках розтяжки тіла»): та сама вправа, гумка замість рук на стегні. Перевагу над звичайною розтяжкою дослідження не показали (мале порівняння з ременем — без різниці); зручно, бо тягне рівно */
     { id: 'ham_b', key: 's_ham_b', instead: 'ham', gear: 'miniband', skip: [], name: 'Розтяжка задньої поверхні стегна з гумкою', how: 'Лежачи на спині, другу ногу зігніть. Найслабша гумка — на передню частину стопи піднятої ноги, другий кінець — у руках. Повільно випряміть ногу до легкого натягу; віддає в ногу чи поперек — опустіть.' },
     { id: 'calf_b', key: 's_calf_b', instead: 'calf', gear: 'miniband', skip: [], name: 'Розтяжка литки з гумкою', how: 'Лежачи на спині, другу ногу зігніть. Найслабша гумка — на передню частину стопи піднятої прямої ноги, другий кінець — у руках. Тягніть носок на себе до легкого натягу в литці.' },
-    { id: 'glute', key: 's_glute', skip: ['back'], name: 'Розтяжка сідниць', how: 'Лежачи на спині, другу ногу зігніть. Тягніть одне коліно до грудей за стегно, а не за коліно; поперек на підлозі.' }
+    { id: 'glute', key: 's_glute', skip: ['back'], name: 'Розтяжка сідниць', how: 'Лежачи на спині, другу ногу зігніть. Тягніть одне коліно до грудей за стегно, а не за коліно; поперек на підлозі.' },
+    /* з 3.27.22: двобічні — обидві ноги чи обидві руки разом */
+    { id: 'adduct', key: 's_adduct', both: true, skip: [], name: 'Розтяжка привідних мʼязів стегна', how: 'Лежачи на спині, коліна зігнуті, стопи разом. Повільно розведіть коліна в боки до легкого натягу на внутрішній поверхні стегон; поперек на підлозі, коліна руками не тисніть.' },
+    { id: 'lat', key: 's_lat', both: true, skip: ['back', 'knees', 'shoulders'], name: 'Розтяжка найширшого мʼяза спини', how: 'На колінах перед кріслом чи лавою, прямі руки — на сидінні. Відводьте таз назад до пʼят, спина рівна, живіт напружений, голова між руками.' }
   ];
+  /* які мʼязи тренування розтягує вправа (з 3.27.22; мʼязи вправ — m.p у app/program.js; згиначі стегна — прямий мʼяз стегна, тобто квадрицепс;
+     привідних у переліку мʼязів немає — вони лише в повному наборі й «Гнучкості») */
+  var TARGET = { chest: ['chest'], shoulder: ['delts', 'reardelts'], lat: ['lats'], quad: ['quads'], hipflex: ['quads'], ham: ['hams'], glute: ['glutes'], calf: ['calves'], adduct: [] };
   var RULE = 'До легкого натягу, без болю й ривків; дихайте рівно.', END = 'Розтяжку зроблено. Вставайте повільно.', WALK = 'За бажанням спершу 5 хв повільної ходьби.';
   function byId(id) { return LIST.filter(function (x) { return x.id === id; })[0] || null; }
-  /* mode: 'full' — усе, що дозволяють обмеження; 'short' — те саме, що було в заминці (груди, задня поверхня стегна, литки); плечі — рука через груди замість одвірка; 'off' — нічого */
-  function pick(mode, limits, gear) {
+  /* mode: 'full' — усе, що дозволяють обмеження; 'short' — три вправи на мʼязи цього тренування (day — { мʼяз: скільки вправ дня його качають });
+     без day — як у заминці (груди, литка, задня поверхня стегна); плечі — рука через груди замість одвірка; 'flex' — «Гнучкість»; 'off' — нічого.
+     Порядок повного набору й «Гнучкості» — спершу мʼязи дня */
+  function pick(mode, limits, gear, day) {
     if (mode === 'off') return [];
-    var lim = limits || [], has = gear || [], ok = LIST.filter(function (x) { return !x.gear && !x.skip.some(function (s) { return lim.indexOf(s) >= 0; }); }).map(function (x) { return x.id; });
+    var lim = limits || [], has = gear || [], w = day || {}, ok = LIST.filter(function (x) { return !x.gear && !x.skip.some(function (s) { return lim.indexOf(s) >= 0; }); }).map(function (x) { return x.id; });
+    var score = function (id) { return (TARGET[id] || []).reduce(function (s, m) { return s + (w[m] || 0); }, 0); };
+    var byDay = function (ids) { return ids.map(function (id, i) { return [id, score(id), i]; }).sort(function (a, b) { return b[1] - a[1] || a[2] - b[2]; }).map(function (x) { return x[0]; }); };
     /* гумка є — ті самі мʼязи, той самий час */
     var swap = function (ids) { return ids.map(function (id) { var b = LIST.filter(function (x) { return x.instead === id && has.indexOf(x.gear) >= 0; })[0]; return b ? b.id : id; }); };
-    if (mode !== 'short') return swap(ok);
-    return swap([ok.indexOf('chest') >= 0 ? 'chest' : 'shoulder', 'calf', 'ham']);
+    if (mode === 'flex') return swap(byDay(FLEX.ids.filter(function (id) { return ok.indexOf(id) >= 0; })));
+    if (mode !== 'short') return swap(byDay(ok));
+    /* коротка: по черзі вправа на мʼязи, що найбільше працювали й ще не розтягнуті (дві на той самий мʼяз — ні); мʼязів дня менше трьох — добираємо:
+       день без верху — ногами (задня поверхня, литка, сідниці, згиначі, передня поверхня), інакше — як у заминці (груди, литка, задня поверхня) */
+    var up = ['chest', 'delts', 'reardelts', 'lats'].some(function (m) { return w[m]; }), noDay = !Object.keys(w).length;
+    var base = (up || noDay ? [ok.indexOf('chest') >= 0 ? 'chest' : 'shoulder', 'calf', 'ham'] : ['ham', 'calf', 'glute', 'hipflex', 'quad']).filter(function (id) { return ok.indexOf(id) >= 0; }), top = [], left = Object.assign({}, w);
+    for (var k = 0; k < 3; k++) {
+      var best = null, bs = 0;
+      ok.forEach(function (id) { if (top.indexOf(id) >= 0) return; var s = (TARGET[id] || []).reduce(function (t, m) { return t + (left[m] || 0); }, 0); if (s > bs) { bs = s; best = id; } });
+      if (!best) break;
+      top.push(best); TARGET[best].forEach(function (m) { left[m] = 0; });
+    }
+    return swap(top.concat(base.filter(function (id) { return top.indexOf(id) < 0; })).slice(0, 3));
   }
-  /* скільки хвилин (ціле, угору): обидва боки кожної вправи + зміна боку + перехід */
-  function mins(ids) { return ids.length ? Math.ceil((ids.length * (2 * HOLD + SWITCH) + (ids.length - 1) * MOVE) / 60) : 0; }
-  return { HOLD: HOLD, SWITCH: SWITCH, LIST: LIST, RULE: RULE, END: END, WALK: WALK, byId: byId, pick: pick, mins: mins };
+  /* утримання й підходи режиму: «Гнучкість» — 2 по 60 с, інші — 1 по 30 с */
+  function plan(mode) { return mode === 'flex' ? { hold: FLEX.hold, rounds: FLEX.rounds } : { hold: HOLD, rounds: 1 }; }
+  /* скільки хвилин (ціле, угору): кожен підхід — обидва боки + зміна боку (двобічна — одне утримання), між підходами — зміна, між вправами — перехід */
+  function mins(ids, mode) {
+    var p = plan(mode), s = ids.reduce(function (t, id) { var x = byId(id), one = x && x.both ? p.hold : 2 * p.hold + SWITCH; return t + p.rounds * one + (p.rounds - 1) * SWITCH; }, 0);
+    return ids.length ? Math.ceil((s + (ids.length - 1) * MOVE) / 60) : 0;
+  }
+  return { HOLD: HOLD, SWITCH: SWITCH, FLEX: FLEX, LIST: LIST, TARGET: TARGET, RULE: RULE, END: END, WALK: WALK, byId: byId, pick: pick, plan: plan, mins: mins };
 })();
 if (typeof module !== 'undefined') module.exports = STRETCH;

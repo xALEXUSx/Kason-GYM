@@ -1532,6 +1532,10 @@ I18N.add({
   "Лежачи на спині, обидві ноги зігнуті. Одну підніміть, візьміться за стегно й повільно випряміть до легкого натягу; віддає в ногу чи поперек — опустіть.": "Lie on your back, both knees bent. Lift one leg, hold your thigh and slowly straighten to a light pull; if it shoots down your leg or into your lower back, lower it.",
   "Розтяжка сідниць": "Glute stretch",
   "Лежачи на спині, другу ногу зігніть. Тягніть одне коліно до грудей за стегно, а не за коліно; поперек на підлозі.": "Lie on your back with the other knee bent. Pull one knee toward your chest by the thigh, not the knee; lower back on the floor.",
+  "Розтяжка привідних мʼязів стегна": "Inner thigh stretch",
+  "Лежачи на спині, коліна зігнуті, стопи разом. Повільно розведіть коліна в боки до легкого натягу на внутрішній поверхні стегон; поперек на підлозі, коліна руками не тисніть.": "Lie on your back, knees bent, soles together. Slowly let your knees open out to the sides until you feel a gentle stretch along your inner thighs; keep your lower back on the floor and don’t press your knees down with your hands.",
+  "Розтяжка найширшого мʼяза спини": "Lat stretch",
+  "На колінах перед кріслом чи лавою, прямі руки — на сидінні. Відводьте таз назад до пʼят, спина рівна, живіт напружений, голова між руками.": "Kneel in front of a chair or bench with straight arms on the seat. Sit your hips back toward your heels, back straight, core braced, head between your arms.",
   "До легкого натягу, без болю й ривків; дихайте рівно.": "To a light pull, no pain or bouncing; breathe evenly.",
   "Розтяжку зроблено. Вставайте повільно.": "Stretching done. Get up slowly.",
   "За бажанням спершу 5 хв повільної ходьби.": "If you like, start with 5 minutes of slow walking.",
@@ -1554,7 +1558,11 @@ I18N.add({
   "Коліно до грудей — тягни за стегно": "Knee to chest — pull by the thigh",
   "Тримай 30 с — поперек на підлозі": "Hold 30 s — lower back on the floor",
   "✕ Не підіймай плечі й голову": "✕ Don’t lift your shoulders and head",
-  "✕ Не нахиляйся вперед": "✕ Don’t lean forward"
+  "✕ Не нахиляйся вперед": "✕ Don’t lean forward",
+  /* 3.27.22: привідні й найширший */
+  "Стопи разом — коліна повільно в боки": "Soles together — knees slowly out to the sides",
+  "Руки прямі на сидінні — таз назад до пʼят": "Straight arms on the seat — hips back toward your heels",
+  "Тримай 30 с — спина рівна, голова між руками": "Hold 30 s — back straight, head between your arms"
 });
 
 /* ---- 3.27.13: вправи без гантелі при колінах, рівновага 65+, важчі базові в залі ---- */
