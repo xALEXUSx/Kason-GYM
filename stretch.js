@@ -10,7 +10,9 @@
    Джерела (звірено 09.11): Thomas та ін. 2018 (Int J Sports Med, PMID 29506306) — для амплітуди важить час на тиждень (≥ 5 хв на мʼяз) і частота, а не довжина
    одного заняття; статична краща за балістичну й PNF; Warneke та ін. 2025 (консенсус) — надовго 2–3 підходи по 30–120 с на мʼяз. Привідні — NHS «Inner thigh stretch»
    (стопи разом, коліна до підлоги) — лежачи, щоб поперек не згинався; найширший — ACE «Kneeling Lat Stretch» (на колінах, руки прямі на лаві, таз назад, спина рівна).
-   Двобічні вправи (both) — обидва боки разом, без зміни боку. */
+   Двобічні вправи (both) — обидва боки разом, без зміни боку.
+   З 3.27.24 (рішення Claude 09.11 за дорученням Alexа): «Гнучкість» у день без тренування (flexday) — ті самі вправи, 1 підхід по 60 с (≈ 8 хв): частота від 5 днів
+   на тиждень і ≥ 5 хв на мʼяз на тиждень (Thomas та ін. 2018) досяжні за будь-якої кількості тренувань. */
 var STRETCH = (function () {
   'use strict';
   var HOLD = 30, SWITCH = 5, MOVE = 15;  // с на бік, зміна боку, перехід до наступної вправи
@@ -45,7 +47,7 @@ var STRETCH = (function () {
     var byDay = function (ids) { return ids.map(function (id, i) { return [id, score(id), i]; }).sort(function (a, b) { return b[1] - a[1] || a[2] - b[2]; }).map(function (x) { return x[0]; }); };
     /* гумка є — ті самі мʼязи, той самий час */
     var swap = function (ids) { return ids.map(function (id) { var b = LIST.filter(function (x) { return x.instead === id && has.indexOf(x.gear) >= 0; })[0]; return b ? b.id : id; }); };
-    if (mode === 'flex') return swap(byDay(FLEX.ids.filter(function (id) { return ok.indexOf(id) >= 0; })));
+    if (mode === 'flex' || mode === 'flexday') return swap(byDay(FLEX.ids.filter(function (id) { return ok.indexOf(id) >= 0; })));
     if (mode !== 'short') return swap(byDay(ok));
     /* коротка: по черзі вправа на мʼязи, що найбільше працювали й ще не розтягнуті (дві на той самий мʼяз — ні); мʼязів дня менше трьох — добираємо:
        день без верху — ногами (задня поверхня, литка, сідниці, згиначі, передня поверхня), інакше — як у заминці (груди, литка, задня поверхня) */
@@ -59,8 +61,8 @@ var STRETCH = (function () {
     }
     return swap(top.concat(base.filter(function (id) { return top.indexOf(id) < 0; })).slice(0, 3));
   }
-  /* утримання й підходи режиму: «Гнучкість» — 2 по 60 с, інші — 1 по 30 с */
-  function plan(mode) { return mode === 'flex' ? { hold: FLEX.hold, rounds: FLEX.rounds } : { hold: HOLD, rounds: 1 }; }
+  /* утримання й підходи режиму: «Гнучкість» — 2 по 60 с, у день без тренування — 1 по 60 с, інші — 1 по 30 с */
+  function plan(mode) { return mode === 'flex' ? { hold: FLEX.hold, rounds: FLEX.rounds } : mode === 'flexday' ? { hold: FLEX.hold, rounds: 1 } : { hold: HOLD, rounds: 1 }; }
   /* скільки хвилин (ціле, угору): кожен підхід — обидва боки + зміна боку (двобічна — одне утримання), між підходами — зміна, між вправами — перехід */
   function mins(ids, mode) {
     var p = plan(mode), s = ids.reduce(function (t, id) { var x = byId(id), one = x && x.both ? p.hold : 2 * p.hold + SWITCH; return t + p.rounds * one + (p.rounds - 1) * SWITCH; }, 0);
