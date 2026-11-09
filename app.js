@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.19';
+  const VERSION = '3.27.20';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -277,7 +277,16 @@ window.APP_START = () => {
     const left = Math.ceil((T.end - Date.now()) / 1000);
     if (left === 10 && T.total >= 30 && !T.said10 && T.kind === 'rest') { T.said10 = true; if (!speaking()) talk(LL('Десять секунд.', "Ten seconds.")); }
     if (coachOn()) {
-      if (left <= 0) { if (!T.alarmed) { T.alarmed = true; const k = T.kind; beep(); hapticAlarm(); stopTimer(); onTimerEnd(k); } return; }
+      if (left <= 0) {
+        if (!T.alarmed) {
+          T.alarmed = true; const k = T.kind; beep(); hapticAlarm();
+          /* далі вправа на час — відпочинок не закінчується сам: на ній одразу піде відлік, тож «Почати» — коли людина готова (з 3.27.20) */
+          const d = P() && P().draft;
+          if (k === 'rest' && d && tsOn(d, curStep(d))) { const tEl = document.getElementById('cTime'), cs = curStep(d); if (tEl) tEl.textContent = '0:00'; talk(LL('Час! ', 'Time! ') + G().ex[d.items[cs.i].ex].name + '.'); return; }
+          stopTimer(); onTimerEnd(k);
+        }
+        return;
+      }
       const tEl = document.getElementById('cTime'), arc = document.getElementById('cArc');
       if (tEl) tEl.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
       if (arc) { const c = 2 * Math.PI * 52, f = Math.max(0, Math.min(1, left / T.total)); arc.setAttribute('stroke-dasharray', (c * f).toFixed(1) + ' ' + c.toFixed(1)); }
@@ -573,25 +582,26 @@ window.APP_START = () => {
     for (let i = h.length - 1; i >= 0; i--) { const s = h[i].sets.find((x) => x.variant); if (s) return s.variant; }
     return ex.variants[0].id;
   }
-  /* малюнок дисків: фунтові 10 / 5 / 2,5 lb — ті самі три розміри, що 5 / 2,5 / 1,25 кг (з 3.18.0) */
-  const DISC_LB = { 10: '5', 5: '25', 2.5: '125' };
-  function discs(side) { if (!side.length) return ''; return '<span class="disc"><b></b>' + side.map((x) => `<i class="d${isLb() ? DISC_LB[x] || '125' : String(x).replace('.', '')}"></i>`).join('') + '</span>'; }
   /* одна гантель і вага «у руках» (з 3.27.8; слова Alexа 26.10: «Коли вправа з 1 гантелею то правильно писати скільки на 1 бік, бо зараз пише так як для 2 гантель»;
      «Так само в таких місцях все підлаштувати під 1 гантель»): диски — «з кожного боку гантелі» (до 3.27.8 «на кожен бік» читалось як ліва й права рука, тобто дві гантелі);
      де гантель не в руках — сідничний міст, гантель лежить на тазі, — не «у руках 13 кг», а «гантель 13 кг» */
   const ON_BODY = { bridge: 1 };
   const SIDE_TXT = () => LL('з кожного боку гантелі: ', 'each side of the dumbbell: ');
+  /* з 3.27.20 (слово Alexа 09.11: «Не потрібно говорити і писати скільки з однієї сторони різних млинців, просто нехай буде текст і голосом скільки всього з однієї сторони»):
+     диски — лише скільки всього з кожного боку гантелі, без переліку дисків і малюнка */
+  const sideSum = (side) => Math.round(side.reduce((a, x) => a + x, 0) * 100) / 100;
+  const sideTxt = (pl) => SIDE_TXT() + fmt(sideSum(pl.side)) + KG(LL(' кг', ' kg'));
   function plateLine(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return '';
     const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
-    return `<span class="plt">${pl.ok ? (pl.side.length ? SIDE_TXT() + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)}</span>`;
+    return `<span class="plt">${pl.ok ? (pl.side.length ? sideTxt(pl) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)}</span>`;
   }
 
   /* ---------- чернетка тренування ---------- */
   function plateSide(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return null;
     const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
-    return pl.ok ? pl.side : null;
+    return pl.ok ? (pl.side.length ? [sideSum(pl.side)] : []) : null;  // голосом — теж лише всього з кожного боку (з 3.27.20)
   }
   function makeItem(it0, ss, plan, step, o) {
     const prog = G(), p = P(), ex = prog.ex[it0.ex];
@@ -1075,9 +1085,42 @@ window.APP_START = () => {
     const s = d.items[m.i].sets[m.j], tot = (s.mini || []).reduce((a, x) => a + x, 0);
     afterSet(d, m.i, m.j, LL('Міо-підхід завершено. ', "Myo-rep set done. ") + (tot ? LL('У міні-підходах — ', "Mini-sets total: ") + VOICE.reps(tot) + '. ' : ''));
   }
+  /* вправа на час (з 3.27.20): відлік починається сам, коли відкрито картку підходу — 5 с приготуватись, далі секунди підходу
+     (на бік — правий, 5 с змінити бік, лівий); «Час!» — і людина ставить «Підхід виконано». Відпочинок перед такою вправою сам не закінчується
+     (tickTimer): «Почати» — коли людина готова. d.tb — для якого підходу відлік уже був */
+  const TS_PREP = 5;
+  const tsSec = (it, s) => (Number(s.reps) > 0 ? Number(s.reps) : it.max || 30);
+  function tsOn(d, cs) { const it = cs && d.items[cs.i], s = it && it.sets[cs.j]; return !!(it && s && G().ex[it.ex].type === 'time' && s.type !== 'W' && !s.done && wMode() !== 'list'); }
+  function tsBox(d, cs) {
+    if (!tsOn(d, cs)) return '';
+    const it = d.items[cs.i], ex = G().ex[it.ex], s = it.sets[cs.j], sec = tsSec(it, s), b = d.tb && d.tb.i === cs.i && d.tb.j === cs.j ? d.tb : null;
+    if (T.id && /^ts/.test(T.kind) && b) {
+      const what = T.kind === 'tsprep' ? LL('приготуйтесь', 'get ready') : T.kind === 'tsgap' ? LL('змініть бік', 'switch sides') : ex.side ? (b.side ? LL('лівий бік', 'left side') : LL('правий бік', 'right side')) : LL('тримайте', 'hold');
+      return `<div class="cring">${ringSvg()}<div class="ctime"><b id="cTime">0:00</b><span>${what}</span></div></div>`
+        + `<button type="button" class="wide" data-act="tsStop" data-tip="${esc(LL('Зупинити відлік. Секунди введіть самі.', 'Stop the countdown. Enter the seconds yourself.'))}">■ ${LL('Зупинити відлік', 'Stop the countdown')}</button>`;
+    }
+    return `<button type="button" class="wide" data-act="tsGo" data-tip="${esc(LL('Відлік: 5 секунд приготуватись, далі секунди підходу', 'Countdown: 5 seconds to get ready, then the seconds of the set') + (ex.side ? LL(' на правий бік, 5 секунд змінити бік, на лівий.', ' on the right side, 5 seconds to switch, then the left.') : '.'))}">▶ ${b && b.done ? LL('Відлік ще раз', 'Countdown again') : LL('Почати відлік', 'Start the countdown')} · ${sec} ${LL('с', 'sec')}${ex.side ? LL(' на бік', ' per side') : ''}</button>`;
+  }
+  function tsStart(d, cs) { d.tb = { i: cs.i, j: cs.j, side: 0 }; save(); startTimer(TS_PREP, '', 'tsprep'); if (view === 'workout') rWorkout(); }
+  /* сам — лише раз на підхід, коли картка підходу на екрані й жоден таймер не йде */
+  function tsAuto(d) {
+    if (T.id || !d.coach || !d.coach.warm || d.coach.myo) return;
+    const cs = curStep(d); if (!tsOn(d, cs) || (d.tb && d.tb.i === cs.i && d.tb.j === cs.j)) return;
+    tsStart(d, cs);
+  }
+  function tsEnd(d, kind) {
+    const cs = curStep(d), b = d.tb; if (!cs || !b || b.i !== cs.i || b.j !== cs.j) { if (view === 'workout') rWorkout(); return; }
+    const it = d.items[cs.i], ex = G().ex[it.ex], sec = tsSec(it, it.sets[cs.j]);
+    if (kind === 'tsprep') { if (ex.side) talk(LL('Правий бік.', 'Right side.')); startTimer(sec, '', 'ts'); }
+    else if (kind === 'tsgap') startTimer(sec, '', 'ts');
+    else if (ex.side && !b.side) { b.side = 1; save(); talk(LL('Лівий бік.', 'Left side.')); startTimer(STRETCH.SWITCH, '', 'tsgap'); }
+    else { b.done = true; save(); talk(LL('Час!', 'Time!')); }
+    if (view === 'workout') rWorkout();
+  }
   function onTimerEnd(kind) {
     const d = P() && P().draft; if (!d) return;
     if (kind === 'hold' || kind === 'holdgap') return stTimerEnd(d, kind);
+    if (/^ts/.test(kind)) return tsEnd(d, kind);
     if (kind === 'myo') { talk(LL('Ще від трьох до пʼяти повторень.', "Three to five more reps.")); rWorkout(); return; }
     const cs = curStep(d), gs = cs ? gSay(d, 'card') : '';
     talk(cs ? LL('Час! ', "Time! ") + G().ex[d.items[cs.i].ex].name + '.' + gs : LL('Час!', "Time!"));
@@ -1143,6 +1186,7 @@ window.APP_START = () => {
     vizAttach(d);
     startElapsed(d); keepAwake(true);
     if (T.id) tickTimer();
+    tsAuto(d);
     guideMark(d);
     if (document.querySelector('.cdone')) tourMaybe('coach');
     else if (T.id && T.kind === 'rest' && document.querySelector('.crest .cring')) tourMaybe('rest');
@@ -1179,7 +1223,7 @@ window.APP_START = () => {
     return `<div class="coach">${chipsFor(d, cs)}
       <h1 class="cname">${esc(ex.name)}</h1><div class="cmus">${esc(ex.m.p.map(mName).join(' · '))}${ex.side ? LL(' · кожен бік', " · each side") : ''}</div>
       ${vsel}${sd ? `<div class="hint side">↔ ${esc(sd.card)}</div>` : ''}${it.note ? `<div class="hint">💡 ${esc(it.note)}</div>` : ''}${plat}${painHint(it)}${userNote}
-      <div class="ctarget${isLoad(ex) ? '' : ' one'}">${boxL}${boxR}</div>
+      <div class="ctarget${isLoad(ex) ? '' : ' one'}">${boxL}${boxR}</div>${tsBox(d, cs)}
       ${plateLine(ex, it, s.load)}
       ${s.prev && s.type !== 'W' ? `<button type="button" class="ghost cprev" data-act="copyprev" ${ij}${LL(`>Минулого: `, `>Last time: `)}${esc(setText(ex, s.prev))}${LL(` — повторити</button>`, ` — repeat</button>`)}` : ''}
       ${rir}
@@ -1281,6 +1325,9 @@ window.APP_START = () => {
       <p class="tiny muted">Fewer than three and the myo-rep set ends on its own: the muscle is tired enough.</p>
       <button type="button" class="ghost wide" data-act="myoEnd">That’s enough — end myo set</button></div>`)}`;
   }
+  /* «Що підготувати» і на картці розминки (з 3.27.20): кого питають про спину, бачив блок лише внизу вікна «Як спина сьогодні?» —
+     за 10 хв розминки якраз зібрати гантелі. Те саме тренування, що почалось */
+  function warmPrep() { const d = P().draft, pc = d ? prepCard(null, d.place, d) : ''; return pc ? `<h3 style="margin:14px 0 4px">${LL('Що підготувати', 'What to get ready')}</h3>${pc}` : ''; }
   function warmCard() {
     const w = warmList();
     return `${LL(`<div class="coach"><div class="cchips"><span class="chip a">Крок 1 · розминка</span></div><h1 class="cname">`, `<div class="coach"><div class="cchips"><span class="chip a">Step 1 · warm-up</span></div><h1 class="cname">`)}${esc(w.title)}</h1>
@@ -1288,7 +1335,7 @@ window.APP_START = () => {
       <button type="button" class="pri wide big" data-act="cwarm">✓ Розминку зроблено</button>
       <div class="grid2 cacts"><button type="button" data-act="say" data-what="warm">🔊 Прослухати</button><button type="button" data-act="cwarm" data-skip="1">Пропустити</button></div></div>`, `</ul>
       <button type="button" class="pri wide big" data-act="cwarm">✓ Warm-up done</button>
-      <div class="grid2 cacts"><button type="button" data-act="say" data-what="warm">🔊 Listen</button><button type="button" data-act="cwarm" data-skip="1">Skip</button></div></div>`)}${phaseBox(P().draft)}`;
+      <div class="grid2 cacts"><button type="button" data-act="say" data-what="warm">🔊 Listen</button><button type="button" data-act="cwarm" data-skip="1">Skip</button></div></div>`)}${warmPrep()}${phaseBox(P().draft)}`;
   }
   /* розтяжка — останній блок тренування (з 3.27.11; слова Alexа 31.10: «розтяжка має бути частиною тренування», «Так, останнім блоком»; дані — app/stretch.js): «Більше» → «Тренування» — повний набір, коротка чи вимкнути. Стан — у чернетці (d.sb), набір фіксується, коли підходи скінчились; підходи, рекорди й калорії блок не чіпає */
   const stMode = () => S().stretch || 'short';
@@ -1476,7 +1523,7 @@ window.APP_START = () => {
     if (!isRep && hasKg(ex)) {
       const pl = v === null ? null : ENGINE.plates(v, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
       const tot = v === null ? 0 : ENGINE.totalLoad(ex, v, P().handle, it.variant);
-      extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : (ON_BODY[it.ex] ? LL('гантель: ', 'dumbbell: ') : LL('усього в руках: ', "total in hand: ")) + fmt(tot) + KG(LL(' кг', " kg"))}${pl ? ' · ' + (pl.ok ? (pl.side.length ? SIDE_TXT() + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
+      extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : (ON_BODY[it.ex] ? LL('гантель: ', 'dumbbell: ') : LL('усього в руках: ', "total in hand: ")) + fmt(tot) + KG(LL(' кг', " kg"))}${pl ? ' · ' + (pl.ok ? (pl.side.length ? sideTxt(pl) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
     }
     const quick = [];
     if (s.prev) quick.push([LL('минулого: ', "last time: ") + (isRep ? s.prev.reps : loadText(ex, s.prev.load)), isRep ? s.prev.reps : s.prev.load]);
@@ -1832,10 +1879,10 @@ window.APP_START = () => {
      (якщо це гантелі то одразу кажи що потрібно на приклад 3 пари гантель по 10, 15 та 20 кг на кожній) щоб завчасно підготуватись до інтенсивних тренувань»):
      лише вдома; те саме тренування, що почнеться (buildDraft, відповідь «Добре»; «Коротка версія» — теж): гантелі — вага однієї (гриф + диски), скільки штук,
      диски на кожен бік і вправи; розминкова вага позначена; еспандер — рівні; тренажери вдома — вага. Порожньо ('') — у залі чи без обладнання */
-  function prepCard(wid, place) {
+  function prepCard(wid, place, dr) {
     const prog = G(), p = P();
     if ((place || prog.place || 'home') !== 'home') return '';
-    let d = null; try { d = buildDraft(wid, 'g', place, ui.shortNext); } catch (e) { return ''; }
+    let d = dr || null; if (!d) try { d = buildDraft(wid, 'g', place, ui.shortNext); } catch (e) { return ''; }  // dr — уже почате тренування (картка розминки)
     const h = Number(p.handle) || 0, dbs = {}, bands = [], machs = [];
     d.items.forEach((it) => {
       const ex = prog.ex[it.ex]; if (!ex) return;
@@ -1855,7 +1902,7 @@ window.APP_START = () => {
     const kg = KG(LL(' кг', ' kg')), w = (x) => fmt(Math.round((h + x.load) * 100) / 100);
     const rows = list.map((x) => {
       const pl = ENGINE.plates(x.load, p.inv, x.n, prog.cap, isLb() ? 'lb' : 'kg');
-      return `<li style="display:block"><div class="sp"><b>${w(x)}${kg} × ${x.n}</b><span class="small muted">${pl.ok ? (pl.side.length ? SIDE_TXT() + esc(pl.text) + ' ' + discs(pl.side) : LL('лише гриф', 'handle only')) : '⚠ ' + esc(pl.text)}</span></div>`
+      return `<li style="display:block"><div class="sp"><b>${w(x)}${kg} × ${x.n}</b><span class="small muted">${pl.ok ? (pl.side.length ? sideTxt(pl) : LL('лише гриф', 'handle only')) : '⚠ ' + esc(pl.text)}</span></div>`
         + `<div class="tiny muted">${esc(x.ex.join(' · '))}${x.warm ? LL(' — розминка', ' — warm-up') : ''}</div></li>`;
     }).join('');
     const ws = list.map(w), sum = ws.length > 1 ? ws.slice(0, -1).join(', ') + LL(' і ', ' and ') + ws[ws.length - 1] : ws[0];
@@ -1894,7 +1941,7 @@ window.APP_START = () => {
     if (ASK.st === 'rec') { const s = Math.floor((Date.now() - ASK.t0) / 1000); return `${LL(`<b>Слухаю… 0:`, `<b>Listening… 0:`)}${pad(s)}${LL(`</b> · торкніться, щоб надіслати`, `</b> · tap to send`)}`; }
     if (ASK.st === 'think') return LL('<b>Думаю…</b>', "<b>Thinking…</b>");
     if (ASK.st === 'talk') return LL('<b>Говорю…</b> · торкніться, щоб зупинити', "<b>Speaking…</b> · tap to stop");
-    if (ASK.st === 'err') return `<span class="bad">${esc(ASK.msg)}</span>`;
+    if (ASK.st === 'err') return `<span class="bad">${esc(ASK.msg)}</span>${ASK.wav || ASK.retryQ ? ` <button type="button" class="sm" data-act="askRetry" data-tip="${esc(LL('Надіслати те саме питання ще раз — без перезапису.', 'Send the same question again — no need to record it again.'))}">↻ ${LL('Надіслати ще раз', 'Send again')}</button>` : ''}`;
     if (ASK.photo) return LL('<b>Фото додано</b> — запитайте голосом, напишіть або просто «Надіслати».', "<b>Photo added</b> — ask by voice, type a question, or just tap “Send.”");
     return ASK.chat.length ? LL('Торкніться, щоб уточнити.', "Tap to ask a follow-up.") : LL('Торкніться й запитайте: програма, вага, техніка, застосунок.', "Tap and ask: program, weights, form, the app.");
   }
@@ -2008,7 +2055,7 @@ window.APP_START = () => {
     mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     ASK.rec = { mr, stream, chunks, type: mr.mimeType || type };
     RADIO.hush(true);
-    mr.start(); ASK.st = 'rec'; ASK.msg = ''; ASK.t0 = Date.now();
+    mr.start(); ASK.st = 'rec'; ASK.msg = ''; ASK.t0 = Date.now(); ASK.wav = null; ASK.retryQ = null;
     ASK.tick = setInterval(() => { if (Date.now() - ASK.t0 >= 30000) askStop(); else askDraw(); }, 500);
     liveOpen().catch(() => {});  // поки людина говорить — розмова з Gemini Live уже налаштовується (≈ 1,5 с)
     askDraw();
@@ -2030,10 +2077,30 @@ window.APP_START = () => {
     try { wav = blob && blob.size ? await toWav16k(await blob.arrayBuffer()) : null; } catch (e) { wav = null; }
     if (g !== ASK.gen) return;
     if (!wav) { ASK.st = 'err'; ASK.msg = LL('Не почув — скажіть ще раз, ближче до телефону.', "Didn’t catch that — say it again, closer to the phone."); return askDraw(); }
-    const j = await post('/hear', { audio: wav, lang: I18N.lang, kb: 'min' }, 8000);
+    ASK.wav = wav;
+    const j = await post('/hear', { audio: wav, lang: I18N.lang, kb: 'min' }, hearMs(wav));
     if (g !== ASK.gen) return;
-    if (!j || !j.q) { ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
+    askHeard(j);
+  }
+  /* запис на сервер (з 3.27.20): 9.11 з повільного інтернету (на знімку — «E») запит за 8 с до сервера не дійшов (журнал сервера: 0 запитів) —
+     чекаємо за розміром запису (від ≈ 12 кБ/с), до 45 с; не дійшов — запис лишається, «↻ Надіслати ще раз» без перезапису */
+  const hearMs = (wav) => Math.min(45000, 8000 + Math.round(wav.length / 12));
+  /* розпізнано буквами, яких немає ні в українській, ні в англійській («jakt það með», знімок 9.11) — тренеру не шлемо, просимо сказати ще раз */
+  const oddText = (q) => I18N.lang !== 'en' && /[ðþæøåäöüßñçéèêëìíîïòóôõùúûýÿœ]/i.test(q);
+  function askHeard(j) {
+    if (!j || !j.q) { if (j && (j.error === 'empty' || j.error === 'big')) ASK.wav = null; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
+    ASK.wav = null;
+    if (oddText(j.q)) { ASK.st = 'err'; ASK.msg = LL('Не розібрав: «', 'Couldn’t make it out: “') + j.q.replace(/[\s.!?…]+$/, '') + LL('». Скажіть ще раз, ближче до телефону, або напишіть.', '.” Say it again, closer to the phone, or type it.'); return askDraw(); }
     askTurn(j.q, Array.isArray(j.kb) ? j.kb : []);
+  }
+  async function askRetry() {
+    if (ASK.st === 'think' || ASK.st === 'rec' || ASK.st === 'mic') return;
+    ensureAudio(); VOICEPACK.unlock();
+    if (!ASK.wav) { const q = ASK.retryQ; ASK.retryQ = null; return q ? askTurn(q) : undefined; }
+    const g = ASK.gen, wav = ASK.wav; ASK.st = 'think'; ASK.msg = ''; askDraw();
+    const j = await post('/hear', { audio: wav, lang: I18N.lang, kb: 'min' }, hearMs(wav));
+    if (g !== ASK.gen) return;
+    askHeard(j);
   }
   /* запис → WAV 16 кГц моно (так його найкраще чує розпізнавання), base64; тиша чи коротше 0,4 с — null */
   async function toWav16k(buf) {
@@ -2058,7 +2125,7 @@ window.APP_START = () => {
     if (!q || ASK.st === 'think' || ASK.st === 'rec' || ASK.st === 'mic') return;
     ensureAudio(); VOICEPACK.unlock();
     const inp = document.getElementById('askText'); if (inp) inp.value = '';
-    askTurn(q);
+    ASK.wav = null; askTurn(q);
   }
   async function post(path, body, ms) {
     const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, to = ctl ? setTimeout(() => ctl.abort(), ms) : 0;
@@ -2079,7 +2146,7 @@ window.APP_START = () => {
     /* попередня відповідь ще йшла — її обриваємо (текст лишається з «…» і кнопкою «Прослухати»), нова розмова з Live, щоб шматки не змішались */
     if (LIVE.turn) { const pt = LIVE.turn.t; if (pt) { pt.a = String(pt.a).replace(/\s+/g, ' ').trim() + (pt.a ? ' …' : ''); pt.done = !!pt.a; } liveClose(); }
     const g = ASK.gen, t = { q, a: '', pcm: [], done: false, heard: false, img: ASK.photo || null };
-    ASK.photo = null;
+    ASK.photo = null; ASK.retryQ = null;
     t.kbP = Array.isArray(kb) ? Promise.resolve(kb) : post('/kb', { q, lang: I18N.lang, kb: 'min' }, 3000).then((j) => (j && Array.isArray(j.kb) ? j.kb : []));
     ASK.chat.push(t); ASK.st = 'think'; ASK.msg = ''; ASK.help = false; askDraw();
     let ok = false;
@@ -2089,11 +2156,11 @@ window.APP_START = () => {
     const prog = G();
     const j = await post('/ask', { text: q, lang: I18N.lang, kb: 'min', image: t.img ? t.img.b64 : undefined, sex: prog.sex === 'f' ? 'f' : 'm', pack: packId(), ids: coachIds(), program: coachProgram(), history: ASK.chat.slice(0, -1).slice(-6).filter((x) => x.a).map((x) => ({ q: qText(x), a: x.a })) }, 32000);
     if (g !== ASK.gen) return;
-    if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); if (t.img && !ASK.photo) ASK.photo = t.img; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
+    if (!j || !j.a) { ASK.chat.splice(ASK.chat.indexOf(t), 1); if (t.img && !ASK.photo) ASK.photo = t.img; if (!t.img) ASK.retryQ = q; ASK.st = 'err'; ASK.msg = askErr(j); return askDraw(); }
     t.a = j.a; t.done = true; ASK.st = 'idle'; askDraw();
     if (!S().voice.on) return;
-    ASK.st = 'talk'; ASK.i = ASK.chat.indexOf(t); askDraw();
-    sysSay(sp(t.a), LL('відповідь тренера — системним голосом (запасний шлях)', "coach reply — system voice (fallback)")); askWaitQuiet(ASK.i, g);
+    /* запасний шлях (з 3.27.20; знімок Alexа 09.11: «відповідає стандартний жіночий голос, а не gemini») — спершу голос тренера з сервера (/say), не вийшло — голос телефона */
+    askSpeak(ASK.chat.indexOf(t), true);
   }
   /* питання в історії розмови — текстом; фото раніших питань не пересилаємо (відповідь тренера вже каже, що на ньому) */
   const qText = (x) => x.q + (x.img ? LL(' (до питання було фото)', " (a photo was attached to the question)") : '');
@@ -3746,7 +3813,7 @@ window.APP_START = () => {
         const last = arr[arr.length - 1], first = arr[0];
         return `<div class="card"><div class="sp"><div><b>${l}</b><div class="small muted">${last ? fmt(last.v) + ' ' + u + ' · ' + dm(last.d) + (last.src === 'q' ? LL(' (з анкети)', ' (from the questionnaire)') : '') + (first && first !== last ? ' · ' + (last.v - first.v >= 0 ? '+' : '') + fmt(Math.round((last.v - first.v) * 10) / 10) + LL(' від першого', " since the first") : '') : LL('ще немає', "none yet")}</div></div><button type="button" class="sm" data-act="measAdd" data-m="${k}${LL(`">+ Додати</button></div>
           `, `">+ Add</button></div>
-          `)}${arr.length >= 2 ? CHARTS.line(series, { h: 130, label: l, marks }) + cycLegend(marks) : ''}${k === 'weight' && arr.length ? LL('<p class="tiny muted">Зважуйтесь зранку натщесерце; дивіться на середню за 7 днів (лінія).</p>', "<p class=\"tiny muted\">Weigh yourself in the morning on an empty stomach; watch the 7-day average (the line).</p>") : ''}${k === 'weight' ? cycBox() : ''}</div>`;
+          `)}${k === 'weight' && arr.length ? LL('<p class="tiny muted">Зважуйтесь зранку натщесерце. Середня за 7 днів і графік — на «Прогресі» → «Тіло».</p>', "<p class=\"tiny muted\">Weigh yourself in the morning on an empty stomach. The 7-day average and the chart are in Progress → Body.</p>") : ''}${k === 'weight' ? cycBox() : ''}</div>`;
       }).join('');
     } else if (ui.bodyTab === 'f') {
       body = `<div class="seg">${[['front', LL('Спереду', "Front")], ['side', LL('Збоку', "Side")], ['back', LL('Ззаду', "Back")]].map(([k, l]) => `<button type="button" class="${ui.photoPose === k ? 'on' : ''}" data-act="pose" data-v="${k}">${l}</button>`).join('')}${LL(`</div>
@@ -4153,6 +4220,7 @@ window.APP_START = () => {
     if (act === 'askSend') { const inp = document.getElementById('askText'); return askSend({ text: inp ? inp.value : '' }); }
     if (act === 'askEx') return askSend({ text: b.dataset.v || '' });
     if (act === 'askSay') return askSpeak(Number(b.dataset.i), true);
+    if (act === 'askRetry') return askRetry();
     if (act === 'askNew') { askHush(); liveClose(); ASK.chat = []; ASK.photo = null; ASK.st = 'idle'; ASK.msg = ''; ASK.help = false; return askDraw(); }
     if (act === 'install') { const ev = installEv; installEv = null; if (ev) { try { ev.prompt(); ev.userChoice.finally(() => render()); } catch (e) { render(); } } else render(); return; }
     if (act === 'langPick') return langPick(b.dataset.v);
@@ -4268,7 +4336,9 @@ window.APP_START = () => {
     if (act === 'stGo') { const d = p.draft; if (!d) return; const x = stCur(d); if (!x) return; d.sb.side = 0; save(); talk(LL('Правий бік.', 'Right side.')); startTimer(STRETCH.HOLD, TR(x.name), 'hold'); rWorkout(); return; }
     if (act === 'stNext') { if (p.draft) stNext(p.draft); return; }
     if (act === 'mode') { if (!p.draft) return; p.draft.mode = wMode() === 'list' ? 'coach' : 'list'; if (p.draft.mode === 'coach' && p.draft.coach) p.draft.coach.warm = true; save(); render(); window.scrollTo(0, 0); return; }  // лише це тренування (з 3.27.7)
-    if (act === 'cdone') return coachDone();
+    if (act === 'cdone') { if (T.id && /^ts/.test(T.kind)) stopTimer(); return coachDone(); }
+    if (act === 'tsGo') { const d = p.draft, cs = d && curStep(d); if (!tsOn(d, cs)) return; stopTimer(); return tsStart(d, cs); }
+    if (act === 'tsStop') { stopTimer(); return rWorkout(); }
     if (act === 'cwarm') { p.draft.coach.warm = true; save(); const cs = curStep(p.draft), gs = cs ? gSay(p.draft, 'card') : ''; rWorkout(); window.scrollTo(0, 0); if (cs) talk((b.dataset.skip ? '' : L('warmDone', p.draft.n) || LL('Добре. ', "Good. ")) + LL('Перша вправа. ', "First exercise. ") + setSpeech(p.draft, cs) + gs); return; }
     if (act === 'cstep') {
       const it = p.draft.items[i], s = it.sets[j], ex = G().ex[it.ex], dir = Number(b.dataset.d);
@@ -4516,7 +4586,9 @@ window.APP_START = () => {
      (ні orientation у маніфесті, ні screen.orientation.lock — MDN/BCD), тож на iPhone застосунок працює й горизонтально
      (бічні відступи під виріз екрана — safe-area-inset-left/right). Заслінку «Поверніть телефон» 3.16.0 прибрано в 3.16.1. */
   /* iOS «присипляє» звук після згортання — будь-який дотик його будить */
-  document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running') { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
+  /* поки тренер говорить (записом через <audio> чи голосом телефона), resume() не викликаємо: на iPhone відновлення Web Audio посеред фрази може
+     забрати звук у фрази (з 3.27.20; «Коли я воджу пальцем то тренер замовкає», 09.11) — розбудимо наступним дотиком, коли тиша */
+  document.addEventListener('pointerdown', () => { VOICEPACK.unlock(); if (audio && audio.state !== 'running' && !speaking() && !PLAY.srcs.length) { try { audio.resume(); } catch (e) { /* немає */ } } }, { passive: true });
   /* швидкий дотик по кнопці (з 3.27.3; слово Alexа 25.10: «Роби усе крім 2D»; дослідження — CLAUDE.md §11): після першого дотику застосунок перемальовує екран,
      і Safari на iPhone другий швидкий дотик (140–270 мс) рахує подвійним і збільшує сторінку (×1,6), хоч у body є touch-action: manipulation (замір 25.10,
      tests/browser/iosdt.js; не допомогли manipulation на кожній кнопці й maximum-scale=1). Короткий дотик одним пальцем по кнопці без зсуву —
@@ -4541,6 +4613,15 @@ window.APP_START = () => {
       const at = document.elementFromPoint(t.clientX, t.clientY); if (!at || at.closest('button') !== s.b) return;
       e.preventDefault(); s.b.click();
     }, { capture: true, passive: false });
+  })();
+  /* iOS 26: після клавіатури система інколи лишає видиму частину екрана (visualViewport) коротшою за вікно, і закріплена внизу панель висить
+     над місцем, де була клавіатура (WebKit 297779; Apple: вада системного компонента). Клавіатуру сховано, а видима частина коротша —
+     опускаємо панель на цю різницю; інакше — як завжди. Збільшення щипком не чіпаємо (scale ≠ 1) */
+  (function navKeep() {
+    const vv = window.visualViewport, nav = document.getElementById('tabs'); if (!vv || !nav) return;
+    const typing = () => { const a = document.activeElement; return !!(a && a.matches && a.matches('input, select, textarea, [contenteditable]')); };
+    const fix = () => { const gap = Math.round(window.innerHeight - vv.height - vv.offsetTop), on = !typing() && Math.abs(vv.scale - 1) < 0.01 && gap > 40; nav.style.transform = on ? `translateY(${gap}px)` : ''; };
+    vv.addEventListener('resize', fix); vv.addEventListener('scroll', fix); window.addEventListener('scroll', fix, { passive: true }); document.addEventListener('focusout', () => setTimeout(fix, 350));
   })();
   if (DB.active && !DB.profiles[DB.active]) DB.profiles[DB.active] = newProfile(DB.active);
   if (DB.active) ENGINE.migrate(DB);
