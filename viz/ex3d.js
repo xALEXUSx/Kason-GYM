@@ -873,6 +873,23 @@ function EX3D(E, Q) {
     mk({ id: 'b_bal', grp: 'test', name: 'Стійка на одній нозі', work: { p: ['glutes', 'calves'], s: ['abs'] }, sides: true,
       t1: 1.6, t2: 1.6, c1: 'Підніми ногу — таз рівно, погляд уперед', c2: 'Тримай 5–10 с — і на іншу ногу', bad: '✕ Не завалюйся корпусом убік', ghost: TORSO,
       build() {},
-      pose(t, g) { return balStand(t, g); } })
+      pose(t, g) { return balStand(t, g); } }),
+    /* відведення стегна лежачи на боці (з 3.27.23; AAOS Knee Conditioning Program, вправа 10): лежачи на правому боці (обличчя до +z, голова до +x),
+       голова на витягнутій нижній руці, верхня кисть — на килимку перед грудьми; нижня нога зігнута (стегно ≈ 45° уперед, коліно ≈ 90°) — опора;
+       верхня — пряма, від лінії тіла вгору до 45°, носок уперед, коліно дивиться вперед. Помилка — нога йде вперед і розвертається носком угору */
+    mk({ id: 'sideabd', grp: 'mat', name: 'Відведення стегна лежачи на боці', work: { p: ['glutes'], s: [] }, sides: true,
+      t1: 1.3, t2: 1.8, c1: 'Підніми пряму ногу до 45° — носок уперед', c2: 'Пауза, повільно вниз', bad: '✕ Не розвертай носок угору', ghost: ['pelvis', 'thighL', 'shinL'],
+      build(k) { Q.mat(k, { x: 0, z: 0.08 }); },
+      pose(t, g) {
+        const ax = 0.12, py = 0.2, P = { rot: sideRot(11), at: V(ax, py, 0), pelvis: V(0, 0, 0), lumb: 0, chest: 0, head: 8 };
+        const hipT = V(ax - 0.02, py + 0.1, 0), a = lerp(-6, 45, t) * RAD, fw = g ? 0.35 * t : 0;
+        const dT = V(-Math.cos(a), Math.sin(a), fw).normalize(), ankT = hipT.clone().addScaledVector(dT, 0.86);
+        /* нижня нога: стегно вперед-униз до коліна на килимку, гомілка назад */
+        const hipB = V(ax - 0.02, py - 0.1, 0), kB = hipB.clone().add(V(-0.3, -0.04, 0.31)), ankB = kB.clone().add(V(-0.3, 0, -0.3));
+        return world(P, {
+          ank: [ankT, ankB], foot: [V(0, g ? 0.6 * t : 0, 1).normalize(), V(-1, 0, -0.4).normalize()],
+          kneePole: [V(0, g ? 0.8 * t : 0, 1).normalize(), V(0, 0, 1)],
+          hand: [V(ax + 0.4, 0.054, 0.33), V(ax + 0.9, 0.12, 0.2)], elbowPole: [V(0, 1, 0.5).normalize(), V(0, -0.3, 1).normalize()] });
+      } })
   ];
 }
