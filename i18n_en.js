@@ -1569,6 +1569,15 @@ I18N.add({
 I18N.add({
   "Присідання до крісла без ваги": "Bodyweight Chair Squat",
   "Сідничний міст без ваги": "Bodyweight Glute Bridge",
+  /* 3.27.23: відведення стегна лежачи на боці */
+  "Відведення стегна лежачи на боці": "Side-Lying Hip Abduction",
+  "Лежачи на боці, нижня нога зігнута, голова на витягнутій руці. Повільно підніміть пряму верхню ногу до 45°, носок уперед, пауза 1 с, повільно опустіть; таз не відкочуйте назад. Легко — пауза 2–3 с угорі; є фітнес-гумка — вище колін.": "Lie on your side, bottom knee bent, head resting on your outstretched arm. Slowly raise the straight top leg to 45°, toes pointing forward, pause 1 s, lower slowly; don’t let your hips roll back. Too easy — pause 2–3 s at the top; if you have a mini band, put it just above your knees.",
+  "Лежачи на боці, нижня нога зігнута, голова на витягнутій руці, верхня рука — на підлозі перед грудьми.": "Lie on your side, bottom leg bent, head on your outstretched arm, top hand on the floor in front of your chest.",
+  "Підніми пряму верхню ногу до сорока пʼяти градусів, носок уперед, пауза, повільно вниз.": "Raise the straight top leg to forty-five degrees, toes forward, pause, lower slowly.",
+  "Не відкочуй таз назад": "Don’t roll your hips back",
+  "тоді нога йде вперед, а сідниця відпочиває": "then the leg drifts forward and your glute stops working",
+  "Підніми пряму ногу до 45° — носок уперед": "Raise the straight leg to 45° — toes forward",
+  "✕ Не розвертай носок угору": "✕ Don’t turn your toes up",
   "Крісло позаду, руки перед собою. Торкніться сидіння сідницями й одразу вставайте, не сідаючи. Коліна йдуть у напрямку носків, пʼяти на підлозі. Болить коліно — менша глибина. Легко — опускання 3–4 с.": "Chair behind you, arms out in front. Touch the seat with your glutes and stand right back up without sitting down. Knees track over your toes, heels on the floor. If your knee hurts, go less deep. If it’s easy, lower for 3–4 sec.",
   "Лежачи на спині, стопи на підлозі ближче до сідниць, руки вздовж тіла. Підніміть таз до лінії плечі — коліна, пауза 1–2 с, стисніть сідниці; поперек не прогинайте. Легко — пауза 3 с угорі й повільне опускання.": "Lie on your back, feet on the floor close to your glutes, arms at your sides. Lift your hips to a line from shoulders to knees, pause 1–2 sec, squeeze your glutes; don’t arch your lower back. If it’s easy, pause 3 sec at the top and lower slowly.",
   "Головна вправа для ніг і сідниць, коли гантелі немає. Сильні ноги беруть на себе навантаження в житті.": "The main leg and glute exercise when you have no dumbbell. Strong legs take the load in everyday life.",

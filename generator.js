@@ -106,7 +106,9 @@ var GEN = (function () {
      (квадрицепс і сідниці, як розщеплений присід удома; з розгинанням ніг сідниці в Б не працювали) */
   var FULL = {
     A: [['squat', ['goblet', 'splitsquat', 'chairsq']], ['push', ['dbbench', 'floorpress', 'pushup']], ['row', ['row1', 'bandrow']], ['vpull', ['pulldown', 'pullover']],
-      ['press', ['seatedpress', 'bandpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'bridgebw', 'abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['curl', 'hammer', 'bandcurl']]],
+      ['press', ['seatedpress', 'bandpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'bridgebw', 'abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['curl', 'hammer', 'bandcurl']],
+      /* відведення стегна (з 3.27.23) — лише вдома при «коліна» й коли в плані ще немає відведення (тренажер — у «сідницях» А): build1; у А — воно коротше за Б */
+      ['abd', ['sideabd']]],
     B: [['hinge', ['rdl', 'bridge', 'bridgebw', 'abduct']], ['single', ['splitsquat', 'goblet', 'chairsq', 'calf']], ['row', ['row1', 'bandrow']], ['side', ['lateral', 'extrot', 'facepull']],
       ['rear', ['facepull', 'reardelt', 'extrot']], ['chest', ['floorfly', 'pushup']], ['tri', ['ohext', 'closegrip', 'bandext']], ['core', ['pallof', 'sideplank', 'deadbug']],
       /* литки (з 3.27.14) — лише мета «мʼязи»: їх не було зовсім; за бажанням, щоб не подовжувати обовʼязкове */
@@ -234,6 +236,8 @@ var GEN = (function () {
     /* вправи без гантелі (з 3.27.13) — у затверджених тренуваннях їх немає, тож шаблон тут: вага тіла легша за гоблет (10–15), тому більше повторень; будь-яке навантаження від 30 % максимуму дає ріст мʼязів, коли підхід близько до відмови (ACSM 2026) */
     if (ex.chairsq) T.chairsq = { ex: 'chairsq', sets: 3, min: 12, max: 20, rest: 90 };
     if (ex.bridgebw) T.bridgebw = { ex: 'bridgebw', sets: 3, min: 12, max: 20, rest: 60 };
+    /* відведення стегна лежачи на боці (з 3.27.23): вага тіла легка — 15–20 на кожен бік (AAOS — 20), 2 підходи, як у відведення з петлею */
+    if (ex.sideabd) T.sideabd = { ex: 'sideabd', sets: 2, min: 15, max: 20, rest: 45 };
     /* лише петля (з 3.27.14): замір 01.11 — плечі 4,5, трицепс 4,5, біцепс 6 підходів; еластичний опір дає силу, як гантелі й тренажери (Lopes 2019, 8 досліджень). Шаблон — гантельної вправи того самого місця (him) */
     if (ex.bandpress) T.bandpress = { ex: 'bandpress', sets: 2, min: 12, max: 15, rest: 90 };
     if (ex.bandcurl) T.bandcurl = { ex: 'bandcurl', sets: 2, min: 12, max: 15, rest: 60 };
@@ -259,7 +263,9 @@ var GEN = (function () {
       ['A', 'B'].forEach(function (w) {
         var used = {}, items = []; slots[w] = {};
         plan[w].forEach(function (slot) {
-          if (slot[0] === 'calves' && (!hasG('muscle') || (lim.indexOf('knees') >= 0 && used.g_legcurl))) return;  // при колінах підйом на носок лишається єдиною заміною згинання ніг
+          if (slot[0] === 'calves' && (!hasG('muscle') || (lim.indexOf('knees') >= 0 && used.g_legcurl))) return;
+          /* з 3.27.23: лише при «коліна» й без іншого відведення (тренажер відведення — у «сідницях» цього ж А; петля при «коліна» не трапляється — замір 09.11); у залі цього місця немає */
+          if (slot[0] === 'abd' && (lim.indexOf('knees') < 0 || items.some(function (x) { return /abduct/.test(x.ex); }))) return;  // при колінах підйом на носок лишається єдиною заміною згинання ніг
           var pick = slot[1].filter(function (id) { return ex[id] && T[id] && !used[id] && ok(id); })[0];
           if (!pick) return;
           used[pick] = true; slots[w][slot[0]] = pick;
@@ -298,7 +304,7 @@ var GEN = (function () {
        3 / 2, обсяг — за 2 тижні, як і в плані на 3 дні), з округленням угору — обсяг не менший; 55+ і тиск / серце — не більше 3 підходів, як в А / Б.
        Частота за рівного обсягу не змінює росту мʼязів (ACSM 2026 — Currier та ін., MSSE 58(4):851–872; Schoenfeld 2019), сила трохи росте з частотою
        (Pelland та ін., Sports Med 2026). Нових вправ немає — техніка, 3D, голос і заміни ті самі */
-    var UPPER = ['push', 'row', 'vpull', 'press', 'chest', 'side', 'rear', 'tri', 'arms'], LOWER = ['squat', 'hinge', 'single', 'glute', 'core', 'calves'];
+    var UPPER = ['push', 'row', 'vpull', 'press', 'chest', 'side', 'rear', 'tri', 'arms'], LOWER = ['squat', 'hinge', 'single', 'glute', 'core', 'abd', 'calves'];
     /* підходи на тренування для трьох станів — звичайний тиждень (base), з +1 підходом для «мʼязи» з тижня 5 (plus; як у плані на 4 дні) і перші
        2 тижні новачка (nov — до 2 підходів, як в А / Б): ceil(тижневі ÷ тренувань половини); понад стелю (новачок — 2, 55+ і тиск / серце — 3, решта — 4,
        як найбільше в затвердженій програмі) — віддаємо іншій вправі цієї половини на той самий основний мʼяз (тяга → тяга зверху); немає такої — новачку,
