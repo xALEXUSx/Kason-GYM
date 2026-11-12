@@ -181,7 +181,7 @@ var ENGINE = (function () {
   function suggest0(prog, exId, item, nSets, hist, handle, deload, stepIn, back) {
     var ex = prog.ex[exId];
     /* тренажер чи блок: крок — з ваг людини на ньому (machStep), межа — власна; гантелі — крок дисків і межа набору */
-    var STEP = ex.type === 'mach' ? machStep(ex, hist) : (stepIn || 2.5), cap = ex.type === 'mach' ? (ex.cap || 300) : (prog.cap || 20);
+    var STEP = ex.type === 'mach' ? machStep(ex, hist) : (stepIn || 2.5), cap = capFor(prog, ex, item.variant);  // з 3.27.27 — межа за кількістю гантелей у вправі
     var min = item.min, max = item.max;
     var out = { sets: [], note: '' };
     if (back && back.f) { var bs = backSuggest(ex, item, nSets, hist, handle, STEP, cap, back); if (bs) return bs; }
@@ -226,6 +226,31 @@ var ENGINE = (function () {
       out.note = LL('Повернення після перерви позаду: вага й повторення — як до перерви.', "Comeback after the break is done: weight and reps — same as before the break.");
       return out;
     }
+    /* на межі ваги (з 3.27.27; слово Alexа 12.11: «щоб програма підлаштовувалась коли я дійду межі по вазі … і давала більше підходів без збільшення ваги»):
+       вага та сама — спершу +1 повторення (до верхньої межі + 5, не більше 30; на час — +5 с до верхньої + 15 с), щоб кожен підхід лишався близько до відмови
+       (далі від відмови мʼязи ростуть гірше — Robinson та ін. 2024; з легшою вагою біля відмови ріст той самий — Schoenfeld та ін. 2017, Lasevicius та ін. 2018);
+       усі підходи взяли цю межу — +1 підхід (більше підходів — більше росту, Pelland та ін. 2026), лише поки тренування вміщається в 55 хв (capTrim).
+       Опора — останнє повне тренування (легкий тиждень, коротка версія й повернення після перерви — легші за задумом) */
+    var capRef = null;
+    if (Lmax !== null && (ex.type === 'db' || ex.type === 'dbopt' || (ex.type === 'time' && ex.load))) {
+      var full = last; for (var hh = hist.length - 1; hh >= 0; hh--) { if (hist[hh].deload || hist[hh].short || hist[hh].back) continue; full = hist[hh].sets; break; }
+      if (full && full.length && full.every(function (s) { return s.load !== null && s.load !== undefined && s.load !== '' && Number(s.load) >= cap - 1e-9 && s.reps >= min; })) capRef = full;
+    }
+    function atCap(isTime) {
+      var CEIL = isTime ? max + 15 : Math.min(max + 5, 30), U = isTime ? 5 : 1;
+      var ok = function (s) { return s.type === 'M' || s.rir === undefined || s.rir === null || s.rir >= 1; };
+      var allC = capRef.every(function (s) { return s.reps >= CEIL && ok(s); }), had = capRef.length > nSets, n = nSets + (had || allC ? 1 : 0);
+      out.max = CEIL;  // ціль на картці й швидкі кнопки — до нової верхньої межі
+      for (i = 0; i < n; i++) { var r0 = capRef[i] || capRef[capRef.length - 1]; out.sets.push({ load: cap, reps: allC ? CEIL : Math.max(min, Math.min(CEIL, (r0.reps || min) + U)) }); }
+      var head = LL('Вага максимальна для вашої гантелі', 'Max weight for your dumbbell'), un = isTime ? LL(' с', ' sec') : LL(' повторень', ' reps');
+      if (allC && had) out.note = head + LL(': більше не додаю — ', ': nothing more to add — ') + n + ' × ' + CEIL + un + LL('. Далі — важчий варіант або на одну руку / ногу.', '. Next: a harder variation or one arm / leg.');
+      else if (allC) out.note = head + LL(': +1 підхід, по ', ': +1 set, ') + CEIL + un + '.';
+      else if (capRef.every(function (s) { return s.reps >= CEIL; })) out.note = head + LL(': тримайте ', ': keep ') + CEIL + un + LL(' — коли вийде із запасом 1, буде +1 підхід.', ' — once you have 1 in reserve, you get +1 set.');  // межу повторень узято, але до відмови
+      else out.note = head + (isTime ? LL(': +5 секунд (до ', ': +5 seconds (up to ') : LL(': +1 повторення (до ', ': +1 rep (up to ')) + CEIL + (isTime ? LL(' с).', ' sec).') : ').')
+        + LL(' Межа — у «Більше» → «Гантелі».', ' Set the limit in “More” → “Dumbbells”.');
+      if (n > nSets) { out.capX = true; out.capNoX = head + LL(': по ', ': ') + (allC ? CEIL : out.sets[0].reps) + un + LL('; додатковий підхід сьогодні не вміщається.', '; the extra set doesn’t fit today.'); }
+      return out;
+    }
 
     if (ex.type === 'band') {
       if (allTop) { fill(Lmax, min); out.note = LL('Верхня межа взята: відступіть далі від дверей або +1 рівень.', "Top of the range reached: step farther from the door or go up 1 level."); }
@@ -238,6 +263,7 @@ var ENGINE = (function () {
       return out;
     }
     if (ex.type === 'time') {
+      if (capRef) return atCap(true);
       if (allTop) {
         if (ex.load && Lmax !== null) { var nl = Math.min(cap, Lmax + STEP); fill(nl, min); out.note = nl > Lmax ? LL('Верхня межа взята: +2,5 кг.', "Top of the range reached: +2.5 kg.") : LL('Вага максимальна: довше або повільніше.', "Max weight: go longer or slower."); }
         else { fill(Lmax, max); out.note = LL('Верхня межа взята: складніший варіант.', "Top of the range reached: harder variation."); }
@@ -250,10 +276,11 @@ var ENGINE = (function () {
       else { for (i = 0; i < nSets; i++) out.sets.push({ load: null, reps: Math.min(max, ((last[i] || last[last.length - 1]).reps || min) + 1) }); out.note = LL('+1 повторення.', "+1 rep."); }
       return out;
     }
+    if (capRef) return atCap(false);
     if (allTop) {
       var step = (ex.big && last.every(function (s) { return s.reps >= max + 2; })) ? 2 * STEP : STEP;
       var newL = Math.round(Math.min(cap, Lmax + step) * 100) / 100;  // крок 4,5 чи 6,8 — без хвостів 18,099999
-      if (newL === Lmax) { fill(Lmax, max); out.note = LL('Вага максимальна: темп 4 с, пауза внизу, +1 підхід або одна рука / нога.', "Max weight: 4-sec tempo, pause at the bottom, +1 set, or one arm / leg."); }
+      if (newL === Lmax) { fill(Lmax, max); out.note = LL('Вага максимальна для вашої гантелі: та сама вага; далі — більше повторень, потім підхід.', 'Max weight for your dumbbell: same weight; next come more reps, then a set.'); }
       else { fill(newL, min); out.note = LL('Верхня межа взята: +', "Top of the range reached: +") + dec(Math.round((newL - Lmax) * 100) / 100) + (ex.type === 'mach' ? LL(' кг.', " kg.") : LL(' кг на гантель.', " kg per dumbbell.")); }
       return out;
     }
@@ -368,6 +395,23 @@ var ENGINE = (function () {
     inv = inv || {};
     var z = sizesOf(inv), four = z.filter(function (s) { return inv[s] >= 4; })[0], two = z.filter(function (s) { return inv[s] >= 2; })[0];
     return 2 * (four || two || z[Math.min(1, z.length - 1)]);
+  }
+  /* усі диски набору на одну гантель (з 3.27.27): скільки з цього вміститься на гриф, знає лише людина — capLimit */
+  function capOne(inv) { var one = 0; sizesOf(inv).forEach(function (s) { one += Math.floor((Number((inv || {})[s]) || 0) / 2) * 2 * s; }); return one; }
+  /* Межа дисків на гриф (з 3.27.27; слово Alexа 12.11: «потрібно питати і налаштовувати окремо для вправ з однією гантеллю і двома»):
+     total — найбільша вага однієї гантелі (гриф + диски), яку вказала людина; немає — з набору: для двох — capOf, для однієї — так само,
+     поки людина не вкаже більшу (більше дисків на один гриф може не вміститися). → найбільша вага дисків, яку можна зібрати з набору й не більша за total − гриф */
+  function capLimit(inv, handle, total, dbCount) {
+    var top = dbCount === 1 ? capOne(inv) : capOf(inv);
+    if (total === null || total === undefined || total === '' || isNaN(Number(total))) return dbCount === 1 ? (capOf(inv) || top) : top;
+    var want = Math.min(top, Number(total) - (Number(handle) || 0));
+    for (var q = Math.floor(want * 4 + 1e-9); q > 0; q--) if (plates(q / 4, inv, dbCount, top).ok) return q / 4;
+    return 0;
+  }
+  /* межа вправи: тренажер — своя; гантелі — за кількістю гантелей у вправі (варіант може її міняти: гоблет — одна, на плечах — дві) */
+  function capFor(prog, ex, variant) {
+    if (ex && ex.type === 'mach') return ex.cap || 300;
+    return (ex && prog && prog.cap1 && dbCountOf(ex, variant) === 1) ? prog.cap1 : ((prog && prog.cap) || 20);
   }
   /* Найбільша вага дисків на гриф, яку можна зібрати з набору: для двох гантелей (а якщо на дві дисків не вистачає — для однієї). */
   function capOf(inv) {
@@ -914,6 +958,32 @@ var ENGINE = (function () {
     return it.rest;
   }
   /* Оцінка тривалості, хв: підхід ≈ 45 с (на бік — 75 с), міо — ще 60 с, плюс відпочинок за правилами. */
+  /* додатковий підхід на межі ваги (з 3.27.27) — лише поки тренування вміщається в lim хв: оцінка — estimateMins і час саме від роботи на межі
+     (повторення понад звичну верхню межу capMax0 — по 3 с; на час — секунди понад неї);
+     не вміщається — забираємо з кінця тренування (lim 0 — коротка версія: без додаткових) */
+  function capTrim(prog, items, lim) {
+    var more = function () { var s = 0; items.forEach(function (it) { if (!it.capMax0) return; var f = (prog.ex[it.ex] || {}).type === 'time' ? 1 : 3; it.sets.forEach(function (x) { if (x.type !== 'W' && !x.done && x.reps > it.capMax0) s += (x.reps - it.capMax0) * f; }); }); return s / 60; };
+    for (var k = items.length - 1; k >= 0; k--) {
+      var it = items[k]; if (!it.capX) continue;
+      if (estimateMins(prog, items) + more() <= lim) break;
+      var j = -1; it.sets.forEach(function (x, q) { if (x.type === 'N' && !x.done) j = q; });
+      if (j < 0) continue;
+      it.sets.splice(j, 1); it.capX = false;
+      if (it.capNote && it.capNoX && typeof it.note === 'string') it.note = it.note.split(it.capNote).join(it.capNoX);
+    }
+    /* і без додаткових підходів довше lim (усе на межі в довгому тренуванні) — менше додаткових повторень, з кінця тренування; коротка версія (lim 0) — лише підходи */
+    for (var guard = 0; lim > 0 && guard < 2000 && estimateMins(prog, items) + more() > lim; guard++) {
+      var hit = null;
+      for (var k2 = items.length - 1; k2 >= 0 && !hit; k2--) {
+        var it2 = items[k2]; if (!it2.capMax0) continue;
+        for (var q2 = it2.sets.length - 1; q2 >= 0 && !hit; q2--) { var x2 = it2.sets[q2]; if (x2.type !== 'W' && !x2.done && x2.reps > it2.capMax0) hit = [it2, x2]; }
+      }
+      if (!hit) break;
+      hit[1].reps = Math.max(hit[0].capMax0, hit[1].reps - ((prog.ex[hit[0].ex] || {}).type === 'time' ? 5 : 1));
+      if (!hit[0].capCut) { hit[0].capCut = true; hit[0].note = (hit[0].note ? hit[0].note + ' ' : '') + LL('Сьогодні без додаткових повторень: тренування й так займає 55 хв.', 'No extra reps today: the workout already takes 55 min.'); }
+    }
+    return items;
+  }
   function estimateMins(prog, items) {
     var sec = 0;
     stepOrder(items).forEach(function (st, k, arr) {
@@ -1070,7 +1140,7 @@ var ENGINE = (function () {
     return db;
   }
 
-  return { walkVO2: walkVO2, walk6Norm: walk6Norm, restWarn: restWarn, homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
+  return { capOne: capOne, capLimit: capLimit, capFor: capFor, capTrim: capTrim, walkVO2: walkVO2, walk6Norm: walk6Norm, restWarn: restWarn, homeStraight: homeStraight, plateEx: plateEx, STRAIGHT_CAP: STRAIGHT_CAP, selfLower: selfLower, extraSetOk: extraSetOk, stepOrder: stepOrder, restAfter: restAfter, estimateMins: estimateMins, readyAction: readyAction, alternatives: alternatives, nutrition: nutrition, weightTrend: weightTrend, bodyMonth: bodyMonth, painRun: painRun, milestones: milestones, seedWeight: seedWeight, measureDue: measureDue, foodAdvice: foodAdvice, isWork: isWork, INV: INV, stepFor: stepFor, capOf: capOf, dbCountOf: dbCountOf, setVolume: setVolume, sessionVolume: sessionVolume, plates: plates, warmups: warmups, records: records, prTypes: prTypes, muscleSets: muscleSets, streakWeeks: streakWeeks, streakInfo: streakInfo, missedDays: missedDays, recovery: recovery, REST_H: REST_H, monthChallenge: monthChallenge, weekSummary: weekSummary, yearSummary: yearSummary, shortPick: shortPick, shortSets: shortSets, SHORT_GROUPS: SHORT_GROUPS, SHORT_MIN: SHORT_MIN, freshStart: freshStart, monthReport: monthReport, orderItems: orderItems, migrate: migrate,
            planFor: planFor, totalLoad: totalLoad, metric: metric, metricLabel: metricLabel, history: history, bestOf: bestOf,
            suggest: suggest, comeback: comeback, machStep: machStep, INV_LB: INV_LB, LB: LB, sizesOf: sizesOf, unitize: unitize, lbNum: lbNum, lbText: lbText, isPR: isPR, plateau: plateau, fatigue: fatigue, weekKey: weekKey, greeting: greeting, weeklySets: weeklySets, rolling7: rolling7, STEP: STEP,
            KCAL_MET: KCAL_MET, weightAt: weightAt, sessionKcal: sessionKcal, kcalSum: kcalSum, variantOf: variantOf, histVariant: histVariant, shiftLoad: shiftLoad, variantStart: variantStart, calibrate: calibrate };

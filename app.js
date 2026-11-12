@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.26';
+  const VERSION = '3.27.27';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -15,7 +15,10 @@ window.APP_START = () => {
      межа ваги на гриф — з його власного набору дисків (змінюється в «Більше» → «Гантелі») */
   function buildMe(answers) {
     const g = GEN.build(answers), base = g.cap;
-    Object.defineProperty(g, 'cap', { configurable: true, enumerable: true, get: () => { const p = DB && DB.profiles && DB.profiles.me; return base && p && p.inv ? ENGINE.capOf(p.inv) || base : base; } });
+    /* з 3.27.27 — межа окремо для вправ з двома гантелями (cap) і з однією (cap1): з набору дисків і найбільшої ваги гантелі, яку вказала людина */
+    const capBy = (n) => { const p = DB && DB.profiles && DB.profiles.me; if (!base || !p || !p.inv || !ENGINE.capOf(p.inv)) return base; return ENGINE.capLimit(p.inv, p.handle, (p.dbMax || {})[n === 1 ? 'one' : 'two'], n); };
+    Object.defineProperty(g, 'cap', { configurable: true, enumerable: true, get: () => capBy(2) });
+    Object.defineProperty(g, 'cap1', { configurable: true, enumerable: true, get: () => capBy(1) });
     /* вправи з історії, яких уже немає в програмі (змінили місце, обладнання чи обмеження), — «вибулі»: назва в історії,
        графіки й рекорди в «Прогресі», обсяг у звітах лишаються; у тренування й заміни вони не потрапляють */
     const pr = DB && DB.profiles && DB.profiles.me, first = answers.sex === 'f' ? 'her' : 'him', other = first === 'her' ? 'him' : 'her';
@@ -133,6 +136,23 @@ window.APP_START = () => {
   const GRIP_ERR = () => LL('Вага грифа — у грамах: 0 або від 50 до 10 000 (0,5 кг — це 500)', 'Handle weight is in grams: 0 or 50 to 10,000 (0.5 kg is 500)');
   const QINV = (lb) => (lb ? ['qIL0', 'qIL1', 'qIL2'] : ['qI5', 'qI25', 'qI125']);  // поля дисків анкети: у кг — колишні id (їхні підказки в tips.js)
   /* поле зросту в «Харчуванні» у фунтах: підпис і підказка — дюйми (у кг — як було, підказка з tips.js) */
+  /* найбільша вага однієї гантелі (з 3.27.27; слово Alexа 12.11: «потрібно питати і налаштовувати окремо для вправ з однією гантеллю і двома»):
+     у профілі й анкеті dbMax = { two, one } — гриф + диски, в одиницях людини; null — з набору дисків (ENGINE.capLimit) */
+  const dbMaxAuto = (inv, handle, n) => Math.round(((Number(handle) || 0) + ENGINE.capLimit(inv || {}, handle, null, n)) * 100) / 100;
+  const dbMaxVal = (o, n) => { const x = o && o.dbMax ? o.dbMax[n === 1 ? 'one' : 'two'] : null; return x === null || x === undefined ? dbMaxAuto(o.inv, o.handle, n) : x; };
+  const dbMaxTo = (m, toLb) => { if (!m) return m || null; const cv = (x) => (x === null || x === undefined ? null : Math.round(x * (toLb ? ENGINE.LB : 1 / ENGINE.LB) * 2) / 2); return { two: cv(m.two), one: cv(m.one) }; };
+  /* o — { inv, handle, dbMax, units }: дві гантелі — від грифа до всього, що дає набір на дві; одна — не менше, ніж кожна з двох, і не більше за всі диски */
+  function dbMaxErr(o) {
+    const u = MU('weight', o.units === 'lb'), H = Number(o.handle) || 0, two = o.dbMax ? o.dbMax.two : null, one = o.dbMax ? o.dbMax.one : null, r2 = (x) => Math.round(x * 100) / 100;
+    const t2 = r2(H + ENGINE.capOf(o.inv || {})), t1 = r2(H + ENGINE.capOne(o.inv || {}));
+    if (two !== null && two !== undefined && !(two >= H - 1e-9 && two <= t2 + 1e-9)) return LL('З двома гантелями — від ', 'Two dumbbells: from ') + fmt(H) + LL(' до ', ' to ') + fmt(t2) + ' ' + u + LL(': більше ваші диски на дві гантелі не дають.', ' — your plates don’t allow more for two dumbbells.');
+    const lo = two !== null && two !== undefined ? two : dbMaxAuto(o.inv, o.handle, 2);
+    if (one !== null && one !== undefined && !(one >= lo - 1e-9 && one <= t1 + 1e-9)) return LL('З однією гантеллю — від ', 'One dumbbell: from ') + fmt(lo) + LL(' до ', ' to ') + fmt(t1) + ' ' + u + LL(': не менше, ніж кожна з двох, і не більше за всі ваші диски.', ' — at least as much as each of two, and no more than all your plates.');
+    return '';
+  }
+  const dbMaxHint = (o) => { const u = MU('weight', o.units === 'lb'), H = Number(o.handle) || 0;
+    return LL('З ваших дисків: кожна з двох гантелей — до ', 'From your plates: each of two dumbbells — up to ') + fmt(dbMaxAuto(o.inv, o.handle, 2)) + ' ' + u + LL('; усі диски на одну — ', '; all plates on one — ')
+      + fmt(Math.round((H + ENGINE.capOne(o.inv || {})) * 100) / 100) + ' ' + u + LL(', якщо вміщаються на гриф. Вкажіть, скільки реально збираєте. На межі програма додає повторення, потім підхід.', ' if they fit on the handle. Enter what you can actually load. At the limit, the program adds reps, then a set.'); };
   /* підказка поля диска у фунтах (у кг — з tips.js): найменший — ще й про крок */
   const invTip = (k, i) => (i < 2 ? LL(`Скільки у вас дисків по ${fmt(k)} lb — на обидві гантелі разом.`, `How many ${k} lb plates you have — for both dumbbells combined.`)
     : LL(`Скільки дисків по ${fmt(k)} lb. Від 4 штук вага росте кроком 5 lb, інакше — 10 lb.`, `How many ${k} lb plates. With 4 or more, the weight goes up in 5 lb steps; otherwise in 10 lb steps.`));
@@ -378,8 +398,8 @@ window.APP_START = () => {
     const toLb = v === 'lb', from = PLATES(!toLb), to = PLATES(toLb);
     const inv = {}; to.forEach((k, i) => { inv[k] = (p.inv || {})[from[i]] || 0; });
     logToUnits(p, PROGRAMS[DB.active], toLb, inv);
-    p.inv = inv; p.handle = gripTo(p.handle, toLb); p.units = v;
-    if (DB.active === 'me' && DB.custom && DB.custom.answers) { DB.custom.answers.units = v; DB.custom.answers.inv = Object.assign({}, inv); DB.custom.answers.handle = p.handle; }
+    p.inv = inv; p.handle = gripTo(p.handle, toLb); p.units = v; p.dbMax = dbMaxTo(p.dbMax, toLb);
+    if (DB.active === 'me' && DB.custom && DB.custom.answers) { DB.custom.answers.units = v; DB.custom.answers.inv = Object.assign({}, inv); DB.custom.answers.handle = p.handle; DB.custom.answers.dbMax = p.dbMax ? Object.assign({}, p.dbMax) : null; }
     save(); location.reload();
   }
   function langCard() {
@@ -422,6 +442,7 @@ window.APP_START = () => {
     ['age', 'height', 'weight'].forEach((k) => { const x = v('q' + k); if (x !== undefined) a[k] = k === 'height' ? HDin(num(x), lb) : k === 'weight' ? BWin(num(x), lb) : num(x); });  // зріст і вага — завжди метрично
     if (v('qHandle') !== undefined) { const x = num(v('qHandle')); a.handle = x === null ? null : lb ? x : x / 1000; }  // кг-профіль: поле в грамах
     PLATES(lb).forEach((k, i) => { const x = v(QINV(lb)[i]); if (x !== undefined) a.inv[k] = num(x); });
+    [['two', 'qMax2', 2], ['one', 'qMax1', 1]].forEach(([k, id, n]) => { const x = v(id); if (x === undefined) return; const y = num(x), auto = dbMaxAuto(a.inv, a.handle, n); a.dbMax = Object.assign({ two: null, one: null }, a.dbMax || {}); a.dbMax[k] = y === null || Math.abs(y - auto) < 0.005 ? null : y; });  // збігається з розрахованим — «з дисків» (з 3.27.27)
   }
   function qErrors(step) {
     const a = qState().a, e = GEN.check(a).errors, out = {};
@@ -432,6 +453,7 @@ window.APP_START = () => {
       if (PLATES(a.units === 'lb').some((k) => !(a.inv[k] >= 0 && a.inv[k] <= 40 && Number.isInteger(a.inv[k])))) out.inv = LL('Кількість дисків — ціле число від 0 до 40', "Number of plates must be a whole number from 0 to 40");
       else if (!(PLATES(a.units === 'lb').reduce((t, k) => t + (a.inv[k] || 0), 0) > 0)) out.inv = LL('Вкажіть, скільки дисків є', "Enter how many plates you have");
       else if (!ENGINE.capOf(a.inv)) out.inv = LL('Потрібна хоча б пара однакових дисків — по одному на кожен бік грифа', "You need at least one pair of matching plates — one for each side of the handle");
+      if (!out.inv && !out.handle) { const e2 = dbMaxErr(a); if (e2) out.dbMax = e2; }  // з 3.27.27
     }
     return out;
   }
@@ -461,7 +483,7 @@ window.APP_START = () => {
       <div class="pick">`)}${opt('qEquip', 'db', LL('Гантелі з дисками', "Plate-loaded dumbbells"), LL('розбірні: гриф + диски', "adjustable: handle + plates"), db)}${opt('qEquip', 'band', LL('Петля-еспандер', "Resistance band"), LL('резинка з кріпленням до дверей', "band with a door anchor"), a.equip.indexOf('band') >= 0)}${opt('qEquip', 'bench', LL('Лава для жиму', "Weight bench"), LL('для жиму з повною амплітудою, з гантелями', "for a full-range press, with dumbbells"), a.equip.indexOf('bench') >= 0)}${opt('qEquip', 'miniband', LL('Фітнес-гумки (кільця)', "Mini loop bands"), LL('для розтяжки наприкінці тренування', "for stretching at the end of a workout"), a.equip.indexOf('miniband') >= 0)}</div>${BAND_NOTE()}${err('equip')}
       ${db ? `${LL(`<div class="card"><b>Ваші гантелі</b>`, `<div class="card"><b>Your dumbbells</b>`)}${(a.units === 'lb' ? numIn('qHandle', LL('Вага одного грифа без дисків, lb', 'Weight of one handle without plates, lb'), a.handle, 'decimal') : numIn('qHandle', LL('Вага одного грифа без дисків, г', 'Weight of one handle without plates, g'), a.handle === null || a.handle === undefined ? a.handle : a.handle * 1000, 'numeric'))}${err('handle')}${LL(`
         <label class="f">Скільки дисків разом на обидві гантелі</label><div class="grid3"><div>`, `
-        <label class="f">Total plates for both dumbbells</label><div class="grid3"><div>`)}${PLATES(a.units === 'lb').map((k, i) => numIn(QINV(a.units === 'lb')[i], fmt(k) + ' ' + MU('weight', a.units === 'lb'), a.inv[k], undefined, a.units === 'lb' ? invTip(k, i) : '')).join('</div><div>')}</div></div>${err('inv')}</div>` : ''}${LL(`
+        <label class="f">Total plates for both dumbbells</label><div class="grid3"><div>`)}${PLATES(a.units === 'lb').map((k, i) => numIn(QINV(a.units === 'lb')[i], fmt(k) + ' ' + MU('weight', a.units === 'lb'), a.inv[k], undefined, a.units === 'lb' ? invTip(k, i) : '')).join('</div><div>')}</div></div>${err('inv')}${LL('<label class="f">Найбільша вага однієї гантелі (гриф + диски)</label>', '<label class="f">Heaviest single dumbbell (handle + plates)</label>')}<div class="grid2"><div>${numIn('qMax2', LL('вправи з двома гантелями, ', 'two-dumbbell exercises, ') + MU('weight', a.units === 'lb'), dbMaxVal(a, 2), 'decimal', LL('Найважча гантель, яку збираєте, коли в руках дві однакові.', 'The heaviest dumbbell you can load when you hold two identical ones.'))}</div><div>${numIn('qMax1', LL('з однією гантеллю, ', 'one-dumbbell exercises, ') + MU('weight', a.units === 'lb'), dbMaxVal(a, 1), 'decimal', LL('Найважча одна гантель: на один гриф можна надіти більше дисків — скільки вміщається.', 'The heaviest single dumbbell: one handle can take more plates — as many as fit.'))}</div></div>${err('dbMax')}<p class="tiny muted">${esc(dbMaxHint(a))}</p></div>` : ''}${LL(`
       <h2>Тренажери вдома</h2><p class="muted small">Ті самі вправи, що в залі: історія й рекорди спільні, вагу застосунок рахує окремо для дому й залу. Додати чи прибрати можна будь-коли: «Більше» → «Обладнання вдома».</p>
       <button type="button" class="wide`, `
       <h2>Machines at home</h2><p class="muted small">Same exercises as at the gym: history and PRs are shared, but the app tracks weights separately for home and gym. You can add or remove machines anytime: “More” → “Home equipment.”</p>
@@ -520,7 +542,7 @@ window.APP_START = () => {
     const fresh = !DB.profiles.me;
     if (fresh) DB.profiles.me = newProfile('me');
     const p = DB.profiles.me, was = p.units === 'lb' ? 'lb' : 'kg';
-    p.days = a.days.slice().sort(); p.handle = a.handle; p.units = a.units === 'lb' ? 'lb' : 'kg'; p.inv = {}; PLATES(p.units === 'lb').forEach((k) => { p.inv[k] = a.inv[k] || 0; });
+    p.days = a.days.slice().sort(); p.handle = a.handle; p.units = a.units === 'lb' ? 'lb' : 'kg'; p.inv = {}; PLATES(p.units === 'lb').forEach((k) => { p.inv[k] = a.inv[k] || 0; }); p.dbMax = a.dbMax ? Object.assign({}, a.dbMax) : null;  // з 3.27.27
     if (!fresh && was !== p.units) logToUnits(p, PROGRAMS.me, p.units === 'lb', p.inv);  // з 3.27.7 — як «Більше» → «Одиниці» (гриф і диски вже в нових одиницях)
     p.me = Object.assign({}, p.me || {}, { height: a.height, age: a.age });
     if (!fresh) { keepWeek(p, oldPw, PROGRAMS.me); if (oldPw && oldPw !== PROGRAMS.me.perWeek) daysToast(PROGRAMS.me.perWeek); }
@@ -592,14 +614,14 @@ window.APP_START = () => {
   const sideTxt = (pl) => SIDE_TXT() + fmt(sideSum(pl.side)) + KG(LL(' кг', ' kg'));
   function plateLine(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return '';
-    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
+    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), ENGINE.capFor(G(), ex, it.variant), isLb() ? 'lb' : 'kg');
     return `<span class="plt">${pl.ok ? (pl.side.length ? sideTxt(pl) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)}</span>`;
   }
 
   /* ---------- чернетка тренування ---------- */
   function plateSide(ex, it, load) {
     if (!hasKg(ex) || load === null || load === undefined || load === '') return null;
-    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
+    const pl = ENGINE.plates(load, P().inv, ENGINE.dbCountOf(ex, it.variant), ENGINE.capFor(G(), ex, it.variant), isLb() ? 'lb' : 'kg');
     return pl.ok ? (pl.side.length ? [sideSum(pl.side)] : []) : null;  // голосом — теж лише всього з кожного боку (з 3.27.20)
   }
   function makeItem(it0, ss, plan, step, o) {
@@ -609,8 +631,8 @@ window.APP_START = () => {
     const variant = o.variant || defaultVariant(it0.ex, plan), vo = ex.variants ? ex.variants.find((v) => v.id === variant) || null : null;
     const it = vo && (vo.sets || vo.min) ? Object.assign({}, it0, { sets: vo.sets || it0.sets, min: vo.min || it0.min, max: vo.max || it0.max }) : it0;
     const nS = prog.setsFor(it, plan.week), all = histAt(it.ex, o.where), hist = ENGINE.histVariant(ex, all, variant);
-    const sug = ENGINE.suggest(prog, it.ex, it, nS, hist, p.handle, plan.deload, step, o.back);
-    const vs = ex.type === 'amrap' ? null : ENGINE.variantStart(ex, all, variant, p.handle, step, prog.cap || 20);
+    const sug = ENGINE.suggest(prog, it.ex, Object.assign({}, it, { variant }), nS, hist, p.handle, plan.deload, step, o.back);
+    const vs = ex.type === 'amrap' ? null : ENGINE.variantStart(ex, all, variant, p.handle, step, ENGINE.capFor(prog, ex, variant));
     if (vs) {
       const lb = (id) => TR((ex.variants.find((v) => v.id === id) || {}).label || ''), withLoad = isLoad(ex) && ex.type !== 'band';
       sug.sets.forEach((x) => { if (withLoad) x.load = vs.load; if (vs.harder && ex.type === 'time') x.reps = it.min; });
@@ -649,7 +671,7 @@ window.APP_START = () => {
     if (o.myo && ex.iso && ex.type !== 'amrap' && sets.length) sets[sets.length - 1].type = 'M';
     /* plan — вага, яку запланував застосунок (з 3.27.8): з нею порівнюємо, чи вагу знизила сама людина (ENGINE.selfLower); easy — сьогодні застосунок сам полегшив вправу */
     sets.forEach((s) => { s.plan = s.load; });
-    return { ex: it.ex, variant: vo ? variant : defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: it.max, rest: it.rest, from: o.from || null, sets, first: !hist.length, easy: !!(o.ra && o.ra.act === 'light') || !!hurt };
+    return { ex: it.ex, capX: !!sug.capX && !skipped, capNote: sug.capX ? sug.note : undefined, capNoX: sug.capNoX, variant: vo ? variant : defaultVariant(it.ex, plan), skipped, optional: !!it.optional, note, ss, min: it.min, max: sug.max || it.max, capMax0: sug.max ? it.max : undefined, rest: it.rest, from: o.from || null, sets, first: !hist.length, easy: !!(o.ra && o.ra.act === 'light') || !!hurt };
   }
   /* перемкнули варіант (з 3.21.9): невиконані підходи — заново за порадою цього варіанта (вага, повторення, кількість); виконані лишаються як є;
      розминка — заново, якщо ще нічого не зроблено */
@@ -666,7 +688,8 @@ window.APP_START = () => {
       const fw = work.find((x) => !x.done), ws = ENGINE.warmups(prog.ex[it.ex], fw ? fw.load : null, step, prog.warm, 0);
       warm = ws.map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true }));
     }
-    Object.assign(it, { variant: v, sets: warm.concat(work), min: fr.min, max: fr.max, note: fr.note, first: fr.first, calib: false });
+    Object.assign(it, { variant: v, sets: warm.concat(work), min: fr.min, max: fr.max, note: fr.note, first: fr.first, calib: false, capX: fr.capX, capNote: fr.capNote, capNoX: fr.capNoX });
+    ENGINE.capTrim(prog, d.items, d.short ? 0 : 55);
     save(); haptic(); rWorkout();
   }
   function buildDraft(wid, ready, place, short) {
@@ -698,6 +721,7 @@ window.APP_START = () => {
     });
     /* удома пара з двох вправ із гантелями — підряд, а не суперсетом: диски перекручують раз на вправу (з 3.27.10, ENGINE.homeStraight) */
     if (where === 'home') ENGINE.homeStraight(prog, list);
+    ENGINE.capTrim(prog, list, short ? 0 : 55);  // з 3.27.27 — додатковий підхід на межі ваги лише в межах 55 хв; коротка версія — без нього
     /* розминковий підхід — перед першою базовою вправою з вагою */
     for (const st of ENGINE.stepOrder(list)) {
       const it = list[st.i], ex = prog.ex[it.ex], fw = it.sets.find((s) => s.type !== 'W');
@@ -997,7 +1021,7 @@ window.APP_START = () => {
     if (it.first && !it.calib && s.type === 'N' && (ex.type === 'db' || ex.type === 'dbopt' || ex.type === 'mach' || (ex.type === 'time' && ex.load))) {
       it.calib = true; const dd = ENGINE.calibrate(s, it.min, it.max);
       if (dd) {
-        const st = isMach(ex) ? loadStep(ex, it.ex, d.place) : ENGINE.stepFor(p.inv), cap = isMach(ex) ? (ex.cap || 300) : (G().cap || 20), nl = ENGINE.shiftLoad(ex, s.load, dd, st, cap);
+        const st = isMach(ex) ? loadStep(ex, it.ex, d.place) : ENGINE.stepFor(p.inv), cap = ENGINE.capFor(G(), ex, it.variant), nl = ENGINE.shiftLoad(ex, s.load, dd, st, cap);
         let ch = false; it.sets.forEach((x, k) => { if (k > j && !x.done && !x.touched && x.type !== 'W' && x.load !== nl) { x.load = nl; x.plan = nl; ch = true; } });
         if (ch) s.calib = dd;
       }
@@ -1540,7 +1564,7 @@ window.APP_START = () => {
     const v = num(kp.str);
     let extra = '';
     if (!isRep && hasKg(ex)) {
-      const pl = v === null ? null : ENGINE.plates(v, P().inv, ENGINE.dbCountOf(ex, it.variant), G().cap, isLb() ? 'lb' : 'kg');
+      const pl = v === null ? null : ENGINE.plates(v, P().inv, ENGINE.dbCountOf(ex, it.variant), ENGINE.capFor(G(), ex, it.variant), isLb() ? 'lb' : 'kg');
       const tot = v === null ? 0 : ENGINE.totalLoad(ex, v, P().handle, it.variant);
       extra = `<p class="small muted" style="text-align:center">${v === null ? (ex.type === 'dbopt' ? LL('без гантелі', "no dumbbell") : '') : (ON_BODY[it.ex] ? LL('гантель: ', 'dumbbell: ') : LL('усього в руках: ', "total in hand: ")) + fmt(tot) + KG(LL(' кг', " kg"))}${pl ? ' · ' + (pl.ok ? (pl.side.length ? sideTxt(pl) : LL('лише гриф', "handle only")) : '⚠ ' + esc(pl.text)) : ''}</p>`;
     }
@@ -1920,7 +1944,7 @@ window.APP_START = () => {
     if (!list.length && !bands.length && !machs.length) return '';
     const kg = KG(LL(' кг', ' kg')), w = (x) => fmt(Math.round((h + x.load) * 100) / 100);
     const rows = list.map((x) => {
-      const pl = ENGINE.plates(x.load, p.inv, x.n, prog.cap, isLb() ? 'lb' : 'kg');
+      const pl = ENGINE.plates(x.load, p.inv, x.n, x.n === 1 && prog.cap1 ? prog.cap1 : prog.cap, isLb() ? 'lb' : 'kg');
       return `<li style="display:block"><div class="sp"><b>${w(x)}${kg} × ${x.n}</b><span class="small muted">${pl.ok ? (pl.side.length ? sideTxt(pl) : LL('лише гриф', 'handle only')) : '⚠ ' + esc(pl.text)}</span></div>`
         + `<div class="tiny muted">${esc(x.ex.join(' · '))}${x.warm ? LL(' — розминка', ' — warm-up') : ''}</div></li>`;
     }).join('');
@@ -4001,6 +4025,14 @@ window.APP_START = () => {
       : `<div><b>${esc(g.title)}</b>${g.sub ? `<div class="small muted">${esc(g.sub)}</div>` : ''}</div>`;
   }
   /* обладнання вдома — будь-коли додати чи прибрати; програма перебудовується, історія й рекорди лишаються */
+  /* «Більше» → «Гантелі»: найбільша вага однієї гантелі — окремо для вправ з двома й з однією (з 3.27.27) */
+  function dbMaxSet(p) {
+    const o = { inv: p.inv, handle: p.handle, dbMax: p.dbMax, units: isLb() ? 'lb' : 'kg' }, u = MU('weight');
+    return `<label class="f">${LL('Найбільша вага однієї гантелі (гриф + диски), ', 'Heaviest single dumbbell (handle + plates), ')}${u}</label><div class="grid2">`
+      + `<div><label class="f" for="max2In">${LL('вправи з двома гантелями', 'two-dumbbell exercises')}</label><input inputmode="decimal" id="max2In" value="${fmt(dbMaxVal(o, 2))}"></div>`
+      + `<div><label class="f" for="max1In">${LL('з однією гантеллю', 'one-dumbbell exercises')}</label><input inputmode="decimal" id="max1In" value="${fmt(dbMaxVal(o, 1))}"></div></div>`
+      + `<p class="tiny muted">${esc(dbMaxHint(o))}</p>`;
+  }
   function eqCard(p) {
     const a = DB.custom && DB.custom.answers; if (!a) return '';
     const eq = a.equip || [], mk = Object.keys(GEN.MACH), allM = mk.every((k) => eq.indexOf(k) >= 0), dis = p.draft ? ' disabled' : '';
@@ -4062,8 +4094,8 @@ window.APP_START = () => {
       ${hasDb ? `${isLb() ? KG(LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, кг</label><input inputmode="decimal" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, kg</label><input inputmode="decimal" id="handleIn" value="`)) : LL(`<h2>Гантелі</h2><div class="card"><label class="f">Вага грифа без дисків, г</label><input inputmode="numeric" id="handleIn" value="`, `<h2>Dumbbells</h2><div class="card"><label class="f">Handle weight without plates, g</label><input inputmode="numeric" id="handleIn" value="`)}${fmt(isLb() ? p.handle : p.handle * 1000)}${LL(`">
         <label class="f">`, `">
         <label class="f">`)}${LL('Диски на обидві гантелі: ', 'Plates for both dumbbells: ')}${PLATES(isLb()).map(fmt).join(' · ')} ${MU('weight')}${LL(' (штук)', ' (count)')}</label><div class="grid3">${PLATES(isLb()).map((k, i) => `<input inputmode="numeric" data-inv="${k}"${isLb() ? ` data-tip="${esc(invTip(k, i))}"` : ''} value="${p.inv[k] || 0}">`).join('')}${LL(`</div>
-        <p class="tiny muted">Крок ваги зараз: `, `"></div>
-        <p class="tiny muted">Current weight step: `)}${fmt(ENGINE.stepFor(p.inv))}${KG(LL(` кг на гантель.</p></div>`, ` kg per dumbbell.</p></div>`))}` : ''}${LL(`
+        <p class="tiny muted">Крок ваги зараз: `, `</div>
+        <p class="tiny muted">Current weight step: `)}${fmt(ENGINE.stepFor(p.inv))}${KG(LL(` кг на гантель.</p>`, ` kg per dumbbell.</p>`))}${dbMaxSet(p)}</div>` : ''}${LL(`
       <h2>Порадник і підказки</h2><div class="card" id="mGuide" style="padding:10px 12px">`, `
       <h2>Guide and tips</h2><div class="card" id="mGuide" style="padding:10px 12px">`)}${guideChips()}${LL(`<div class="quick"><button type="button" class="sm" data-act="food">Кухня</button><button type="button" class="sm" data-act="glAll">Словник термінів</button><button type="button" class="sm" data-act="whatsnew">Можливості</button><button type="button" class="sm" data-act="tourReset">Показати навчання знову</button></div></div>
       <h2>Резервна копія</h2><div class="card" id="mBackup"><p class="small">Дані лише в цьому телефоні. Раз на тиждень зберігайте копію в iCloud, «Файли» чи Telegram.</p><p class="tiny muted">Остання копія: `, `<div class="quick"><button type="button" class="sm" data-act="food">Kitchen</button><button type="button" class="sm" data-act="glAll">Glossary</button><button type="button" class="sm" data-act="whatsnew">Features</button><button type="button" class="sm" data-act="tourReset">Show the tutorial again</button></div></div>
@@ -4090,6 +4122,12 @@ window.APP_START = () => {
       if (lb ? (x === null || x < 0 || x > 25) : !gripOk(x)) { toast(lb ? LL('Вага грифа — від 0 до 25 lb', 'Handle weight — 0 to 25 lb') : GRIP_ERR()); e.target.value = fmt(lb ? p.handle : p.handle * 1000); return; }
       const v = lb ? x : x / 1000; p.handle = v; syncAnswers({ handle: v }); save(); toast(LL('Збережено', "Saved"));
     };
+    if (hasDb) [['max2In', 'two', 2], ['max1In', 'one', 1]].forEach(([id, k, n]) => { const el = document.getElementById(id); if (!el) return; el.onchange = () => {  // з 3.27.27
+      const y = num(el.value), o = { inv: p.inv, handle: p.handle, units: isLb() ? 'lb' : 'kg', dbMax: Object.assign({ two: null, one: null }, p.dbMax || {}) };
+      o.dbMax[k] = y === null || Math.abs(y - dbMaxAuto(p.inv, p.handle, n)) < 0.005 ? null : y;
+      const e = dbMaxErr(o); if (e) { toast(e, false, 6000); el.value = fmt(dbMaxVal({ inv: p.inv, handle: p.handle, dbMax: p.dbMax }, n)); return; }
+      p.dbMax = o.dbMax; syncAnswers({ dbMax: Object.assign({}, o.dbMax) }); save(); toast(LL('Збережено', 'Saved')); rMore();
+    }; });
     app.querySelectorAll('[data-inv]').forEach((el) => { el.onchange = () => { const v = num(el.value); if (v === null || v < 0 || v > 40) { el.value = p.inv[el.dataset.inv]; return; } p.inv[el.dataset.inv] = Math.round(v); syncAnswers({ inv: Object.assign({}, p.inv) }); save(); rMore(); }; });
     app.querySelectorAll('[data-set]').forEach((el) => { el.onchange = () => { S()[el.dataset.set] = el.checked; if (el.dataset.set === 'guide' && el.checked) S().guideFrom = P() ? P().sessions.length : 0; save(); if (el.dataset.set === 'haptics' && el.checked) haptic(); }; });
     tourMaybe('more');
@@ -4217,7 +4255,7 @@ window.APP_START = () => {
     const nw = makeItem(base, old.ss, plan, ENGINE.stepFor(p.inv), { from: from === to ? null : from, myo, where: d.place, back: d.back || null });
     /* у старої вправи був розминковий підхід — і в нової (заміна на відпочинку з 3.27.11 часто припадає саме на першу базову) */
     if (old.sets.some((s) => s.type === 'W')) { const ex = prog.ex[to], fw = nw.sets.find((s) => s.type !== 'W'); nw.sets = ENGINE.warmups(ex, fw ? fw.load : null, ENGINE.stepFor(p.inv), prog.warm, isMach(ex) ? loadStep(ex, to, d.place) : 0).map((w) => ({ type: 'W', load: w.load, reps: w.reps, rir: null, done: false, pr: [], prev: null, touched: true })).concat(nw.sets); }
-    nw.skipped = false; d.items[i] = nw; if (T.id && T.kind === 'rest') { T.next = nextLabel(d); T.view = ''; } save(); closeSheet(); rWorkout();
+    nw.skipped = false; d.items[i] = nw; ENGINE.capTrim(prog, d.items, d.short ? 0 : 55); if (T.id && T.kind === 'rest') { T.next = nextLabel(d); T.view = ''; } save(); closeSheet(); rWorkout();
     talk(LL('Заміна. ', "Switching to ") + prog.ex[to].name + '.');
   }
   function sayWhat(b) {
@@ -4276,6 +4314,7 @@ window.APP_START = () => {
       if (v !== a.units) {  // диски тієї самої кількості — у розмірах нових одиниць; гриф — перерахований
         const from = PLATES(a.units === 'lb'), to = PLATES(v === 'lb'), inv = {}; to.forEach((k, i) => { inv[k] = (a.inv || {})[from[i]]; }); a.inv = inv;
         if (typeof a.handle === 'number') a.handle = gripTo(a.handle, v === 'lb');
+        a.dbMax = dbMaxTo(a.dbMax, v === 'lb');
         a.units = v;
       }
       return rOnboard();
