@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.24';
+  const VERSION = '3.27.25';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -280,9 +280,6 @@ window.APP_START = () => {
       if (left <= 0) {
         if (!T.alarmed) {
           T.alarmed = true; const k = T.kind; beep(); hapticAlarm();
-          /* далі вправа на час — відпочинок не закінчується сам: на ній одразу піде відлік, тож «Почати» — коли людина готова (з 3.27.20) */
-          const d = P() && P().draft;
-          if (k === 'rest' && d && tsOn(d, curStep(d))) { const tEl = document.getElementById('cTime'), cs = curStep(d); if (tEl) tEl.textContent = '0:00'; talk(LL('Час! ', 'Time! ') + G().ex[d.items[cs.i].ex].name + '.'); return; }
           stopTimer(); onTimerEnd(k);
         }
         return;
@@ -1087,9 +1084,10 @@ window.APP_START = () => {
     const s = d.items[m.i].sets[m.j], tot = (s.mini || []).reduce((a, x) => a + x, 0);
     afterSet(d, m.i, m.j, LL('Міо-підхід завершено. ', "Myo-rep set done. ") + (tot ? LL('У міні-підходах — ', "Mini-sets total: ") + VOICE.reps(tot) + '. ' : ''));
   }
-  /* вправа на час (з 3.27.20): відлік починається сам, коли відкрито картку підходу — 5 с приготуватись, далі секунди підходу
-     (на бік — правий, 5 с змінити бік, лівий); «Час!» — і людина ставить «Підхід виконано». Відпочинок перед такою вправою сам не закінчується
-     (tickTimer): «Почати» — коли людина готова. d.tb — для якого підходу відлік уже був */
+  /* вправа на час (з 3.27.20): «▶ Почати відлік» на картці підходу — 5 с приготуватись, далі секунди підходу
+     (на бік — правий, 5 с змінити бік, лівий); «Час!» — і людина ставить «Підхід виконано». d.tb — для якого підходу відлік уже був.
+     З 3.27.25 (слово Alexа 10.11: «вправу на час потрібно вмикати кнопкою коли я буду готовий») — лише кнопкою: сам відлік не починається,
+     а відпочинок перед такою вправою закінчується сам, як у решти (його зупинка на нулі була лише через автозапуск) */
   const TS_PREP = 5;
   const tsSec = (it, s) => (Number(s.reps) > 0 ? Number(s.reps) : it.max || 30);
   function tsOn(d, cs) { const it = cs && d.items[cs.i], s = it && it.sets[cs.j]; return !!(it && s && G().ex[it.ex].type === 'time' && s.type !== 'W' && !s.done && wMode() !== 'list'); }
@@ -1104,12 +1102,6 @@ window.APP_START = () => {
     return `<button type="button" class="wide" data-act="tsGo" data-tip="${esc(LL('Відлік: 5 секунд приготуватись, далі секунди підходу', 'Countdown: 5 seconds to get ready, then the seconds of the set') + (ex.side ? LL(' на правий бік, 5 секунд змінити бік, на лівий.', ' on the right side, 5 seconds to switch, then the left.') : '.'))}">▶ ${b && b.done ? LL('Відлік ще раз', 'Countdown again') : LL('Почати відлік', 'Start the countdown')} · ${sec} ${LL('с', 'sec')}${ex.side ? LL(' на бік', ' per side') : ''}</button>`;
   }
   function tsStart(d, cs) { d.tb = { i: cs.i, j: cs.j, side: 0 }; save(); startTimer(TS_PREP, '', 'tsprep'); if (view === 'workout') rWorkout(); }
-  /* сам — лише раз на підхід, коли картка підходу на екрані й жоден таймер не йде */
-  function tsAuto(d) {
-    if (T.id || !d.coach || !d.coach.warm || d.coach.myo) return;
-    const cs = curStep(d); if (!tsOn(d, cs) || (d.tb && d.tb.i === cs.i && d.tb.j === cs.j)) return;
-    tsStart(d, cs);
-  }
   function tsEnd(d, kind) {
     const cs = curStep(d), b = d.tb; if (!cs || !b || b.i !== cs.i || b.j !== cs.j) { if (view === 'workout') rWorkout(); return; }
     const it = d.items[cs.i], ex = G().ex[it.ex], sec = tsSec(it, it.sets[cs.j]);
@@ -1188,7 +1180,6 @@ window.APP_START = () => {
     vizAttach(d);
     startElapsed(d); keepAwake(true);
     if (T.id) tickTimer();
-    tsAuto(d);
     guideMark(d);
     if (document.querySelector('.cdone')) tourMaybe('coach');
     else if (T.id && T.kind === 'rest' && document.querySelector('.crest .cring')) tourMaybe('rest');

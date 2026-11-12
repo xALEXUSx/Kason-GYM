@@ -106,7 +106,8 @@ var GEN = (function () {
      (квадрицепс і сідниці, як розщеплений присід удома; з розгинанням ніг сідниці в Б не працювали) */
   var FULL = {
     A: [['squat', ['goblet', 'splitsquat', 'chairsq']], ['push', ['dbbench', 'floorpress', 'pushup']], ['row', ['row1', 'bandrow']], ['vpull', ['pulldown', 'pullover']],
-      ['press', ['seatedpress', 'bandpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'bridgebw', 'abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['curl', 'hammer', 'bandcurl']],
+      ['press', ['seatedpress', 'bandpress', 'facepull', 'reardelt']], ['glute', ['bridge', 'bridgebw', 'abduct']], ['core', ['deadbug', 'sideplank']], ['abs', ['crunchw', 'crunch']], ['arms', ['curl', 'hammer', 'bandcurl']],
+      /* прес (з 3.27.25; слово Alexа 10.11 «Так, роби»): скручування — лише мета «мʼязи», без грижі й до 55 (avoid у build); суперсетом із «корпусом» (PAIRS) — тренування ≤ 55 хв */
       /* відведення стегна (з 3.27.23) — лише вдома при «коліна» й коли в плані ще немає відведення (тренажер — у «сідницях» А): build1; у А — воно коротше за Б */
       ['abd', ['sideabd']]],
     B: [['hinge', ['rdl', 'bridge', 'bridgebw', 'abduct']], ['single', ['splitsquat', 'goblet', 'chairsq', 'calf']], ['row', ['row1', 'bandrow']], ['side', ['lateral', 'extrot', 'facepull']],
@@ -114,7 +115,7 @@ var GEN = (function () {
       /* литки (з 3.27.14) — лише мета «мʼязи»: їх не було зовсім; за бажанням, щоб не подовжувати обовʼязкове */
       ['calves', ['calf']]]
   };
-  var PAIRS = { A: [['push', 'row'], ['press', 'vpull'], ['glute', 'arms']], B: [['side', 'rear'], ['chest', 'tri'], ['single', 'core']],
+  var PAIRS = { A: [['push', 'row'], ['press', 'vpull'], ['glute', 'arms'], ['core', 'abs']], B: [['side', 'rear'], ['chest', 'tri'], ['single', 'core']],
     /* «верх / низ» (з 3.27.0): ті самі пари протилежних мʼязів, що в А / Б; прес — два різні місця (з А і з Б) */
     U: [['push', 'row'], ['press', 'vpull'], ['chest', 'tri'], ['side', 'rear']], L: [['glute', 'coreA'], ['single', 'coreB']] };
 
@@ -174,7 +175,7 @@ var GEN = (function () {
   /* Місця тренування в залі: тренажери першими, далі вправи з власною вагою */
   var GFULL = {
     A: [['squat', ['g_legpress']], ['push', ['g_chestpress', 'pushup']], ['row', ['g_cablerow']], ['vpull', ['g_latpull']],
-      ['press', ['g_shpress', 'g_facepull']], ['glute', ['g_abduct']], ['core', ['deadbug', 'sideplank']], ['arms', ['g_cablecurl']]],
+      ['press', ['g_shpress', 'g_facepull']], ['glute', ['g_abduct']], ['core', ['deadbug', 'sideplank']], ['abs', ['crunch']], ['arms', ['g_cablecurl']]],
     B: [['hinge', ['g_legcurl']], ['single', ['g_legpress', 'g_legext', 'splitsquat', 'calf']], ['row', ['g_cablerow']], ['side', ['g_cablelat', 'g_facepull']],
       ['rear', ['g_facepull', 'g_cablelat']], ['chest', ['g_pecdeck', 'pushup']], ['tri', ['g_pushdown']], ['core', ['g_pallof', 'sideplank', 'deadbug']], ['calves', ['calf']]]
   };
@@ -206,6 +207,9 @@ var GEN = (function () {
     var lim = (a.limits || []).filter(function (x) { return x !== 'none'; });
     var avoid = {}; lim.forEach(function (l) { (AVOID[l] || []).concat(GAVOID[l] || []).forEach(function (id) { avoid[id] = true; }); });
     var age = Number(a.age), older = age >= 55, novice = a.level !== 'exp', heart = lim.indexOf('heart') >= 0, back = lim.indexOf('back') >= 0;
+    /* скручування (з 3.27.25): лише мета «мʼязи»; при грижі — AVOID.back; з 55 — ні: питання про остеопороз в анкеті немає, а при ньому вправи зі згинанням хребта
+       давали нові переломи хребців у 89 % проти 16 % при розгинанні (Sinaki, Mikkelsen 1984). Через avoid їх не пропонує й «Замінити» */
+    if (!hasG('muscle') || older) { avoid.crunch = true; avoid.crunchw = true; }
     /* коротка розминка (3 хв) — лише без обмежень, до 55 і до 100 кг: тіло розігріває перший легкий підхід вправи;
        з тиском чи серцем, спиною, суглобами, від 55 або від 100 кг — повна, 10 хв (поступово, як радить ACSM) */
     var shortWarm = !lim.length && !older && !(Number(a.weight) >= 100);
@@ -238,6 +242,9 @@ var GEN = (function () {
     if (ex.bridgebw) T.bridgebw = { ex: 'bridgebw', sets: 3, min: 12, max: 20, rest: 60 };
     /* відведення стегна лежачи на боці (з 3.27.23): вага тіла легка — 15–20 на кожен бік (AAOS — 20), 2 підходи, як у відведення з петлею */
     if (ex.sideabd) T.sideabd = { ex: 'sideabd', sets: 2, min: 15, max: 20, rest: 45 };
+    /* скручування (з 3.27.25): 3 підходи; з гантеллю 10–15, без ваги 12–20 — не більше 60 згинань за тренування (Contreras, Schoenfeld 2011); без міо-підходу */
+    if (ex.crunchw) T.crunchw = { ex: 'crunchw', sets: 3, min: 10, max: 15, rest: 60 };
+    if (ex.crunch) T.crunch = { ex: 'crunch', sets: 3, min: 12, max: 20, rest: 60 };
     /* лише петля (з 3.27.14): замір 01.11 — плечі 4,5, трицепс 4,5, біцепс 6 підходів; еластичний опір дає силу, як гантелі й тренажери (Lopes 2019, 8 досліджень). Шаблон — гантельної вправи того самого місця (him) */
     if (ex.bandpress) T.bandpress = { ex: 'bandpress', sets: 2, min: 12, max: 15, rest: 90 };
     if (ex.bandcurl) T.bandcurl = { ex: 'bandcurl', sets: 2, min: 12, max: 15, rest: 60 };
@@ -304,7 +311,7 @@ var GEN = (function () {
        3 / 2, обсяг — за 2 тижні, як і в плані на 3 дні), з округленням угору — обсяг не менший; 55+ і тиск / серце — не більше 3 підходів, як в А / Б.
        Частота за рівного обсягу не змінює росту мʼязів (ACSM 2026 — Currier та ін., MSSE 58(4):851–872; Schoenfeld 2019), сила трохи росте з частотою
        (Pelland та ін., Sports Med 2026). Нових вправ немає — техніка, 3D, голос і заміни ті самі */
-    var UPPER = ['push', 'row', 'vpull', 'press', 'chest', 'side', 'rear', 'tri', 'arms'], LOWER = ['squat', 'hinge', 'single', 'glute', 'core', 'abd', 'calves'];
+    var UPPER = ['push', 'row', 'vpull', 'press', 'chest', 'side', 'rear', 'tri', 'arms'], LOWER = ['squat', 'hinge', 'single', 'glute', 'core', 'abs', 'abd', 'calves'];
     /* підходи на тренування для трьох станів — звичайний тиждень (base), з +1 підходом для «мʼязи» з тижня 5 (plus; як у плані на 4 дні) і перші
        2 тижні новачка (nov — до 2 підходів, як в А / Б): ceil(тижневі ÷ тренувань половини); понад стелю (новачок — 2, 55+ і тиск / серце — 3, решта — 4,
        як найбільше в затвердженій програмі) — віддаємо іншій вправі цієї половини на той самий основний мʼяз (тяга → тяга зверху); немає такої — новачку,
