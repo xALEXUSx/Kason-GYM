@@ -278,7 +278,10 @@ var GEN = (function () {
           used[pick] = true; slots[w][slot[0]] = pick;
           var t = T[pick], it = { ex: pick, sets: t.sets, min: t.min, max: t.max, rest: t.rest };
           if (older || heart) it.sets = Math.min(it.sets, 3);
-          if ((slot[0] === 'arms' && !hasG('muscle')) || (perWeek === 4 && (slot[0] === 'arms' || slot[0] === 'tri'))) it.optional = true;
+          /* руки при 4 днях (з 3.27.26; слово Alexа 12.11 «ти будуєш мені програму тому й сам вирішуй»): для мети «мʼязи» — обовʼязкові, як при 2–3 і 5–6 днях:
+             «за бажанням» їх пропускали, і біцепс мав 7,7, трицепс — 5,2 підходу на тиждень; так — 11,7 і 10,5 (до 55), тренування ≤ 53 хв (замір 12.11).
+             Сет згинання росту біцепса дає вдвічі більше, ніж сет тяги (Mannarino 2021); підходи базових — половина (Pelland 2026). Інші цілі — як були */
+          if ((slot[0] === 'arms' && !hasG('muscle')) || (perWeek === 4 && !hasG('muscle') && (slot[0] === 'arms' || slot[0] === 'tri'))) it.optional = true;
           if (/за бажанням/.test(ex[pick].name)) it.optional = true;  // назва вже каже «за бажанням» — так і показуємо
           if (slot[0] === 'calves') { it.sets = 2; it.optional = true; }
           items.push(it);
