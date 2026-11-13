@@ -5,7 +5,7 @@ window.APP_START = () => {
   'use strict';
   window.APP_STARTED = true;
   document.body.classList.add('started');
-  const VERSION = '3.27.27';
+  const VERSION = '3.27.28';
   /* знак застосунку: штанга на плашці бренду (замість K), середина грифа — охра */
   const MARK = window.MARK_SVG, WORD = window.WORD_SVG;  // знак і назва FORTES (з 3.27.2 — криві шрифту бренду; tools/logo/build.mjs)
   const app = document.getElementById('app');
@@ -73,6 +73,7 @@ window.APP_START = () => {
      до 3.27.4 «Темп» (0,9 / 1 / 1,1) був лише для системного голосу: 0,9 → ×1, 1,1 → ×1,2 */
   { const r = Number(DB.settings.voice.rate) || 1; DB.settings.voice.rate = VRATES.indexOf(r) >= 0 ? r : (r > 1 ? 1.2 : 1); VOICEPACK.setRate(DB.settings.voice.rate); }
   RADIO.setDuck(DB.settings.radio.duck);
+  if (DB.settings.radio.id && !RADIO.byId(DB.settings.radio.id)) DB.settings.radio.id = null;  // з 3.27.28 — станцію прибрано зі списку (RauteMusik Workout замовкла, дослідження 12.11, R1)
   let view = DB.active ? 'home' : 'onboard';
   /* відкрили з нагадування про воду (з 3.27.1, sw.js → «./#kitchen»): одразу «Кухня» сьогодні; знак з адреси прибираємо, щоб оновлення сторінки не вертало сюди */
   if (location.hash === '#kitchen') { if (view === 'home') view = 'kitchen'; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* без історії */ } }
@@ -525,7 +526,7 @@ window.APP_START = () => {
         /* без «Назад» (перший крок) — «Далі» на всю ширину, як «Відновити» під нею (до 3.12.2 стояла праворуч несиметрично) */
         return `<div class="qnav${left ? '' : ' one'}">${left}`; })()}
       <button type="button" class="pri big" data-act="qNext">${last ? (q.edit ? LL('Оновити програму', "Update program") : LL('Скласти програму', "Build my program")) : q.ret ? LL('Готово', "Done") : LL('Далі', "Next")}</button></div>
-      ${q.step || q.edit ? '' : LL('<p></p><label class="btn ghost" style="display:block;text-align:center">Є резервна копія? Відновити<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label>', "<p></p><label class=\"btn ghost\" style=\"display:block;text-align:center\">Have a backup? Restore<input type=\"file\" id=\"restoreIn\" accept=\".json,application/json\" style=\"display:none\"></label>")}`;
+      ${q.step || q.edit ? '' : brokenNote()}${q.step || q.edit ? '' : LL('<p></p><label class="btn ghost" style="display:block;text-align:center">Є резервна копія? Відновити<input type="file" id="restoreIn" accept=".json,application/json" style="display:none"></label>', "<p></p><label class=\"btn ghost\" style=\"display:block;text-align:center\">Have a backup? Restore<input type=\"file\" id=\"restoreIn\" accept=\".json,application/json\" style=\"display:none\"></label>")}`;
     const ri = document.getElementById('restoreIn'); if (ri) ri.onchange = (e) => { if (e.target.files && e.target.files[0]) restore(e.target.files[0]); };
   }
   /* усі тренажери разом: усі є — зняти всі, інакше — додати відсутні */
@@ -2548,8 +2549,16 @@ window.APP_START = () => {
     }).join('')}</div>${LL(`<p class="tiny muted" style="margin:8px 0 0">Торкніться рядка — відмітка на сьогодні; ще раз — скасувати. Дні з відмітками зеленіють у «План» → «Історія».</p></div>`, `<p class="tiny muted" style="margin:8px 0 0">Tap a row to check it off for today; tap again to undo. Days with check marks turn green in “Plan” → “History”.</p></div>`)}`;
   }
 
+  /* збережені дані не прочитались (з 3.27.28, дослідження 12.11, D1): копію відкладено (store.js keepBroken) — сказати людині й дати зберегти її файлом */
+  function brokenNote() {
+    const id = STORE.current || 'a1', has = !!STORE.brokenOf(id), locked = STORE.lockedOf(id);
+    if (!has && !locked) return '';
+    return `<div class="note b">${locked ? LL('Не вдалося прочитати збережені дані, а місця на їхню копію в телефоні немає. Щоб нічого не стерти, нові записи поки не зберігаються. Відновіть резервну копію («Є резервна копія? Відновити») або збережіть пошкоджені дані файлом.', 'Your saved data couldn’t be read, and there’s no room on the phone to keep a copy. So nothing gets erased, new entries aren’t saved for now. Restore a backup (“Have a backup? Restore”) or save the damaged data as a file.')
+      : LL('Не вдалося прочитати збережені дані. Нічого не стерто: їх копію відкладено в цьому телефоні. Є резервна копія — відновіть її; копію пошкоджених даних можна зберегти файлом.', 'Your saved data couldn’t be read. Nothing was erased: a copy is kept on this phone. If you have a backup, restore it; you can also save the damaged data as a file.')}</div>`
+      + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 12px"><button type="button" class="ghost" data-act="brokenSave">${LL('Зберегти файлом', 'Save as a file')}</button>${has ? `<button type="button" class="ghost" data-act="brokenDrop">${LL('Прибрати копію', 'Remove the copy')}</button>` : ''}</div>`;
+  }
   function alerts() {
-    const out = [], p = P(), prog = G();
+    const out = [brokenNote()], p = P(), prog = G();
     if (ENGINE.fatigue(prog, p, p.handle)) out.push(LL('<div class="note b">Два тренування поспіль головні вправи падають. Зробіть легкий тиждень: половина підходів, вага та сама або на крок нижча.</div>', "<div class=\"note b\">Your main lifts have dropped two workouts in a row. Take a deload week: half the sets, same weight or one step lower.</div>"));
     /* з 3.24.0 (пункт 2): минулий тиждень без тренувань — серію зберіг запасний; нагадка лише цього тижня */
     const si = ENGINE.streakInfo(p.sessions, today()), prevWk = (() => { const x = new Date(ENGINE.weekKey(today()) + 'T12:00:00'); x.setDate(x.getDate() - 7); return x.toISOString().slice(0, 10); })();
@@ -3533,6 +3542,11 @@ window.APP_START = () => {
       if (sub) { await fetch(COACH_URL + '/push/unsub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
     } catch (e) { /* немає */ }
   }
+  /* усе про нагадування геть — і на сервері, і в телефоні (з 3.27.28, «Видалити мої дані»): не довше 5 с, бо без мережі чи без
+     сервісного працівника serviceWorker.ready не завершиться; локальне скасування підписки само прибере запис на сервері при наступному надсиланні (410) */
+  function pushForget() {
+    return Promise.race([waterUnsub(), new Promise((r) => setTimeout(r, 5000))]).then(() => { try { if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {}); } catch (e) { /* немає */ } });
+  }
   async function kWaterRemind() {
     const k = kit();
     if (k.set.water) { k.set.water = false; save(); rKitchen(); if ((S().remind || {}).on) remindSync(false); else waterUnsub(); toast(LL('Нагадування про воду вимкнено', 'Water reminders off')); return; }
@@ -4160,7 +4174,8 @@ window.APP_START = () => {
     const r = new FileReader();
     r.onload = async () => {
       try {
-        const o = JSON.parse(r.result);
+        let o = JSON.parse(r.result);
+        if (o && !o.app && o.profiles) o = { app: 'trening', v: 2, exported: '', db: o };  // з 3.27.28 — сама база (файл «Зберегти файлом» з незчитаних даних)
         if (!o || o.app !== 'trening' || !o.db || !o.db.profiles) throw new Error('format');
         const cnt = Object.values(o.db.profiles).reduce((a, q) => a + ((q && q.sessions) ? q.sessions.length : 0), 0);
         if (!confirm(LL('Відновити копію від ', "Restore the backup from ") + String(o.exported || '').slice(0, 10) + ' (' + plural(cnt, LL('тренування', "workout"), LL('тренування', "workouts"), LL('тренувань', "workouts")) + LL(')? Поточні дані на цьому телефоні буде замінено.', ")? The current data on this phone will be replaced."))) return;
@@ -4340,7 +4355,8 @@ window.APP_START = () => {
     if (act === 'accDelete') {
       if (!confirm(LL('Видалити всі ваші тренування, заміри й фото на цьому телефоні й почати з анкети?', "Delete all your workouts, measurements, and photos on this phone and start over from the questionnaire?"))) return;
       if (!confirm(LL('Точно? Повернути можна лише з резервної копії.', "Are you sure? You can only get it back from a backup."))) return;
-      ACC.wipe(STORE.current); return;
+      /* з 3.27.28 (дослідження 12.11, D2): спершу прибрати нагадування й розклад на сервері — інакше після видалення вони й далі приходили */
+      pushForget().then(() => ACC.wipe(STORE.current)); return;
     }
     /* під час тренування анкета не змінюється: нова програма скасувала б незавершене тренування */
     if (act === 'qEdit') { if (P() && P().draft) return; ui.q = null; qState(); view = 'onboard'; render(); window.scrollTo(0, 0); return; }
@@ -4640,6 +4656,9 @@ window.APP_START = () => {
       p.days = nd; syncAnswers({ days: nd }); save(); badgeSync(); remindSync(false); if (DB.custom) daysToast(nd.length); return rMore();  // нові дні — і в нагадування
     }
     if (act === 'backup') return backup();
+    /* копія незчитаних даних (з 3.27.28): файлом — щоб не загубилась; «.json» — «Відновити» приймає й саму базу без обгортки */
+    if (act === 'brokenSave') { const id = STORE.current || 'a1', raw = STORE.brokenOf(id) || STORE.rawOf(id); if (raw) shareFile('trenuvannia-damaged-' + today() + '.json', new Blob([raw], { type: 'application/json' }), 'application/json'); return; }
+    if (act === 'brokenDrop') { if (!confirm(LL('Прибрати відкладену копію пошкоджених даних? Повернути її вже не вийде.', 'Remove the kept copy of the damaged data? You won’t be able to get it back.'))) return; STORE.dropBroken(STORE.current || 'a1'); render(); return; }
     if (act === 'csv') return csv();
   }
   app.addEventListener('click', (e) => { const b = e.target.closest('[data-act]'); if (b) handle(b, e); });

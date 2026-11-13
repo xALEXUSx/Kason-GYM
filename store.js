@@ -23,15 +23,35 @@ var STORE = (function () {
   function remove(id) {
     var r = readReg(); r.list = r.list.filter(function (a) { return a.id !== id; }); if (r.last === id) r.last = r.list.length ? r.list[0].id : null; writeReg(r);
     try { localStorage.removeItem(keyOf(id)); } catch (e) { /* немає */ }
+    dropBroken(id); delete lock[id];  // з 3.27.28 — і відкладена копія незчитаного запису
     return tx('readonly', function (st) { return st.getAll(); }).then(function (all) {
       return Promise.all((all || []).filter(function (p) { return (p.acc || 'a1') === id; }).map(function (p) { return delPhoto(p.id); }));
     }).catch(function () { /* фото немає */ });
   }
+  /* Запис, який не вдалося прочитати (з 3.27.28; дослідження 12.11, D1): раніше застосунок мовчки починав з порожньої бази, а перше ж
+     збереження затирало всю історію. Тепер сирий запис відкладаємо поруч (ключ «…#broken», другий раз — «…#broken2») і не пишемо поверх,
+     поки копія не відкладена; людина бачить це на головній і може зберегти копію файлом. */
+  var BROKEN = ['#broken', '#broken2'], lock = {};
+  function keepBroken(id, raw) {
+    var k0 = keyOf(id) + BROKEN[0], k1 = keyOf(id) + BROKEN[1];
+    try {
+      var a = localStorage.getItem(k0);
+      if (a === raw || localStorage.getItem(k1) === raw) return;
+      localStorage.setItem(a === null ? k0 : k1, raw);
+    } catch (e) { lock[id] = true; }  // місця на копію немає — не затираємо оригінал жодним збереженням
+  }
+  function brokenOf(id) { try { return localStorage.getItem(keyOf(id) + BROKEN[1]) || localStorage.getItem(keyOf(id) + BROKEN[0]); } catch (e) { return null; } }
+  function dropBroken(id) { BROKEN.forEach(function (s) { try { localStorage.removeItem(keyOf(id) + s); } catch (e) { /* немає */ } }); }
   function loadOf(id) {
-    try { var raw = localStorage.getItem(keyOf(id)); if (raw) { var d = JSON.parse(raw); if (d && d.profiles) return ENGINE.migrate(d); } } catch (e) { /* немає сховища */ }
+    var raw = null;
+    try { raw = localStorage.getItem(keyOf(id)); } catch (e) { /* немає сховища */ }
+    if (raw) {
+      try { var d = JSON.parse(raw); if (d && d.profiles) return ENGINE.migrate(d); } catch (e) { /* нижче — відкладаємо копію */ }
+      keepBroken(id, raw);
+    }
     return ENGINE.migrate({ v: 2, active: null, profiles: {}, lastBackup: null, settings: {} });
   }
-  function saveOf(id, db) { try { localStorage.setItem(keyOf(id), JSON.stringify(db)); return true; } catch (e) { return false; } }
+  function saveOf(id, db) { if (lock[id]) return false; try { localStorage.setItem(keyOf(id), JSON.stringify(db)); return true; } catch (e) { return false; } }
   function load() { return loadOf(acc || 'a1'); }
   function save(db) { return saveOf(acc || 'a1', db); }
 
@@ -81,5 +101,6 @@ var STORE = (function () {
   function dataToBlob(d) { var parts = d.split(','), bin = atob(parts[1]), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); return new Blob([arr], { type: (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg' }); }
   function allPhotos() { return tx('readonly', function (st) { return st.getAll(); }).then(function (all) { return (all || []).filter(function (p) { return (p.acc || 'a1') === (acc || 'a1'); }); }); }
   return { accounts: accounts, account: account, use: use, update: update, create: create, remove: remove, loadOf: loadOf, saveOf: saveOf, get current() { return acc; },
+    brokenOf: brokenOf, dropBroken: dropBroken, lockedOf: function (id) { return !!lock[id]; }, rawOf: function (id) { try { return localStorage.getItem(keyOf(id)); } catch (e) { return null; } },
     load: load, save: save, putPhoto: putPhoto, delPhoto: delPhoto, listPhotos: listPhotos, allPhotos: allPhotos, compress: compress, blobToData: blobToData, dataToBlob: dataToBlob };
 })();

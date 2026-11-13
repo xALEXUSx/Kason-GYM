@@ -1673,3 +1673,9 @@ I18N.add({
   "Фітнес-гумки (кільця)": "Mini loop bands",
   "Є фітнес-гумки (кільця)": "I have mini loop bands"
 });
+
+/* ---- 3.27.28: підказки до найбільшої ваги гантелі (поля 3.27.27; дослідження 12.11, U1) ---- */
+I18N.add({
+  "Найважча гантель (гриф + диски), яку ви справді збираєте для вправ з двома гантелями. Дійшли до неї — програма додає повторення, потім підхід, а не вагу.": "The heaviest dumbbell (handle + plates) you actually load for two-dumbbell exercises. Once you reach it, the program adds reps, then a set — not weight.",
+  "Найважча гантель для вправ з однією гантеллю — вона може бути важчою, ніж для двох, бо всі диски йдуть на один гриф. Дійшли до неї — більше повторень, потім підхід.": "The heaviest dumbbell for one-dumbbell exercises — it can be heavier than for two, since all the plates go on one handle. Once you reach it: more reps, then a set."
+});

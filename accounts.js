@@ -31,7 +31,8 @@ var ACC = (function () {
   function tile(name) { return '<span class="acct">' + esc((String(name || '?').trim()[0] || '?').toUpperCase()) + '</span>'; }
   /* «Новий акаунт» — і англійською («New account», з 3.17.0): нерозпочатий акаунт будь-якою мовою */
   function isNewName(n) { return n === 'Новий акаунт' || n === 'New account'; }
-  function isEmpty(a) { var db = STORE.loadOf(a.id); return isNewName(a.name) && !db.active && !Object.keys(db.profiles || {}).length; }
+  /* з 3.27.28: акаунт, чиї дані не прочитались (STORE.brokenOf / lockedOf), не «порожній» — інакше прибирання нижче стерло б і відкладену копію */
+  function isEmpty(a) { var db = STORE.loadOf(a.id); return isNewName(a.name) && !db.active && !Object.keys(db.profiles || {}).length && !STORE.brokenOf(a.id) && !STORE.lockedOf(a.id); }
   function picker() {
     /* порожніх «Новий акаунт» (кинута анкета) лишаємо щонайбільше один */
     var empties = STORE.accounts().filter(isEmpty);

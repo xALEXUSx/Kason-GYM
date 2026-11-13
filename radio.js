@@ -1,10 +1,9 @@
 var LL = typeof LL === 'function' ? LL : (typeof I18N !== 'undefined' ? I18N.L : function (u) { return u; });  // мова (i18n.js); у node — українська
 /* Радіо для тренувань. Звук іде через Web Audio (GainNode), тож його можна плавно притишувати, коли говорить тренер:
    на iPhone гучність аудіоелемента з коду не змінюється. Для цього потрібні станції з дозволом CORS на кожному кроці
-   переадресації — усі нижче перевірено 22.10.2026. */
+   переадресації — усі нижче перевірено 22.10.2026. З 3.27.28 прибрано RauteMusik Workout: адреса веде на сторінку 404 (curl 12.11, дослідження R1). */
 var RADIO = (function () {
   var STATIONS = [
-    { id: 'workout', g: LL('Для тренувань', "Workout"), name: 'RauteMusik Workout', genre: LL('денс, хіп-хоп, хіти без зупинки', "dance, hip-hop, nonstop hits"), url: 'https://workout-high.rautemusik.fm/' },
     { id: 'antenne', g: LL('Для тренувань', "Workout"), name: 'Antenne Bayern Workout Hits', genre: LL('поп і денс-хіти', "pop and dance hits"), url: 'https://mp3channels.webradio.antenne.de/workout-hits' },
     { id: 'fit', g: LL('Для тренувань', "Workout"), name: 'FIT Radio High Energy', genre: LL('енергійна електроніка', "high-energy electronic"), url: 'https://radio.webicdp.com/listen/fmvfitradiohighenergy/radio.mp3' },
     { id: 'hotmix', g: LL('Для тренувань', "Workout"), name: 'Hotmix Sport', genre: LL('спортивний мікс', "sports mix"), url: 'https://streaming.hotmixradio.com/hotmix-sport-plus-en-mp3' },

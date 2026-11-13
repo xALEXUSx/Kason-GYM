@@ -1116,6 +1116,8 @@ var ENGINE = (function () {
   function migrate(db) {
     if (!db || !db.profiles) return db;
     db.v = 3;
+    /* порожній профіль (null) — даних у ньому немає; до 3.27.28 падіння на ньому перетворювало всю базу на порожню (дослідження 12.11, D1) */
+    Object.keys(db.profiles).forEach(function (id) { var p = db.profiles[id]; if (!p || typeof p !== 'object') { delete db.profiles[id]; if (db.active === id) db.active = null; } });
     db.settings = db.settings || {};
     ['sound', 'haptics', 'awake'].forEach(function (k) { if (db.settings[k] === undefined) db.settings[k] = true; });
     /* «за руку» (з 3.21.7): новим і тим, у кого ще немає 3 тренувань; досвідченим — вимкнено (увімкнути — «Більше» → «Тренування») */
@@ -1134,7 +1136,8 @@ var ENGINE = (function () {
       if (!p.body) p.body = { weight: [], waist: [], tests: [] };
       ['weight', 'waist', 'chest', 'hips', 'arm', 'tests'].forEach(function (k) { if (!p.body[k]) p.body[k] = []; });
       if (!p.daily) p.daily = {};
-      (p.sessions || []).forEach(function (s) { (s.sets || []).forEach(function (x) { if (!x.type) x.type = 'N'; }); });
+      if (Array.isArray(p.sessions)) p.sessions = p.sessions.filter(function (s) { return s !== null && s !== undefined; });  // з 3.27.28 — порожні записи тренувань (null) прибираємо
+      (p.sessions || []).forEach(function (s) { (s.sets || []).forEach(function (x) { if (x && !x.type) x.type = 'N'; }); });
     });
     if (db.profiles.me && db.custom && db.custom.answers) seedWeight(db.profiles.me, db.custom.answers.weight, db.custom.date);  // з 3.21.4
     return db;
